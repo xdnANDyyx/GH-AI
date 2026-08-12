@@ -1,0 +1,1112 @@
+
+
+<template>
+  <div class="workspace-page">
+    <!-- Steps bar -->
+    <div class="steps-bar">
+      <template v-for="(s, i) in workflowSteps" :key="i">
+        <div class="step-item" :class="getStepClass(i + 1, 3)"><div class="step-num">{{ i + 1 }}</div> {{ s.label }}</div>
+        <div v-if="i < workflowSteps.length - 1" class="step-line" :class="{ done: isStepLineDone(i + 1) }"></div>
+      </template>
+    </div>
+
+    <!-- Three-column layout -->
+    <div class="three-col">
+      <!-- ===== LEFT: Canvas (50%) ===== -->
+      <div class="canvas-col" :style="{ flex: canvasFlex }">
+
+
+        <!-- Compare / Upload container -->
+        <div class="canvas-box"
+        >
+          <!-- <CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" /> -->
+          <!-- Upload state -->
+          <div v-if="!processed" class="upload-zone" @click="triggerUpload" @dragover.prevent @drop.prevent="handleDrop">
+            <div class="canvas-placeholder" v-if="!originalImage">
+              <svg viewBox="0 0 48 48" fill="none">
+                <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
+                <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
+                <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h3>拖拽图片到画布，或从右侧上传</h3>
+              <p>支持 JPG / PNG / WebP 格式，最大 20MB</p>
+            </div>
+            <div class="upload-preview" v-else>
+              <img :src="originalImage" class="preview-img" />
+              <div class="preview-overlay">
+                <button class="preview-del-btn" @click.stop="clearImage">✕</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- After processing: compare view -->
+          <div v-else class="compare-container">
+            <div class="compare-side">
+              <div class="label">修复前</div>
+              <div class="compare-img-placeholder">
+                <img :src="originalImage" v-if="originalImage" />
+                <span v-else class="empty-label">修复前（带划痕污渍）</span>
+              </div>
+            </div>
+            <div class="compare-divider-bar" ref="compareDivider" @mousedown="startDividerDrag"></div>
+            <div class="compare-side">
+              <div class="label">修复后</div>
+              <div class="compare-img-placeholder">
+                <img :src="processedImage" v-if="processedImage" />
+                <span v-else class="empty-label">修复后（光滑洁净）</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="canvas-bottom-bar">
+          <span>提示：在左侧上传需要精修的图片，选择右侧精修功能，或在AI助手中输入您的需求。</span>
+        </div>
+      </div>
+
+      <!-- Divider + Toggle: canvas ⇔ config -->
+      <div class="col-divider-wrapper">
+        <div class="col-divider" @mousedown="startColResize($event, 'config')"></div>
+        <div class="config-toggle-btn" @click="configCollapsed = !configCollapsed" :title="configCollapsed ? '展开创作配置' : '折叠创作配置'">
+          <el-icon :size="14"><ArrowLeft v-if="!configCollapsed" /><ArrowRight v-else /></el-icon>
+        </div>
+      </div>
+
+      <!-- ===== CENTER: Config Panel (25%) ===== -->
+      <div class="config-col" :class="{ collapsed: configCollapsed }" :style="{ flex: configFlex }">
+        <el-scrollbar v-show="!configCollapsed">
+          <div class="config-inner">
+            <!-- 创作配置 标题 (带全部展开/折叠) -->
+            <div class="panel-header" @click="toggleAllSections">
+              <span>创作配置</span>
+              <span class="panel-toggle-all">{{ allExpanded ? '全部折叠 ▲' : '全部展开 ▼' }}</span>
+            </div>
+
+            <!-- Section: 上传图片 -->
+            <div class="config-section collapsible">
+              <div class="section-header collapsible" @click="toggleSection('upload')">
+                <span class="section-label">上传图片</span>
+                <span class="expand-text">
+                  {{ sections.upload ? '收起' : '展开' }}
+                  <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.upload }"><ArrowDown /></el-icon>
+                </span>
+              </div>
+              <div class="section-body" v-show="sections.upload">
+                <div class="panel-upload-zone" @click.stop="triggerUpload" @dragover.prevent @drop.prevent="handleDrop">
+                  <el-icon :size="28" color="#2563FF"><UploadFilled /></el-icon>
+                  <p class="panel-upload-text">点击或拖拽图片到此处上传</p>
+                  <p class="panel-upload-hint">支持 JPG / PNG / WebP，最多 10 张</p>
+                </div>
+                <div v-if="uploadedFiles.length" class="uploaded-images-list">
+                  <div v-for="(f, i) in uploadedFiles" :key="i" class="uploaded-thumb-wrap">
+                    <div class="uploaded-thumb">
+                      <img :src="f" v-if="typeof f === 'string'" />
+                      <span v-else class="thumb-placeholder">图片</span>
+                    </div>
+                    <div class="uploaded-remove" @click.stop="removeProductFile(i)">✕</div>
+                  </div>
+                  <div
+                    v-if="uploadedFiles.length < 10"
+                    class="uploaded-thumb-wrap add"
+                    @click.stop="triggerUpload"
+                  >
+                    <div class="uploaded-thumb add-thumb">+</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Section: 精修工具 -->
+            <div class="config-section collapsible">
+              <div class="section-header collapsible" @click="toggleSection('retouch')">
+                <span class="section-label">精修工具</span>
+                <span class="expand-text">
+                  {{ sections.retouch ? '收起' : '展开' }}
+                  <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.retouch }"><ArrowDown /></el-icon>
+                </span>
+              </div>
+              <div class="section-body" v-show="sections.retouch">
+                <div class="tool-grid">
+                  <div
+                    v-for="tool in retouchTools"
+                    :key="tool.key"
+                    class="tool-card"
+                    :class="{ active: activeTool === tool.key }"
+                    @click="activeTool = tool.key"
+                  >
+                    <div class="tool-icon-svg" v-html="tool.svgIcon"></div>
+                    <div class="tool-name">{{ tool.name }}</div>
+                    <div class="tool-desc">{{ tool.desc }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Section: 输出设置 -->
+            <div class="panel-section" :class="{ collapsed: !sections.output }">
+              <div class="section-header" @click="toggleOutputSection">
+                <span class="section-label">输出设置</span>
+                <span class="expand-text">
+                  {{ sections.output ? '收起' : '展开' }}
+                  <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.output }"><ArrowDown /></el-icon>
+                </span>
+              </div>
+              <div class="section-body" v-show="sections.output">
+                <div class="output-settings">
+                  <div class="output-row">
+                    <span class="output-label">画质</span>
+                    <select v-model="outputQuality" class="form-select">
+                      <option value="standard">标准</option>
+                      <option value="high">高清</option>
+                      <option value="ultra">超清</option>
+                    </select>
+                  </div>
+                  <div class="output-row">
+                    <span class="output-label">输出格式</span>
+                    <select v-model="outputFormat" class="form-select">
+                      <option value="png">PNG</option>
+                      <option value="jpg">JPG</option>
+                      <option value="webp">WebP</option>
+                    </select>
+                  </div>
+                  <div class="output-row">
+                    <span class="output-label">尺寸</span>
+                    <select v-model="selectedSize" class="form-select">
+                      <option v-for="s in sizeOptions" :key="s.value" :value="s.value">{{ s.label }} ({{ s.value }})</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </el-scrollbar>
+      </div>
+
+      <!-- Divider handle: config ⇔ AI -->
+      <div class="col-divider" @mousedown="startColResize($event, 'ai')"></div>
+
+      <!-- ===== RIGHT: AI Panel (flex:1) ===== -->
+      <div class="ai-col" :style="{ flex: aiFlex }" ref="aiPanel">
+        <div class="ai-resize-handle" @mousedown="startAiResize"></div>
+        <div class="ai-header">
+          <h3>AI 助手</h3>
+          <button class="ai-clear-btn" @click="clearChat">清空对话</button>
+        </div>
+
+        <!-- Chat messages -->
+        <div class="ai-chat" ref="chatContainer">
+          <div class="chat-msg bot">
+            <div class="chat-avatar">AI</div>
+            <div class="chat-bubble">您好！我是光合AI助手，有什么可以帮您？</div>
+          </div>
+          <div v-for="(msg, i) in chatMessages" :key="i" class="chat-msg" :class="msg.role">
+            <div v-if="msg.role === 'bot'" class="chat-avatar">AI</div>
+            <div class="chat-bubble">{{ msg.text }}</div>
+          </div>
+          <div v-if="generating" class="chat-msg bot">
+            <div class="chat-avatar">AI</div>
+            <div class="chat-bubble">正在为您生成中...</div>
+          </div>
+        </div>
+
+        <!-- Chat input -->
+        <div class="chat-input-area">
+          <textarea
+            class="chat-input"
+            v-model="chatPrompt"
+            placeholder="请输入您的需求，描述越详细，效果越好..."
+            @keydown.enter.exact.prevent="sendMessage"
+            maxlength="2000"
+          ></textarea>
+        </div>
+        <div class="chat-footer">
+          <div>
+            <span class="chat-counter">{{ chatPrompt.length }}/2000</span>
+            <br />
+            <!-- <span class="chat-cost">本次操作将消耗 2 积分</span> -->
+          </div>
+          <button class="chat-send" @click="sendMessage" :disabled="!chatPrompt.trim() || generating">
+            <el-icon><Promotion /></el-icon>
+            -2积分
+          </button>
+        </div>
+            </div>
+
+            <!-- Section: 提示词增强 -->
+            <div class="config-section collapsible">
+              <div class="section-header collapsible" @click="toggleSection('promptBoost')">
+                <span class="section-label">提示词增强</span>
+                <span class="expand-text">
+                  {{ sections.promptBoost ? '收起' : '展开' }}
+                  <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.promptBoost }"><ArrowDown /></el-icon>
+                </span>
+              </div>
+              <div class="section-body" v-show="sections.promptBoost">
+                <div class="prompt-boost-row">
+                  <label class="boost-label">产品类别</label>
+                  <PromptLibrarySelect ref="boostProductRef" category="product" v-model="boostProduct" placeholder="选择产品类别" />
+                </div>
+                <div class="prompt-boost-row">
+                  <label class="boost-label">材质</label>
+                  <PromptLibrarySelect ref="boostMaterialRef" category="material" v-model="boostMaterial" placeholder="选择材质" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+    <!-- Hidden file input -->
+    <input type="file" ref="fileInput" accept="image/*" multiple hidden @change="handleFileSelect" />
+  </div>
+</template>
+
+<script>
+import { UploadFilled, ArrowDown, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { getPublicCreationConfigByGroup } from '@/api/customer'
+// import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
+// import CanvasOverlay from '@/components/CanvasOverlay.vue'
+import { useImageGeneration } from '@/composables/useImageGeneration'
+import { useWorkflowProgress } from '@/composables/useWorkflowProgress'
+import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
+import { aiDialogue } from '@/api/customer'
+import { ElMessage } from 'element-plus'
+
+export default {
+  name: 'RetouchView',
+  components: { PromptLibrarySelect },
+  setup() {
+    // ---- Canvas Interactions ----
+    // const { canvasUI, handleCanvasExport } = useCanvasInteractions({
+    //   canvasSelector: '.canvas-box',
+    //   getImage: () => processedImage.value || originalImage.value || '',
+    //   defaultName: 'retouch',
+    // })
+    const gen = useImageGeneration('render')
+    const { steps: workflowSteps, getStepClass, isStepLineDone } = useWorkflowProgress()
+
+    // ---- State ----
+    const configCollapsed = ref(false)
+    const processed = ref(false)
+    const originalImage = ref(null)
+    const processedImage = ref(null)
+    const productFiles = ref([])
+    const uploadedFiles = ref([])
+    const generating = ref(false)
+    const compareMode = ref(true)
+    const zoom = ref(100)
+
+    // Tool selection
+    const activeTool = ref('smart-optimize')
+    const allRetouchTools = [
+      { key: 'one-click-repair', name: '一键修复', desc: '智能一键修复', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M4 20l7-9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M11 3l4 4-4 4-4-4 4-4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M19 13l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" fill="currentColor" opacity="0.2"/></svg>' },
+      { key: 'smart-optimize', name: '智能优化', desc: '一键提升画质', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M12 3l2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>' },
+      { key: 'defect-remove', name: '去瑕疵', desc: '去除划痕、污渍', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M12 2l2.5 6.5L21 11l-6.5 2.5L12 20l-2.5-6.5L3 11l6.5-2.5L12 2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 8l8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>' },
+      { key: 'texture-enhance', name: '纹理增强', desc: '增强材质细节', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><rect x="3" y="3" width="8" height="8" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="13" y="3" width="8" height="8" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="3" y="13" width="8" height="8" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="13" y="13" width="8" height="8" rx="1" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2"/></svg>' },
+      { key: 'color-adjust', name: '色彩调整', desc: '亮度、对比度', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/><path d="M12 3a9 9 0 010 18V3z" fill="currentColor" opacity="0.25"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.2"/></svg>' },
+      { key: 'light-optimize', name: '光影优化', desc: '优化光影层次', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.5"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>' },
+      { key: 'bg-process', name: '背景处理', desc: '纯色 / 自定义', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><rect x="2" y="4" width="20" height="16" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M6 12l3-3 3 3 5-6 5 7H2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' },
+      { key: 'sharpen', name: '锐化增强', desc: '提升清晰度', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M12 2l10 10-10 10L2 12 12 2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.2" fill="currentColor" opacity="0.1"/></svg>' },
+      { key: 'denoise', name: '降噪处理', desc: '减少噪点', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/><path d="M8 8l8 8M16 8l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>' },
+    ]
+    const retouchTools = ref([...allRetouchTools])
+
+    // Config sections
+    const sections = reactive({
+      upload: true,
+      retouch: true,
+      output: true,
+      promptBoost: false,
+    })
+    const outputQuality = ref('high')
+    const outputFormat = ref('png')
+    const boostProduct = ref('')
+    const boostMaterial = ref('')
+    const boostProductRef = ref(null)
+    const boostMaterialRef = ref(null)
+
+    const sizeOptions = [
+      { label: '1:1', value: '1:1', w: 20, h: 20 },
+      { label: '4:3', value: '4:3', w: 24, h: 18 },
+      { label: '3:4', value: '3:4', w: 18, h: 24 },
+      { label: '16:9', value: '16:9', w: 28, h: 16 },
+      { label: '9:16', value: '9:16', w: 16, h: 28 },
+      { label: '3:2', value: '3:2', w: 24, h: 16 },
+      { label: '2:3', value: '2:3', w: 16, h: 24 },
+      { label: '自定义', value: 'custom', w: 18, h: 18 },
+    ]
+    const selectedSize = ref('1:1')
+
+    // Prompt
+    const promptTags = ref([])
+    const showPromptInput = ref(false)
+    const newPromptTag = ref('')
+
+    // Chat
+    const chatPrompt = ref('')
+    const chatMessages = ref([])
+
+    // ---- Computed ----
+    const allExpanded = computed(() => {
+      return Object.values(sections).every(v => v)
+    })
+
+    // ---- Layout resize ----
+    const _configWidthPx = ref(280)
+    const _aiWidthPx = ref(360)
+    const canvas3Flex = computed(() => '1 1 0%')
+    const canvasFlex = canvas3Flex
+    const configFlex = computed(() => {
+      if (configCollapsed.value) return '0 0 40px'
+      return `0 0 ${_configWidthPx.value}px`
+    })
+    const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
+    let isResizing = false
+    let resizeTarget = ''
+    const aiPanel = ref(null)
+
+    function startColResize(e, target) {
+      isResizing = true
+      resizeTarget = target
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
+      e.preventDefault()
+    }
+
+    function onMouseMove(e) {
+      if (!isResizing) return
+      const threeCol = document.querySelector('.three-col')
+      if (!threeCol) return
+      const rect = threeCol.getBoundingClientRect()
+
+      if (resizeTarget === 'config') {
+        // 画布/配置栏分隔线：按比例缩放配置栏和AI栏
+        const rightWidth = rect.right - e.clientX - 24
+        const totalCurrent = _configWidthPx.value + _aiWidthPx.value + 12
+        if (totalCurrent > 0 && rightWidth > 200) {
+          const ratio = rightWidth / totalCurrent
+          _configWidthPx.value = Math.max(150, Math.min(600, Math.round(_configWidthPx.value * ratio)))
+          _aiWidthPx.value = Math.max(200, Math.min(800, Math.round(_aiWidthPx.value * ratio)))
+        }
+      } else if (resizeTarget === 'ai') {
+        // 配置栏/AI栏分隔线：只调整AI栏宽度，配置栏不变
+        const configEl = document.querySelector('.config-col')
+        if (!configEl) return
+        const configRect = configEl.getBoundingClientRect()
+        const aiWidth = rect.right - e.clientX - 6
+        _aiWidthPx.value = Math.max(200, Math.min(800, Math.round(aiWidth)))
+      }
+    }
+
+    function onMouseUp() {
+      if (isResizing) {
+        isResizing = false
+        resizeTarget = ''
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+    }
+
+    // AI panel independent resize (right edge)
+    let isAiResizing = false
+    let aiStartX = 0
+    let aiStartWidth = 0
+
+    function startAiResize(e) {
+      isAiResizing = true
+      aiStartX = e.clientX
+      const aiEl = aiPanel.value
+      aiStartWidth = aiEl ? aiEl.getBoundingClientRect().width : 360
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
+      e.preventDefault()
+      e.stopPropagation()
+    }
+
+    function onAiMouseMove(e) {
+      if (!isAiResizing) return
+      const delta = aiStartX - e.clientX
+      let newWidth = aiStartWidth + delta
+      newWidth = Math.max(240, Math.min(600, newWidth))
+      _aiWidthPx.value = newWidth
+    }
+
+    function onAiMouseUp() {
+      if (isAiResizing) {
+        isAiResizing = false
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+    }
+
+    onMounted(() => {
+      document.addEventListener('mousemove', onMouseMove)
+      document.addEventListener('mouseup', onMouseUp)
+      document.addEventListener('mousemove', onAiMouseMove)
+      document.addEventListener('mouseup', onAiMouseUp)
+      loadRetouchConfig()
+    })
+
+    async function loadRetouchConfig() {
+      try {
+        const res = await getPublicCreationConfigByGroup('retouch')
+        const list = res.data || res.rows || []
+        const cfg = list.find(c => c.configKey === 'config')
+        if (cfg && cfg.configValue) {
+          const c = JSON.parse(cfg.configValue)
+          if (c.tools && Array.isArray(c.tools)) {
+            retouchTools.value = allRetouchTools.filter(t => c.tools.includes(t.key))
+          }
+        }
+      } catch { /* use defaults */ }
+    }
+
+    onBeforeUnmount(() => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+      document.removeEventListener('mousemove', onAiMouseMove)
+      document.removeEventListener('mouseup', onAiMouseUp)
+    })
+
+    // ---- Methods ----
+    const fileInput = ref(null)
+    function triggerUpload() { fileInput.value?.click() }
+    function handleFileSelect(e) {
+      const files = e.target.files
+      if (files.length) addFiles(files)
+      fileInput.value.value = ''
+    }
+    function handleDrop(e) {
+      const files = e.dataTransfer.files
+      if (files.length) addFiles(files)
+    }
+    function addFiles(files) {
+      for (const f of files) {
+        const url = URL.createObjectURL(f)
+        uploadedFiles.value.push(url)
+        productFiles.value.push(f)
+        if (!originalImage.value) originalImage.value = url
+      }
+    }
+    function clearImage() {
+      originalImage.value = null
+      processed.value = false
+      processedImage.value = null
+      productFiles.value = []
+      uploadedFiles.value = []
+    }
+    function removeProductFile(index) {
+      uploadedFiles.value.splice(index, 1)
+      productFiles.value.splice(index, 1)
+    }
+
+    function undo() { /* placeholder */ }
+    function redo() { /* placeholder */ }
+    function reset() { processed.value = false; processedImage.value = null }
+    // function zoomIn() { zoom.value = Math.min(200, zoom.value + 10) }
+    // function zoomOut() { zoom.value = Math.max(10, zoom.value - 10) }
+    function toggleFullscreen() { /* placeholder */ }
+
+    function toggleAllSections() {
+      const val = !allExpanded.value
+      Object.keys(sections).forEach(k => sections[k] = val)
+    }
+
+    function toggleSection(key) {
+      if (sections.hasOwnProperty(key)) sections[key] = !sections[key]
+    }
+    function toggleOutputSection() {
+      sections.output = !sections.output
+    }
+
+    async function sendMessage() {
+      const text = chatPrompt.value.trim()
+      if (!text || generating.value) return
+      chatMessages.value.push({ role: 'user', text })
+      chatPrompt.value = ''
+      generating.value = true
+      await nextTick()
+      scrollChat()
+      try {
+        const historyMessages = chatMessages.value.slice(0, -1).map(m => ({ role: m.role === 'bot' ? 'assistant' : 'user', content: m.text }))
+        const res = await aiDialogue({ messages: historyMessages, content: text, model: 'deepseek' })
+        chatMessages.value.push({ role: 'bot', text: res?.data?.reply || '已为您智能修复，增强了整体质感。' })
+        if (productFiles.value.length && !processed.value) {
+          if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
+          try {
+            const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
+            const fullPrompt = boostText ? `${text}。约束：${boostText}。` : text
+            await gen.fullGenerate(productFiles.value, fullPrompt, { consumePoints: 2, featureName: 'retouch', title: '产品精修', n: 1 })
+            if (gen.resultImages.value.length > 0) {
+              processed.value = true
+              processedImage.value = gen.resultImages.value[0].url || gen.resultImages.value[0]
+            }
+          } catch (e) { console.error('精修生成失败:', e) }
+        }
+      } catch (e) {
+        chatMessages.value.push({ role: 'bot', text: '抱歉，AI服务暂时不可用。' })
+      } finally {
+        generating.value = false
+        nextTick(() => scrollChat())
+      }
+    }
+
+    function clearChat() { chatMessages.value = [] }
+    function scrollChat() {
+      const el = document.querySelector('.ai-chat')
+      if (el) el.scrollTop = el.scrollHeight
+    }
+
+    return {
+      configCollapsed,
+      processed, originalImage, processedImage, productFiles, uploadedFiles,
+      generating, compareMode, zoom,
+      activeTool, retouchTools,
+      sections,
+      sizeOptions, selectedSize,
+      promptTags, showPromptInput, newPromptTag,
+      outputQuality, outputFormat, toggleOutputSection,
+      chatPrompt, chatMessages,
+      allExpanded,
+      canvasFlex, configFlex, aiFlex,
+      aiPanel,
+      fileInput,
+      workflowSteps, getStepClass, isStepLineDone,
+      boostProduct, boostMaterial, boostProductRef, boostMaterialRef,
+      triggerUpload, handleFileSelect, handleDrop, clearImage, removeProductFile,
+      undo, redo, reset, toggleFullscreen,
+      toggleAllSections, toggleSection,
+      sendMessage, clearChat,
+      startColResize, startAiResize,
+      // canvasUI, handleCanvasExport,
+    }
+  }
+}
+</script>
+
+<style scoped>
+/* ============================================================
+   Layout
+   ============================================================ */
+.workspace-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ---- Steps Bar ---- */
+.steps-bar {
+  display: flex;
+  align-items: center;
+  padding: 12px 24px;
+  background: #fff;
+  border-bottom: 1px solid #E8EDF5;
+  flex-shrink: 0;
+  overflow-x: auto;
+  gap: 0;
+}
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #6B7280;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.step-item.active { color: #2563FF; font-weight: 600; }
+.step-item.done { color: #22C55E; }
+.step-num {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600;
+  border: 2px solid #E8EDF5;
+  flex-shrink: 0;
+}
+.step-item.active .step-num {
+  background: #2563FF; color: #fff; border-color: #2563FF;
+}
+.step-item.done .step-num {
+  background: #22C55E; color: #fff; border-color: #22C55E;
+}
+.step-line {
+  flex: 1; height: 2px; background: #E8EDF5; min-width: 12px; margin: 0 6px;
+}
+.step-line.done { background: #22C55E; }
+
+.prompt-boost-row { margin-bottom: 10px; }
+.prompt-boost-row .boost-label { display: block; font-size: 12px; color: #6B7280; margin-bottom: 4px; }
+
+
+/* ---- Three Column ---- */
+.three-col {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ---- Column Divider + Toggle Wrapper ---- */
+.col-divider-wrapper {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* ---- Column Divider ---- */
+.col-divider {
+  width: 6px;
+  height: 100%;
+  background: transparent;
+  cursor: col-resize;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 5;
+  transition: background 0.2s;
+}
+.col-divider:hover,
+.col-divider:active { background: #2563FF; }
+
+/* ============================================================
+   Canvas Column
+   ============================================================ */
+.canvas-col {
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  overflow: hidden;
+  background: #F7F9FC;
+  min-width: 0;
+}
+
+.compare-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+  gap: 12px;
+}
+.compare-label {
+  font-size: 12px; font-weight: 500;
+  display: flex; align-items: center; gap: 6px;
+}
+.compare-label input[type="checkbox"] { cursor: pointer; transform: scale(1.1); }
+.compare-btns { display: flex; gap: 6px; }
+.compare-btns button {
+  padding: 6px 12px; border: 1px solid #E8EDF5; border-radius: 8px;
+  background: #fff; font-size: 12px; cursor: pointer; color: #6B7280;
+  transition: all 0.15s;
+}
+.compare-btns button:hover { border-color: #2563FF; color: #2563FF; }
+
+.zoom-controls { display: flex; align-items: center; gap: 4px; }
+.zoom-btn {
+  width: 24px; height: 24px; border: 1px solid #E8EDF5; border-radius: 6px;
+  background: #fff; cursor: pointer; display: flex; align-items: center;
+  justify-content: center; font-size: 12px; color: #6B7280;
+}
+.zoom-btn:hover { border-color: #2563FF; color: #2563FF; }
+.zoom-label { font-size: 12px; color: #6B7280; padding: 0 6px; min-width: 35px; text-align: center; }
+
+.canvas-box {
+  flex: 1;
+  border: 2px dashed #E8EDF5;
+  border-radius: 12px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.canvas-placeholder {
+  text-align: center;
+  color: #9CA3AF;
+  padding: 20px;
+}
+.canvas-placeholder svg { width: 48px; height: 48px; margin-bottom: 12px; opacity: 0.4; }
+.canvas-placeholder h3 { font-size: 14px; color: #6B7280; margin-bottom: 6px; font-weight: 500; }
+.canvas-placeholder p { font-size: 12px; color: #9CA3AF; }
+
+.upload-zone {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+
+.upload-preview {
+  position: relative;
+  max-width: 80%;
+  max-height: 80%;
+}
+.preview-img {
+  max-width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+.preview-overlay { position: absolute; top: 8px; right: 8px; }
+.preview-del-btn {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(0,0,0,0.5); color: #fff; border: none;
+  cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center;
+}
+.preview-del-btn:hover { background: #EF4444; }
+
+/* Compare container */
+.compare-container {
+  display: flex;
+  width: 100%; height: 100%;
+  background: #fff;
+}
+.compare-side {
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+.compare-side .label {
+  position: absolute; top: 10px; left: 10px;
+  background: rgba(0,0,0,0.5); color: #fff; font-size: 11px;
+  padding: 3px 8px; border-radius: 6px; z-index: 2;
+}
+.compare-img-placeholder {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #e8edf5, #f0f4fa);
+  color: #9CA3AF; font-size: 12px;
+}
+.compare-img-placeholder img {
+  max-width: 100%; max-height: 100%; object-fit: contain;
+}
+.compare-divider-bar {
+  width: 4px; background: #fff; cursor: col-resize; flex-shrink: 0;
+  position: relative; z-index: 3;
+}
+
+.canvas-bottom-bar {
+  padding: 6px 0;
+  font-size: 11px;
+  color: #9CA3AF;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* ============================================================
+   Config Column
+   ============================================================ */
+.config-col {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+  min-width: 0;
+  position: relative;
+}
+
+/* Config toggle button */
+.config-toggle-btn {
+  width: 26px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border: 1px solid #E8EDF5;
+  border-radius: 0 8px 8px 0;
+  cursor: pointer;
+  color: #6B7280;
+  box-shadow: 2px 0 8px rgba(0,0,0,0.06);
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  z-index: 10;
+}
+.config-toggle-btn:hover {
+  background: #F0F4FF;
+  color: #2563FF;
+  border-color: #2563FF;
+}
+
+/* Collapsed state */
+.config-col.collapsed {
+  flex: 0 0 0 !important;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  overflow: hidden;
+}
+
+.config-inner {
+  padding: 0 0 16px;
+  overflow-y: auto;
+}
+
+.panel-header {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1F2937;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  padding: 14px 16px 0;
+}
+
+.panel-toggle-all {
+  font-size: 12px;
+  color: var(--gh-primary, #2563FF);
+  font-weight: 400;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  transition: opacity 0.2s;
+}
+.panel-toggle-all:hover { opacity: 0.7; }
+
+.config-section.collapsible {
+  margin-bottom: 0;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.panel-section {
+  margin-bottom: 4px;
+  border-bottom: 1px solid #F3F4F6;
+  padding-bottom: 12px;
+}
+.panel-section.collapsed { padding-bottom: 4px; }
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  padding: 8px 16px;
+  transition: opacity 0.2s;
+}
+.section-header:hover { opacity: 0.75; }
+.section-label { font-size: 13px; font-weight: 600; color: #1F2937; }
+.section-arrow {
+  font-size: 14px; color: #9CA3AF; transition: transform 0.25s;
+  flex-shrink: 0;
+}
+.section-arrow.expanded { transform: rotate(180deg); }
+
+.section-body { padding: 0 16px 8px; }
+
+/* Output settings */
+.output-settings { padding: 0; }
+.output-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 0; border-bottom: 1px solid #F7F9FC;
+}
+.output-row:last-child { border-bottom: none; }
+.output-label { font-size: 12px; color: #6B7280; font-weight: 500; }
+.form-select {
+  padding: 6px 10px; border: 1px solid #E8EDF5; border-radius: 6px;
+  font-size: 12px; outline: none; background: #fff; color: #1F2937;
+  cursor: pointer;
+}
+.form-select:focus { border-color: #2563FF; }
+
+/* Panel upload zone */
+.panel-upload-zone {
+  border: 2px dashed #E8EDF5;
+  border-radius: 10px;
+  padding: 16px 12px;
+  text-align: center;
+  cursor: pointer;
+  background: #F7F9FC;
+  transition: all 0.2s;
+  margin: 0 16px;
+}
+.panel-upload-zone:hover { border-color: #2563FF; background: #FAFBFF; }
+.panel-upload-text { font-size: 12px; color: #6B7280; margin-top: 6px; }
+.panel-upload-hint { font-size: 10px; color: #9CA3AF; margin-top: 2px; }
+
+/* Uploaded images list */
+.uploaded-images-list {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 0 16px; margin-top: 10px;
+}
+.uploaded-thumb-wrap {
+  position: relative; width: 48px; height: 48px; border-radius: 8px;
+  overflow: hidden; border: 1px solid #E8EDF5;
+}
+.uploaded-thumb-wrap.add { border-style: dashed; cursor: pointer; }
+.uploaded-thumb {
+  width: 100%; height: 100%; display: flex; align-items: center;
+  justify-content: center; background: #F7F9FC;
+}
+.uploaded-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.uploaded-thumb.add-thumb { font-size: 18px; color: #9CA3AF; font-weight: 500; }
+.thumb-placeholder { font-size: 9px; color: #9CA3AF; }
+.uploaded-remove {
+  position: absolute; top: 2px; right: 2px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: rgba(0,0,0,0.45); color: #fff; font-size: 10px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; opacity: 0; transition: opacity 0.2s;
+}
+.uploaded-thumb-wrap:hover .uploaded-remove { opacity: 1; }
+
+/* Tool grid (in config panel) */
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 0 16px;
+}
+.tool-card {
+  border: 1.5px solid #E8EDF5; border-radius: 10px;
+  padding: 12px 8px 10px; text-align: center; cursor: pointer;
+  transition: all 0.2s; background: #fff;
+}
+.tool-card:hover {
+  border-color: #2563FF; background: #FAFBFF;
+  transform: translateY(-1px); box-shadow: 0 2px 8px rgba(37,99,255,0.06);
+}
+.tool-card.active {
+  border-color: #2563FF; background: #EEF2FF;
+  box-shadow: 0 2px 8px rgba(37,99,255,0.1);
+}
+.tool-card.active .tool-icon-svg :deep(svg) { color: #2563FF; }
+.tool-icon-svg {
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 6px;
+}
+.tool-icon-svg :deep(svg) {
+  color: #6B7280; transition: color 0.2s; width: 22px; height: 22px;
+}
+.tool-card:hover .tool-icon-svg :deep(svg) { color: #2563FF; }
+.tool-name {
+  font-size: 12px; font-weight: 600; margin-bottom: 2px; color: #1F2937;
+}
+.tool-desc { font-size: 10px; color: #9CA3AF; line-height: 1.3; }
+
+/* ============================================================
+   AI Column
+   ============================================================ */
+.ai-col {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  padding: 16px;
+  overflow: hidden;
+  min-width: 240px;
+  position: relative;
+}
+
+.ai-resize-handle {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 5;
+  background: transparent;
+  transition: background 0.2s;
+}
+.ai-resize-handle:hover { background: #2563FF; }
+
+.ai-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+.ai-header h3 { font-size: 14px; font-weight: 600; margin: 0; }
+.ai-clear-btn {
+  font-size: 11px; color: #2563FF; background: none; border: none;
+  cursor: pointer; text-decoration: underline;
+}
+.ai-clear-btn:hover { opacity: 0.7; }
+
+.ai-chat {
+  background: #F7F9FC;
+  border-radius: 10px;
+  padding: 12px;
+  overflow-y: auto;
+  flex: 1;
+  margin-bottom: 8px;
+  min-height: 200px;
+}
+
+.chat-msg {
+  margin-bottom: 10px;
+  display: flex;
+  gap: 6px;
+}
+.chat-msg.bot { flex-direction: row; }
+.chat-msg.user { flex-direction: row-reverse; }
+.chat-avatar {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: #2563FF; display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 10px; flex-shrink: 0;
+}
+.chat-bubble {
+  padding: 8px 12px; border-radius: 10px;
+  font-size: 12px; line-height: 1.5; max-width: 85%;
+}
+.chat-msg.bot .chat-bubble { background: #fff; color: #1F2937; }
+.chat-msg.user .chat-bubble { background: #EEF2FF; color: #2563FF; }
+
+.chat-input-area { display: flex; gap: 6px; flex-shrink: 0; }
+.chat-input {
+  flex: 1; padding: 8px 12px; border: 1px solid #E8EDF5; border-radius: 8px;
+  font-size: 12px; outline: none; resize: none; height: 50px; font-family: inherit;
+}
+.chat-input:focus { border-color: #2563FF; }
+
+.chat-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+.chat-counter { font-size: 10px; color: #9CA3AF; }
+.chat-cost { font-size: 10px; color: #22C55E; }
+.chat-send {
+  padding: 8px 16px; background: #2563FF; color: #fff;
+  border: none; border-radius: 8px; font-size: 12px; cursor: pointer; font-weight: 500;
+  white-space: nowrap;
+}
+.chat-send:hover { opacity: 0.9; }
+.chat-send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+@media (max-width: 1024px) {
+  .steps-bar { padding: 10px 16px; gap: 4px; }
+  .step-item { font-size: 11px; }
+  .step-line { min-width: 8px; margin: 0 4px; }
+  .three-col { flex-wrap: wrap; }
+  .canvas-col { flex: 0 0 100% !important; max-height: 50vh; }
+  .config-col { flex: 0 0 50% !important; }
+  .ai-col { flex: 0 0 50% !important; }
+  .col-divider { display: none; }
+  .tool-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+@media (max-width: 768px) {
+  .steps-bar { display: none; }
+  .three-col { flex-direction: column; }
+  .canvas-col { flex: 0 0 45vh !important; max-height: 45vh; }
+  .config-col { flex: 0 0 auto !important; max-height: 200px; overflow-y: auto; }
+  .ai-col { flex: 1 1 auto !important; min-height: 250px; }
+  .ai-resize-handle { display: none; }
+  .tool-grid { grid-template-columns: repeat(3, 1fr); }
+}
+</style>

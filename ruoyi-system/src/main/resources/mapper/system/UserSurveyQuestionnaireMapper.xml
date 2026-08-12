@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.UserSurveyQuestionnaireMapper">
+
+    <resultMap type="com.ruoyi.system.domain.UserSurveyQuestionnaire" id="UserSurveyQuestionnaireResult">
+        <result property="id" column="id" />
+        <result property="userId" column="user_id" />
+        <result property="companyName" column="company_name" />
+        <result property="companyScale" column="company_scale" />
+        <result property="monthlyProducts" column="monthly_products" />
+        <result property="monthlyImages" column="monthly_images" />
+        <result property="desiredFeatures" column="desired_features" />
+        <result property="contactInfo" column="contact_info" />
+        <result property="createTime" column="create_time" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <sql id="selectUserSurveyQuestionnaireVo">
+        select id, user_id, company_name, company_scale, monthly_products, monthly_images, desired_features, contact_info, create_time, update_time
+        from user_survey_questionnaire
+    </sql>
+
+    <select id="selectUserSurveyQuestionnaireById" parameterType="Long" resultMap="UserSurveyQuestionnaireResult">
+        <include refid="selectUserSurveyQuestionnaireVo"/>
+        where id = #{id}
+    </select>
+
+    <select id="selectUserSurveyQuestionnaireByUserId" parameterType="Long" resultMap="UserSurveyQuestionnaireResult">
+        <include refid="selectUserSurveyQuestionnaireVo"/>
+        where user_id = #{userId}
+    </select>
+
+    <select id="selectUserSurveyQuestionnaireList" parameterType="com.ruoyi.system.domain.UserSurveyQuestionnaire" resultMap="UserSurveyQuestionnaireResult">
+        <include refid="selectUserSurveyQuestionnaireVo"/>
+        <where>
+            <if test="userId != null">
+                and user_id = #{userId}
+            </if>
+            <if test="companyName != null and companyName != ''">
+                and company_name like concat('%', #{companyName}, '%')
+            </if>
+            <if test="companyScale != null and companyScale != ''">
+                and company_scale = #{companyScale}
+            </if>
+            <if test="monthlyProducts != null and monthlyProducts != ''">
+                and monthly_products = #{monthlyProducts}
+            </if>
+            <if test="monthlyImages != null and monthlyImages != ''">
+                and monthly_images = #{monthlyImages}
+            </if>
+            <if test="contactInfo != null and contactInfo != ''">
+                and contact_info like concat('%', #{contactInfo}, '%')
+            </if>
+        </where>
+        order by create_time desc
+    </select>
+
+    <insert id="insertUserSurveyQuestionnaire" parameterType="com.ruoyi.system.domain.UserSurveyQuestionnaire" useGeneratedKeys="true" keyProperty="id">
+        insert into user_survey_questionnaire(
+            user_id,
+            company_name,
+            company_scale,
+            monthly_products,
+            monthly_images,
+            desired_features,
+            contact_info,
+            create_time,
+            update_time
+        ) values (
+            #{userId},
+            #{companyName},
+            #{companyScale},
+            #{monthlyProducts},
+            #{monthlyImages},
+            #{desiredFeatures},
+            #{contactInfo},
+            sysdate(),
+            sysdate()
+        )
+    </insert>
+
+    <update id="updateUserSurveyQuestionnaire" parameterType="com.ruoyi.system.domain.UserSurveyQuestionnaire">
+        update user_survey_questionnaire
+        <set>
+            <if test="companyName != null">company_name = #{companyName},</if>
+            <if test="companyScale != null">company_scale = #{companyScale},</if>
+            <if test="monthlyProducts != null">monthly_products = #{monthlyProducts},</if>
+            <if test="monthlyImages != null">monthly_images = #{monthlyImages},</if>
+            <if test="desiredFeatures != null">desired_features = #{desiredFeatures},</if>
+            <if test="contactInfo != null">contact_info = #{contactInfo},</if>
+            update_time = sysdate()
+        </set>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteUserSurveyQuestionnaireById" parameterType="Long">
+        delete from user_survey_questionnaire where id = #{id}
+    </delete>
+
+    <delete id="deleteUserSurveyQuestionnaireByIds" parameterType="Long">
+        delete from user_survey_questionnaire where id in
+        <foreach item="id" collection="array" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+</mapper>

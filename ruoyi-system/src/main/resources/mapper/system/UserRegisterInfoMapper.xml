@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.UserRegisterInfoMapper">
+
+    <resultMap type="com.ruoyi.system.domain.UserRegisterInfo" id="UserRegisterInfoResult">
+        <result property="id" column="id" />
+        <result property="userId" column="user_id" />
+        <result property="position" column="position" />
+        <result property="positionOther" column="position_other" />
+        <result property="platforms" column="platforms" />
+        <result property="platformOther" column="platform_other" />
+        <result property="channels" column="channels" />
+        <result property="channelOther" column="channel_other" />
+        <result property="purposes" column="purposes" />
+        <result property="createTime" column="create_time" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <sql id="selectUserRegisterInfoVo">
+        select id, user_id, position, position_other, platforms, platform_other, channels, channel_other, purposes, create_time, update_time
+        from user_register_info
+    </sql>
+
+    <select id="selectUserRegisterInfoById" parameterType="Long" resultMap="UserRegisterInfoResult">
+        <include refid="selectUserRegisterInfoVo"/>
+        where id = #{id}
+    </select>
+
+    <select id="selectUserRegisterInfoByUserId" parameterType="Long" resultMap="UserRegisterInfoResult">
+        <include refid="selectUserRegisterInfoVo"/>
+        where user_id = #{userId}
+    </select>
+
+    <select id="selectUserRegisterInfoList" parameterType="com.ruoyi.system.domain.UserRegisterInfo" resultMap="UserRegisterInfoResult">
+        <include refid="selectUserRegisterInfoVo"/>
+        <where>
+            <if test="userId != null">
+                and user_id = #{userId}
+            </if>
+            <if test="position != null and position != ''">
+                and position = #{position}
+            </if>
+        </where>
+        order by create_time desc
+    </select>
+
+    <insert id="insertUserRegisterInfo" parameterType="com.ruoyi.system.domain.UserRegisterInfo" useGeneratedKeys="true" keyProperty="id">
+        insert into user_register_info(
+            user_id,
+            position,
+            position_other,
+            platforms,
+            platform_other,
+            channels,
+            channel_other,
+            purposes,
+            create_time,
+            update_time
+        ) values (
+            #{userId},
+            #{position},
+            #{positionOther},
+            #{platforms},
+            #{platformOther},
+            #{channels},
+            #{channelOther},
+            #{purposes},
+            sysdate(),
+            sysdate()
+        )
+    </insert>
+
+    <update id="updateUserRegisterInfo" parameterType="com.ruoyi.system.domain.UserRegisterInfo">
+        update user_register_info
+        <set>
+            <if test="position != null">position = #{position},</if>
+            <if test="positionOther != null">position_other = #{positionOther},</if>
+            <if test="platforms != null">platforms = #{platforms},</if>
+            <if test="platformOther != null">platform_other = #{platformOther},</if>
+            <if test="channels != null">channels = #{channels},</if>
+            <if test="channelOther != null">channel_other = #{channelOther},</if>
+            <if test="purposes != null">purposes = #{purposes},</if>
+            update_time = sysdate()
+        </set>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteUserRegisterInfoById" parameterType="Long">
+        delete from user_register_info where id = #{id}
+    </delete>
+
+    <delete id="deleteUserRegisterInfoByIds" parameterType="Long">
+        delete from user_register_info where id in
+        <foreach item="id" collection="array" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+</mapper>

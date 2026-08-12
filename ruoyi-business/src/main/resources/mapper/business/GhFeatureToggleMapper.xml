@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.business.mapper.GhFeatureToggleMapper">
+
+    <resultMap type="GhFeatureToggle" id="GhFeatureToggleResult">
+        <id     property="id"           column="id"           />
+        <result property="toggleKey"    column="toggle_key"   />
+        <result property="toggleName"   column="toggle_name"  />
+        <result property="description"  column="description"  />
+        <result property="enabled"      column="enabled"      />
+        <result property="moduleGroup"  column="module_group" />
+        <result property="sortOrder"    column="sort_order"   />
+        <result property="remark"       column="remark"       />
+        <result property="createTime"   column="create_time"  />
+        <result property="updateTime"   column="update_time"  />
+    </resultMap>
+
+    <sql id="selectGhFeatureToggleVo">
+        select id, toggle_key, toggle_name, description, enabled, module_group, sort_order,
+               remark, create_time, update_time
+        from gh_feature_toggle
+    </sql>
+
+    <select id="selectGhFeatureToggleList" parameterType="GhFeatureToggle" resultMap="GhFeatureToggleResult">
+        <include refid="selectGhFeatureToggleVo"/>
+        <where>
+            <if test="toggleKey != null and toggleKey != ''">
+                AND toggle_key like concat('%', #{toggleKey}, '%')
+            </if>
+            <if test="toggleName != null and toggleName != ''">
+                AND toggle_name like concat('%', #{toggleName}, '%')
+            </if>
+            <if test="enabled != null and enabled != ''">
+                AND enabled = #{enabled}
+            </if>
+            <if test="moduleGroup != null and moduleGroup != ''">
+                AND module_group = #{moduleGroup}
+            </if>
+        </where>
+        order by module_group, sort_order asc
+    </select>
+
+    <select id="selectEnabledToggles" resultMap="GhFeatureToggleResult">
+        <include refid="selectGhFeatureToggleVo"/>
+        where enabled = '1'
+        order by module_group, sort_order asc
+    </select>
+
+    <select id="selectGhFeatureToggleById" parameterType="Long" resultMap="GhFeatureToggleResult">
+        <include refid="selectGhFeatureToggleVo"/>
+        where id = #{id}
+    </select>
+
+    <select id="selectGhFeatureToggleByKey" parameterType="String" resultMap="GhFeatureToggleResult">
+        <include refid="selectGhFeatureToggleVo"/>
+        where toggle_key = #{toggleKey}
+    </select>
+
+    <insert id="insertGhFeatureToggle" parameterType="GhFeatureToggle" useGeneratedKeys="true" keyProperty="id">
+        insert into gh_feature_toggle (
+            <if test="toggleKey != null and toggleKey != ''">toggle_key,</if>
+            <if test="toggleName != null and toggleName != ''">toggle_name,</if>
+            <if test="description != null">description,</if>
+            <if test="enabled != null">enabled,</if>
+            <if test="moduleGroup != null">module_group,</if>
+            <if test="sortOrder != null">sort_order,</if>
+            <if test="remark != null">remark,</if>
+            create_time
+        ) values (
+            <if test="toggleKey != null and toggleKey != ''">#{toggleKey},</if>
+            <if test="toggleName != null and toggleName != ''">#{toggleName},</if>
+            <if test="description != null">#{description},</if>
+            <if test="enabled != null">#{enabled},</if>
+            <if test="moduleGroup != null">#{moduleGroup},</if>
+            <if test="sortOrder != null">#{sortOrder},</if>
+            <if test="remark != null">#{remark},</if>
+            sysdate()
+        )
+    </insert>
+
+    <update id="updateGhFeatureToggle" parameterType="GhFeatureToggle">
+        update gh_feature_toggle
+        <set>
+            <if test="toggleKey != null and toggleKey != ''">toggle_key = #{toggleKey},</if>
+            <if test="toggleName != null and toggleName != ''">toggle_name = #{toggleName},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="enabled != null">enabled = #{enabled},</if>
+            <if test="moduleGroup != null">module_group = #{moduleGroup},</if>
+            <if test="sortOrder != null">sort_order = #{sortOrder},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            update_time = sysdate()
+        </set>
+        where id = #{id}
+    </update>
+
+    <update id="updateToggleStatusBatch" parameterType="java.util.List">
+        <foreach collection="list" item="item" separator=";">
+            update gh_feature_toggle
+            set enabled = #{item.enabled},
+                update_time = sysdate()
+            where toggle_key = #{item.toggleKey}
+        </foreach>
+    </update>
+
+    <delete id="deleteGhFeatureToggleById" parameterType="Long">
+        delete from gh_feature_toggle where id = #{id}
+    </delete>
+
+    <delete id="deleteGhFeatureToggleByIds" parameterType="String">
+        delete from gh_feature_toggle where id in
+        <foreach collection="array" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+</mapper>

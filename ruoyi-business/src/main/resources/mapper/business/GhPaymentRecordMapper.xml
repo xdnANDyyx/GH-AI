@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.business.mapper.GhPaymentRecordMapper">
+
+    <resultMap type="com.ruoyi.business.domain.GhPaymentRecord" id="GhPaymentRecordResult">
+        <result property="id"             column="id"               />
+        <result property="orderNo"        column="order_no"         />
+        <result property="userId"         column="user_id"          />
+        <result property="packageId"      column="package_id"       />
+        <result property="amount"         column="amount"           />
+        <result property="points"         column="points"           />
+        <result property="payMethod"      column="pay_method"       />
+        <result property="payStatus"      column="pay_status"       />
+        <result property="payTime"        column="pay_time"         />
+        <result property="transactionId"  column="transaction_id"   />
+        <result property="remark"         column="remark"           />
+        <result property="createBy"       column="create_by"        />
+        <result property="createTime"     column="create_time"      />
+        <result property="updateBy"       column="update_by"        />
+        <result property="updateTime"     column="update_time"      />
+    </resultMap>
+
+    <resultMap type="com.ruoyi.business.vo.PaymentRecordVO" id="PaymentRecordVOResult">
+        <result property="id"             column="id"               />
+        <result property="orderNo"        column="order_no"         />
+        <result property="userId"         column="user_id"          />
+        <result property="packageId"      column="package_id"       />
+        <result property="packageName"    column="package_name"     />
+        <result property="amount"         column="amount"           />
+        <result property="points"         column="points"           />
+        <result property="payMethod"      column="pay_method"       />
+        <result property="payStatus"      column="pay_status"       />
+        <result property="payTime"        column="pay_time"         />
+        <result property="transactionId"  column="transaction_id"   />
+        <result property="createBy"       column="create_by"        />
+        <result property="createTime"     column="create_time"      />
+        <result property="updateBy"       column="update_by"        />
+        <result property="updateTime"     column="update_time"      />
+    </resultMap>
+
+    <sql id="selectPaymentRecordVo">
+        select p.id, p.order_no, p.user_id, p.package_id, pk.name as package_name,
+               p.amount, p.points, p.pay_method, p.pay_status, p.pay_time,
+               p.transaction_id, p.create_by, p.create_time, p.update_by, p.update_time
+        from gh_payment_record p
+        left join gh_points_package pk on p.package_id = pk.id
+    </sql>
+
+    <select id="selectPaymentRecordList" resultMap="PaymentRecordVOResult">
+        <include refid="selectPaymentRecordVo"/>
+        <where>
+            <if test="query != null">
+                <if test="query.orderNo != null and query.orderNo != ''">
+                    and p.order_no = #{query.orderNo}
+                </if>
+                <if test="query.userId != null">
+                    and p.user_id = #{query.userId}
+                </if>
+                <if test="query.payStatus != null and query.payStatus != ''">
+                    and p.pay_status = #{query.payStatus}
+                </if>
+                <if test="query.beginDate != null">
+                    and date_format(p.create_time, '%Y-%m-%d') &gt;= date_format(#{query.beginDate}, '%Y-%m-%d')
+                </if>
+                <if test="query.endDate != null">
+                    and date_format(p.create_time, '%Y-%m-%d') &lt;= date_format(#{query.endDate}, '%Y-%m-%d')
+                </if>
+            </if>
+        </where>
+        order by p.id desc
+    </select>
+
+</mapper>

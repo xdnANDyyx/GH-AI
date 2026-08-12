@@ -1,0 +1,1551 @@
+<template>
+  <div class="workspace-page">
+    <!-- ========== Steps Bar ========== -->
+    <div class="steps-bar">
+      <div class="step-item active" @click="currentStep = 1">
+        <div class="step-num">1</div>
+        上传素材
+      </div>
+      <div class="step-line"></div>
+      <div class="step-item" :class="{ active: currentStep >= 2 }" @click="currentStep = 2">
+        <div class="step-num">2</div>
+        设计类型与风格
+      </div>
+      <div class="step-line"></div>
+      <div class="step-item" :class="{ active: currentStep >= 3 }" @click="currentStep = 3">
+        <div class="step-num">3</div>
+        生成设置
+      </div>
+      <div class="step-line"></div>
+      <div class="step-item" :class="{ active: currentStep >= 4 }" @click="currentStep = 4">
+        <div class="step-num">4</div>
+        批量生成
+      </div>
+    </div>
+
+    <!-- ========== Three Column Layout ========== -->
+    <div class="three-col">
+      <!-- ===== Canvas Column (left) ===== -->
+   
+      <div class="canvas-col" :style="{ flex: canvasFlex }">
+        <!-- Canvas Toolbar -->
+         <!--
+        <div class="canvas-toolbar">
+          <div class="toolbar-left">
+            <button class="toolbar-btn" @click="fitToScreen">
+              <svg viewBox="0 0 14 14" fill="none"><path d="M2 7a5 5 0 119.5 1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M2 3v4h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              适应屏幕
+            </button>
+          </div>
+          <div class="toolbar-right">
+            <div class="zoom-group">
+              <button class="zoom-btn" @click="zoomOut">−</button>
+              <span class="zoom-val">{{ zoomLevel }}%</span>
+              <button class="zoom-btn" @click="zoomIn">+</button>
+            </div>
+            <button class="toolbar-btn" @click="toggleFullscreen">
+              <svg viewBox="0 0 14 14" fill="none"><rect x="2" y="2" width="10" height="10" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M5 2v10M9 2v10M2 5h10M2 9h10" stroke="currentColor" stroke-width="0.8" opacity="0.4"/></svg>
+              全屏
+            </button>
+          </div>
+        </div>
+          -->
+        <!-- Canvas Area -->
+        <div class="canvas-box"
+        >
+          <!-- <CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" /> -->
+          <div class="canvas-placeholder">
+            <svg viewBox="0 0 64 64" fill="none">
+              <rect x="8" y="12" width="48" height="40" rx="4" stroke="#D1D5DB" stroke-width="2"/>
+              <circle cx="24" cy="26" r="5" stroke="#D1D5DB" stroke-width="1.5"/>
+              <path d="M8 44l16-14 10 10 10-14 12 12" stroke="#D1D5DB" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <h3>拖拽图片到画布，或从右侧上传素材</h3>
+            <p>支持 JPG / PNG / WebP，建议尺寸 ≥ 1200px</p>
+            <p>建议使用高质量素材，获得更佳生成效果</p>
+          </div>
+        </div>
+
+        <!-- Task List Card -->
+        <div class="task-card">
+          <div class="task-header">
+            <span class="task-title">生成任务列表（{{ tasks.length }}）</span>
+            <div class="task-actions">
+              <button class="task-action-btn" @click="clearTasks">
+                <svg viewBox="0 0 14 14" fill="none"><path d="M3 4h8l-.7 7.5a1 1 0 01-1 .9H4.7a1 1 0 01-1-.9L3 4z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 4V2.5h3V4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                清空记录
+              </button>
+              <span class="task-fold" @click="taskListExpanded = !taskListExpanded">{{ taskListExpanded ? '∧' : '∨' }}</span>
+            </div>
+          </div>
+
+          <!-- Tabs -->
+          <div class="task-tabs">
+            <div
+              v-for="tab in taskTabs"
+              :key="tab.key"
+              class="task-tab"
+              :class="{ active: taskFilter === tab.key }"
+              @click="taskFilter = tab.key"
+            >{{ tab.label }}</div>
+          </div>
+
+          <!-- Table -->
+          <div class="task-table-wrap" v-show="taskListExpanded">
+            <table class="task-table">
+              <thead>
+                <tr>
+                  <th style="width:20%">任务名称</th>
+                  <th style="width:10%">设计类型</th>
+                  <th style="width:14%">素材数量</th>
+                  <th style="width:8%">生成数量</th>
+                  <th style="width:8%">状态</th>
+                  <th style="width:14%">进度</th>
+                  <th style="width:14%">创建时间</th>
+                  <th style="width:12%">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="task in filteredTasks" :key="task.id">
+                  <td>
+                    <div class="task-name">
+                      <div class="task-thumbs">
+                        <div class="task-thumb" v-for="(_, i) in task.thumbs" :key="i">
+                          <div class="img-placeholder"></div>
+                        </div>
+                      </div>
+                      <span class="task-name-text">{{ task.name }}</span>
+                    </div>
+                  </td>
+                  <td><span class="cell-meta">{{ task.designType }}</span></td>
+                  <td><span class="cell-meta">{{ task.materialCount }}</span></td>
+                  <td><span class="cell-val">{{ task.genCount }} 套方案</span></td>
+                  <td>
+                    <span class="status-dot" :class="task.statusClass">{{ task.statusText }}</span>
+                  </td>
+                  <td>
+                    <div class="progress-cell" v-if="task.progress !== null">
+                      <div class="progress-bar"><div class="progress-fill" :class="task.statusClass" :style="{ width: task.progress + '%' }"></div></div>
+                      <span class="progress-text">{{ task.progress }}%</span>
+                    </div>
+                    <span class="cell-meta" v-else>--</span>
+                  </td>
+                  <td><span class="cell-meta">{{ task.createdAt }}</span></td>
+                  <td>
+                    <div class="table-actions">
+                      <div class="table-action-icon" title="查看" v-if="task.statusClass === 'green' || task.statusClass === 'blue'" @click="viewTask(task)">
+                        <svg viewBox="0 0 15 15" fill="none"><path d="M1.5 7.5s2.5-4.5 6-4.5 6 4.5 6 4.5-2.5 4.5-6 4.5-6-4.5-6-4.5z" stroke="currentColor" stroke-width="1.2"/><circle cx="7.5" cy="7.5" r="2" stroke="currentColor" stroke-width="1.2"/></svg>
+                      </div>
+                      <div class="table-action-icon" title="下载" v-if="task.statusClass === 'green'" @click="downloadTask(task)">
+                        <svg viewBox="0 0 15 15" fill="none"><path d="M7.5 2v8M4.5 7l3 3 3-3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 11v1.5h10V11" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      </div>
+                      <div class="table-action-icon" title="删除" @click="deleteTask(task)">
+                        <svg viewBox="0 0 15 15" fill="none"><path d="M3.5 4.5h8l-.6 7.5a1 1 0 01-1 .9H5.1a1 1 0 01-1-.9L3.5 4.5z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 4.5V3h4v1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+                <tr v-if="filteredTasks.length === 0">
+                  <td colspan="8" class="empty-row">暂无任务记录</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Tips Card -->
+        <div class="tips-card">
+          <svg class="tips-icon" viewBox="0 0 20 20" fill="none">
+            <circle cx="10" cy="10" r="8.5" stroke="#2563FF" stroke-width="1.5"/>
+            <path d="M7.5 7.5a2.5 2.5 0 114 2c-.7.5-1.5 1-1.5 2.2" stroke="#2563FF" stroke-width="1.3" stroke-linecap="round"/>
+            <circle cx="10" cy="14.5" r="0.7" fill="#2563FF"/>
+          </svg>
+          <div class="tips-content">
+            <div class="tips-title">使用提示</div>
+            <div class="tips-text">
+              1. 建议上传清晰的产品图与参考图，参考图越多，生成效果越丰富<br>
+              2. 生成时间会根据图片数量和复杂度有所不同，请耐心等待
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== Divider + Toggle: canvas ⇔ right panel ===== -->
+      <div class="col-divider-wrapper">
+        <div class="col-divider" @mousedown="startColResize($event, 'right')"></div>
+        <div class="config-toggle-btn" @click="configCollapsed = !configCollapsed" :title="configCollapsed ? '展开创作配置' : '折叠创作配置'">
+          <svg viewBox="0 0 16 16" fill="none" :style="{ transform: configCollapsed ? 'rotate(180deg)' : 'rotate(0deg)' }">
+            <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- ===== Right Column: Config + AI ===== -->
+      <div class="right-col" :style="{ flex: rightFlex }">
+        <div class="right-panel-divider" @mousedown="startRightPanelResize($event, 'config')"></div>
+
+        <!-- ===== Config Panel (创作配置) ===== -->
+        <div class="config-col" :class="{ collapsed: configCollapsed }" :style="{ flex: configFlex }">
+          <div class="config-scroll" v-show="!configCollapsed">
+            <div class="config-inner">
+              <div class="panel-header" @click="toggleAllSections">
+                <span>创作配置</span>
+                <span class="panel-toggle-all">{{ allExpanded ? '全部折叠 ▲' : '全部展开 ▼' }}</span>
+              </div>
+
+              <!-- Section: 上传素材 -->
+              <div class="config-section collapsible">
+                <div class="section-header collapsible" @click="toggleSection('upload')">
+                  <span class="section-label">上传素材</span>
+                  <span class="expand-text">
+                    {{ sections.upload ? '收起' : '展开' }}
+                    <svg :size="12" class="expand-arrow" :class="{ expanded: sections.upload }" viewBox="0 0 12 12" fill="none"><path d="M3 4.5l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </span>
+                </div>
+                <div class="section-body" v-show="sections.upload">
+                  <!-- 产品图 -->
+                  <div class="upload-section">
+                    <div class="upload-label">产品图 <span class="required">（必传）</span></div>
+                    <div class="upload-zone" @click="triggerProductUpload">
+                      <svg viewBox="0 0 28 28" fill="none"><path d="M14 7v10M10 11l4-4 4 4" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 18v4a2 2 0 002 2h12a2 2 0 002-2v-4" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      <div class="upload-text">点击上传产品图</div>
+                      <div class="upload-hint">支持 JPG / PNG / WebP，最多 50 张</div>
+                    </div>
+                    <div class="upload-count">
+                      <span class="upload-count-text">已上传 <strong>{{ productImages.length }}</strong> / 50</span>
+                      <span class="upload-clear" v-if="productImages.length > 0" @click="productImages = []">清空</span>
+                    </div>
+                    <input ref="productInput" type="file" multiple accept="image/jpeg,image/png,image/webp" style="display:none" @change="handleProductUpload" />
+                  </div>
+
+                  <!-- 参考图 -->
+                  <div class="upload-section">
+                    <div class="upload-label">参考图 <span class="optional">（选传）</span></div>
+                    <div class="upload-zone" @click="triggerRefUpload">
+                      <svg viewBox="0 0 28 28" fill="none"><path d="M14 7v10M10 11l4-4 4 4" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 18v4a2 2 0 002 2h12a2 2 0 002-2v-4" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      <div class="upload-text">点击上传参考图</div>
+                      <div class="upload-hint">支持 JPG / PNG / WebP，最多 20 张</div>
+                    </div>
+                    <div class="upload-count">
+                      <span class="upload-count-text">已上传 <strong>{{ refImages.length }}</strong> / 20</span>
+                      <span class="upload-clear" v-if="refImages.length > 0" @click="refImages = []">清空</span>
+                    </div>
+                    <input ref="refInput" type="file" multiple accept="image/jpeg,image/png,image/webp" style="display:none" @change="handleRefUpload" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section: 核心卖点 -->
+              <div class="config-section collapsible">
+                <div class="section-header collapsible" @click="toggleSection('selling')">
+                  <span class="section-label">核心卖点</span>
+                  <span class="expand-text">
+                    {{ sections.selling ? '收起' : '展开' }}
+                    <svg :size="12" class="expand-arrow" :class="{ expanded: sections.selling }" viewBox="0 0 12 12" fill="none"><path d="M3 4.5l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </span>
+                </div>
+                <div class="section-body" v-show="sections.selling">
+                  <div class="checkbox-grid">
+                    <div
+                      v-for="(point, i) in sellingPoints"
+                      :key="i"
+                      class="checkbox-item"
+                      @click="toggleSellingPoint(i)"
+                    >
+                      <div class="checkbox-box" :class="{ checked: point.checked }">
+                        <svg v-if="point.checked" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.2 2.2L8 3" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      </div>
+                      {{ point.label }}
+                    </div>
+                    <div class="checkbox-add" @click="addCustomSellingPoint">
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 2.5v7M2.5 6h7" stroke="#2563FF" stroke-width="1.3" stroke-linecap="round"/></svg>
+                      自定义卖点
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section: 生成数量 -->
+              <div class="config-section collapsible">
+                <div class="section-header collapsible" @click="toggleSection('count')">
+                  <span class="section-label">生成数量</span>
+                  <span class="expand-text">
+                    {{ sections.count ? '收起' : '展开' }}
+                    <svg :size="12" class="expand-arrow" :class="{ expanded: sections.count }" viewBox="0 0 12 12" fill="none"><path d="M3 4.5l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </span>
+                </div>
+                <div class="section-body" v-show="sections.count">
+                  <div class="count-sublabel">每个产品生成的方案数</div>
+                  <div class="count-row">
+                    <div class="count-group">
+                      <button
+                        v-for="n in [1, 2, 3, 4, 5]"
+                        :key="n"
+                        class="count-btn"
+                        :class="{ active: genCount === n && !customCount }"
+                        @click="selectCount(n)"
+                      >{{ n }}套</button>
+                      <button class="count-btn" :class="{ active: customCount }" @click="customCount = true">自定义</button>
+                    </div>
+                    <div class="count-input">
+                      <input type="number" v-model.number="genCount" min="1" max="99" @focus="customCount = true" />
+                      <div class="count-input-arrows">
+                        <div class="count-input-arrow" @click="genCount = Math.min(99, genCount + 1)">▲</div>
+                        <div class="count-input-arrow" @click="genCount = Math.max(1, genCount - 1)">▼</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section: 输出设置 -->
+              <div class="config-section collapsible">
+                <div class="section-header collapsible" @click="toggleSection('output')">
+                  <span class="section-label">输出设置</span>
+                  <span class="expand-text">
+                    {{ sections.output ? '收起' : '展开' }}
+                    <svg :size="12" class="expand-arrow" :class="{ expanded: sections.output }" viewBox="0 0 12 12" fill="none"><path d="M3 4.5l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </span>
+                </div>
+                <div class="section-body" v-show="sections.output">
+                  <div class="output-group">
+                    <div class="output-label">图片格式</div>
+                    <div class="radio-group">
+                      <button
+                        v-for="fmt in ['JPG', 'PNG', 'WebP']"
+                        :key="fmt"
+                        class="radio-btn"
+                        :class="{ active: outputFormat === fmt }"
+                        @click="outputFormat = fmt"
+                      >{{ fmt }}</button>
+                    </div>
+                  </div>
+
+                  <div class="output-group">
+                    <div class="output-label">画质</div>
+                    <div class="radio-group">
+                      <button
+                        v-for="q in qualityOptions"
+                        :key="q.value"
+                        class="radio-btn"
+                        :class="{ active: outputQuality === q.value }"
+                        @click="outputQuality = q.value"
+                      >{{ q.label }}</button>
+                    </div>
+                  </div>
+
+                  <div class="output-group">
+                    <div class="output-label">尺寸设置</div>
+                    <select class="size-select" v-model="outputSize">
+                      <option value="">平台推荐尺寸（Amazon 主图）</option>
+                      <option value="1600x1600">1600 × 1600（1:1 主图）</option>
+                      <option value="2000x2000">2000 × 2000（高清 1:1）</option>
+                      <option value="1200x1800">1200 × 1800（3:2）</option>
+                      <option value="1800x1200">1800 × 1200（3:2 横版）</option>
+                      <option value="1200x1200">1200 × 1200（1:1 标准）</option>
+                      <option value="800x800">800 × 800（小尺寸）</option>
+                      <option value="custom">自定义尺寸</option>
+                    </select>
+                  </div>
+
+                  <!-- 自定义尺寸输入 -->
+                  <div class="output-group" v-if="outputSize === 'custom'">
+                    <div class="output-label">自定义尺寸（像素）</div>
+                    <div class="custom-size-row">
+                      <input type="number" v-model.number="customWidth" placeholder="宽度" class="size-input" min="100" />
+                      <span class="size-x">×</span>
+                      <input type="number" v-model.number="customHeight" placeholder="高度" class="size-input" min="100" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section: 语言 -->
+              <div class="config-section collapsible">
+                <div class="section-header collapsible" @click="toggleSection('language')">
+                  <span class="section-label">语言</span>
+                  <span class="expand-text">
+                    {{ sections.language ? '收起' : '展开' }}
+                    <svg :size="12" class="expand-arrow" :class="{ expanded: sections.language }" viewBox="0 0 12 12" fill="none"><path d="M3 4.5l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </span>
+                </div>
+                <div class="section-body" v-show="sections.language">
+                  <el-select v-model="language" style="width: 100%">
+                    <el-option v-for="l in languages" :key="l.value" :label="l.label" :value="l.value" />
+                  </el-select>
+                  <p class="section-helper">选择输出图片上文字的语言，适配跨境电商场景</p>
+                </div>
+              </div>
+
+              <!-- Section: 提示词增强 -->
+              <div class="config-section collapsible">
+                <div class="section-header collapsible" @click="toggleSection('promptBoost')">
+                  <span class="section-label">提示词增强</span>
+                  <span class="expand-text">
+                    {{ sections.promptBoost ? '收起' : '展开' }}
+                    <svg :size="12" class="expand-arrow" :class="{ expanded: sections.promptBoost }" viewBox="0 0 12 12" fill="none"><path d="M3 4.5l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </span>
+                </div>
+                <div class="section-body" v-show="sections.promptBoost">
+                  <div class="prompt-boost-row">
+                    <label class="boost-label">产品类别</label>
+                    <PromptLibrarySelect ref="boostProductRef" category="product" v-model="boostProduct" placeholder="选择产品类别" />
+                  </div>
+                  <div class="prompt-boost-row">
+                    <label class="boost-label">材质</label>
+                    <PromptLibrarySelect ref="boostMaterialRef" category="material" v-model="boostMaterial" placeholder="选择材质" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Generate Button -->
+              <div class="gen-btn-wrap">
+                <el-button type="primary" size="large" class="generate-btn" :loading="generating" :disabled="productImages.length === 0" @click="startBatchGenerate">
+                  {{ generating ? '生成中...' : '开始批量生成' }}
+                </el-button>
+                 <div class="gen-btn-sub" v-if="!generating">预计消耗 {{ estimatedCost }} 积分 | 预计时间 2-5 分钟</div> 
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== Divider inside right panel: config ⇔ AI ===== -->
+        <div class="right-panel-divider" @mousedown="startRightPanelResize($event, 'ai')"></div>
+
+        <!-- ===== AI Assistant Column ===== -->
+        <div class="ai-col" :style="{ flex: aiFlex }">
+          <AiAssistant ref="aiAssistantRef" />
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+defineOptions({ name: 'BatchProcessView' })
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import AiAssistant from '@/components/AiAssistant.vue'
+import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
+// import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
+// import CanvasOverlay from '@/components/CanvasOverlay.vue'
+import { useImageGeneration } from '@/composables/useImageGeneration'
+import { ElMessage } from 'element-plus'
+
+// const { canvasUI, handleCanvasExport } = useCanvasInteractions({
+//   canvasSelector: '.canvas-box',
+//   defaultName: 'batch-process',
+// })
+const gen = useImageGeneration('render')
+
+// ==================== AI Assistant ====================
+const aiAssistantRef = ref(null)
+
+// ==================== Steps ====================
+const currentStep = ref(1)
+
+// ==================== Canvas ====================
+const zoomLevel = ref(100)
+
+
+// function zoomIn() {
+//   zoomLevel.value = Math.min(200, zoomLevel.value + 25)
+// }
+// function zoomOut() {
+//   zoomLevel.value = Math.max(25, zoomLevel.value - 25)
+// }
+function fitToScreen() {
+  zoomLevel.value = 100
+}
+function toggleFullscreen() {
+  // fullscreen toggle placeholder
+}
+
+// ==================== Task List ====================
+const taskListExpanded = ref(true)
+const taskFilter = ref('all')
+const taskTabs = [
+  { key: 'all', label: '全部' },
+  { key: 'processing', label: '处理中' },
+  { key: 'queued', label: '排队中' },
+  { key: 'done', label: '已完成' },
+  { key: 'failed', label: '生成失败' }
+]
+
+const tasks = ref([
+  {
+    id: 1,
+    name: '北欧风格椅子详情图方案',
+    designType: '详情图 / A+',
+    materialCount: '产品图 8 张 / 参考图 6 张',
+    genCount: '3',
+    statusText: '生成中',
+    statusClass: 'blue',
+    progress: 60,
+    createdAt: '2024-06-01 14:30',
+    thumbs: [1, 2]
+  },
+  {
+    id: 2,
+    name: '现代简约沙发主图方案',
+    designType: '主图设计',
+    materialCount: '产品图 6 张 / 参考图 4 张',
+    genCount: '3',
+    statusText: '排队中',
+    statusClass: 'orange',
+    progress: null,
+    createdAt: '2024-06-01 14:25',
+    thumbs: [1, 2]
+  },
+  {
+    id: 3,
+    name: '实木餐桌场景方案',
+    designType: '主图 + 详情图',
+    materialCount: '产品图 5 张 / 参考图 5 张',
+    genCount: '3',
+    statusText: '已完成',
+    statusClass: 'green',
+    progress: 100,
+    createdAt: '2024-06-01 14:20',
+    thumbs: [1, 2]
+  }
+])
+
+const filteredTasks = computed(() => {
+  if (taskFilter.value === 'all') return tasks.value
+  const map = {
+    processing: 'blue',
+    queued: 'orange',
+    done: 'green',
+    failed: 'red'
+  }
+  return tasks.value.filter(t => t.statusClass === map[taskFilter.value])
+})
+
+function clearTasks() {
+  tasks.value = []
+}
+
+function viewTask(task) {
+  console.log('view task:', task)
+}
+
+function downloadTask(task) {
+  console.log('download task:', task)
+}
+
+function deleteTask(task) {
+  tasks.value = tasks.value.filter(t => t.id !== task.id)
+}
+
+// ==================== Upload ====================
+const productImages = ref([])
+const refImages = ref([])
+const productInput = ref(null)
+const refInput = ref(null)
+
+function triggerProductUpload() {
+  productInput.value?.click()
+}
+function triggerRefUpload() {
+  refInput.value?.click()
+}
+function handleProductUpload(e) {
+  const files = Array.from(e.target.files || [])
+  productImages.value = [...productImages.value, ...files].slice(0, 50)
+}
+function handleRefUpload(e) {
+  const files = Array.from(e.target.files || [])
+  refImages.value = [...refImages.value, ...files].slice(0, 20)
+}
+
+// ==================== Selling Points ====================
+const sellingPoints = ref([
+  { label: '高品质材料', checked: true },
+  { label: '耐用结实', checked: true },
+  { label: '多功能使用', checked: true },
+  { label: '易于安装', checked: false },
+  { label: '防刮耐磨', checked: false },
+  { label: '安全环保', checked: false },
+  { label: '时尚设计', checked: false },
+  { label: '性价比高', checked: false },
+  { label: '智能设计', checked: false },
+  { label: '抗菌防霉', checked: false },
+  { label: '防潮防水', checked: false },
+  { label: '静音减震', checked: false }
+])
+
+function toggleSellingPoint(index) {
+  sellingPoints.value[index].checked = !sellingPoints.value[index].checked
+}
+
+function addCustomSellingPoint() {
+  const name = prompt('请输入自定义卖点名称')
+  if (name && name.trim()) {
+    sellingPoints.value.push({ label: name.trim(), checked: true })
+  }
+}
+
+// ==================== Generate Count ====================
+const genCount = ref(3)
+const customCount = ref(false)
+
+function selectCount(n) {
+  genCount.value = n
+  customCount.value = false
+}
+
+// ==================== Output Settings ====================
+const outputFormat = ref('JPG')
+const qualityOptions = [
+  { label: '标准', value: 'standard' },
+  { label: '高清', value: 'hd' },
+  { label: '超清', value: 'ultra' }
+]
+const outputQuality = ref('hd')
+const outputSize = ref('')
+const customWidth = ref(1600)
+const customHeight = ref(1600)
+
+// ==================== Language ====================
+const language = ref('zh-CN')
+const languages = [
+  { label: '中文（简体）', value: 'zh-CN' },
+  { label: '英语（美国）', value: 'en-US' },
+  { label: '英语（英国）', value: 'en-GB' },
+  { label: '日语', value: 'ja-JP' },
+  { label: '韩语', value: 'ko-KR' },
+  { label: '德语', value: 'de-DE' },
+  { label: '法语', value: 'fr-FR' },
+  { label: '西班牙语', value: 'es-ES' },
+]
+
+// ==================== Prompt Boost ====================
+const boostProduct = ref('')
+const boostMaterial = ref('')
+const boostProductRef = ref(null)
+const boostMaterialRef = ref(null)
+
+// ==================== Generate ====================
+const generating = ref(false)
+const estimatedCost = computed(() => {
+  return genCount.value * 12
+})
+
+async function startBatchGenerate() {
+  if (productImages.value.length === 0) return
+  if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
+  generating.value = true
+  try {
+    const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
+    const basePrompt = `批量生成电商图片，共${productImages.value.length}张，数量${genCount.value}`
+    const prompt = boostText ? `${basePrompt}。约束：${boostText}。` : basePrompt
+    await gen.fullGenerate(productImages.value, prompt, { consumePoints: 2, featureName: 'ai_assistant', title: '批量处理生成', n: genCount.value })
+    ElMessage.success('批量生成完成')
+  } catch (e) {
+    console.error('批量生成失败:', e)
+    ElMessage.error('生成失败，请稍后重试')
+  } finally {
+    generating.value = false
+  }
+}
+
+// ==================== Section Collapse (like WhiteBg) ====================
+const sections = ref({
+  upload: true,
+  selling: true,
+  count: true,
+  output: true,
+  language: true,
+  promptBoost: false
+})
+
+const allExpanded = computed(() => {
+  return Object.values(sections.value).every(v => v)
+})
+
+function toggleSection(key) {
+  sections.value[key] = !sections.value[key]
+}
+
+function toggleAllSections() {
+  const target = !allExpanded.value
+  Object.keys(sections.value).forEach(k => {
+    sections.value[k] = target
+  })
+}
+
+// ==================== Panel Layout ====================
+const configCollapsed = ref(false)
+const _configWidthPx = ref(320)
+const _aiWidthPx = ref(360)
+
+const canvasFlex = computed(() => '1 1 0%')
+const rightFlex = computed(() => {
+  const configW = configCollapsed.value ? 40 : _configWidthPx.value
+  return `0 0 ${configW + _aiWidthPx.value + 12}px`
+})
+const configFlex = computed(() => {
+  if (configCollapsed.value) return '0 0 40px'
+  return `0 0 ${_configWidthPx.value}px`
+})
+const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
+
+// ---------- Column resize logic (like WhiteBg) ----------
+let isResizing = false
+let resizeTarget = ''
+
+function startColResize(e, target) {
+  isResizing = true
+  resizeTarget = target
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  e.preventDefault()
+}
+
+function onMouseMove(e) {
+  if (!isResizing) return
+  const threeCol = document.querySelector('.three-col')
+  if (!threeCol) return
+  const rect = threeCol.getBoundingClientRect()
+
+  if (resizeTarget === 'right' || resizeTarget === 'config') {
+    const rightWidth = rect.right - e.clientX - 24
+    const totalCurrent = _configWidthPx.value + _aiWidthPx.value + 12
+    if (totalCurrent > 0 && rightWidth > 200) {
+      const ratio = rightWidth / totalCurrent
+      _configWidthPx.value = Math.max(150, Math.min(600, Math.round(_configWidthPx.value * ratio)))
+      _aiWidthPx.value = Math.max(200, Math.min(800, Math.round(_aiWidthPx.value * ratio)))
+    }
+  } else if (resizeTarget === 'ai') {
+    const rightCol = document.querySelector('.right-col')
+    if (!rightCol) return
+    const rightRect = rightCol.getBoundingClientRect()
+    const rightX = e.clientX - rightRect.left
+    const aiWidth = rightRect.width - rightX - 6
+    _aiWidthPx.value = Math.max(200, Math.min(800, Math.round(aiWidth)))
+  }
+}
+
+function onMouseUp() {
+  if (isResizing) {
+    isResizing = false
+    resizeTarget = ''
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }
+}
+
+function startRightPanelResize(e, target) {
+  isResizing = true
+  resizeTarget = target
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  e.preventDefault()
+}
+
+// ==================== Lifecycle ====================
+onMounted(() => {
+  document.addEventListener('mousemove', onMouseMove)
+  document.addEventListener('mouseup', onMouseUp)
+  nextTick(() => {
+    const rightCol = document.querySelector('.right-col')
+    if (rightCol) {
+      const w = rightCol.getBoundingClientRect().width
+      _configWidthPx.value = Math.round(w * 0.35)
+      _aiWidthPx.value = Math.round(w * 0.55)
+    }
+  })
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('mousemove', onMouseMove)
+  document.removeEventListener('mouseup', onMouseUp)
+})
+</script>
+
+<style scoped>
+/* ============================================================
+   Layout
+   ============================================================ */
+.workspace-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ---- Steps Bar ---- */
+.steps-bar {
+  display: flex;
+  align-items: center;
+  padding: 12px 24px;
+  background: #fff;
+  border-bottom: 1px solid #E8EDF5;
+  flex-shrink: 0;
+  overflow-x: auto;
+  gap: 0;
+}
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #6B7280;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.step-item.active { color: #2563FF; font-weight: 600; }
+.step-num {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600;
+  border: 2px solid #E8EDF5;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+.step-item.active .step-num {
+  background: #2563FF; color: #fff; border-color: #2563FF;
+}
+.step-line {
+  flex: 1; height: 2px; background: #E8EDF5; min-width: 12px; margin: 0 6px;
+}
+
+.prompt-boost-row { margin-bottom: 10px; }
+.prompt-boost-row .boost-label {
+  display: block; font-size: 12px; color: #6B7280; margin-bottom: 4px;
+}
+
+/* ---- Three Column ---- */
+.three-col {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ---- Column Divider + Toggle Wrapper ---- */
+.col-divider-wrapper {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  width: 24px;
+}
+.col-divider {
+  width: 6px;
+  height: 100%;
+  background: transparent;
+  cursor: col-resize;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 5;
+  transition: background 0.2s;
+}
+.col-divider:hover,
+.col-divider:active { background: #2563FF; }
+.config-toggle-btn {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  width: 20px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border: 1px solid #E8EDF5;
+  border-radius: 8px 0 0 8px;
+  cursor: pointer;
+  color: #6B7280;
+  box-shadow: -2px 0 8px rgba(0,0,0,0.06);
+  transition: all 0.2s ease;
+}
+.config-toggle-btn:hover {
+  background: #F0F4FF;
+  color: #2563FF;
+  border-color: #2563FF;
+}
+.config-toggle-btn svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.2s ease;
+}
+
+/* ---- Right Panel Divider ---- */
+.right-panel-divider {
+  width: 6px;
+  background: transparent;
+  cursor: col-resize;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 5;
+  transition: background 0.2s;
+}
+.right-panel-divider:hover,
+.right-panel-divider:active { background: #2563FF; }
+
+/* ============================================================
+   Canvas Column
+   ============================================================ */
+.canvas-col {
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  overflow: hidden;
+  background: #F7F9FC;
+  min-width: 0;
+  gap: 12px;
+}
+
+/* Canvas Toolbar */
+.canvas-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: #fff;
+  border: 1px solid #E8EDF5;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.toolbar-left,
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid #E8EDF5;
+  background: #fff;
+  font-size: 12px;
+  color: #6B7280;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all .15s;
+  font-family: inherit;
+}
+.toolbar-btn:hover { border-color: #2563FF; color: #2563FF; }
+.toolbar-btn svg { width: 14px; height: 14px; }
+
+.zoom-group {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid #E8EDF5;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.zoom-btn {
+  padding: 4px 8px;
+  border: none;
+  background: #fff;
+  font-size: 13px;
+  color: #6B7280;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+}
+.zoom-btn:hover { background: #F7F9FC; color: #2563FF; }
+.zoom-val {
+  font-size: 12px;
+  color: #1F2937;
+  padding: 0 8px;
+  border-left: 1px solid #E8EDF5;
+  border-right: 1px solid #E8EDF5;
+  line-height: 24px;
+  font-weight: 500;
+}
+
+/* Canvas Box */
+.canvas-box {
+  flex: 1;
+  border: 2px dashed #E8EDF5;
+  border-radius: 12px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  min-height: 200px;
+}
+.canvas-placeholder {
+  text-align: center;
+  color: #9CA3AF;
+  padding: 20px;
+}
+.canvas-placeholder svg {
+  width: 64px;
+  height: 64px;
+  color: #D1D5DB;
+  margin-bottom: 12px;
+}
+.canvas-placeholder h3 {
+  font-size: 14px;
+  color: #1F2937;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.canvas-placeholder p {
+  font-size: 12px;
+  color: #9CA3AF;
+  margin: 0;
+  line-height: 1.8;
+}
+
+/* Task Card */
+.task-card {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #E8EDF5;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.task-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 0;
+}
+.task-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1F2937;
+}
+.task-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.task-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  color: #6B7280;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all .15s;
+  font-family: inherit;
+}
+.task-action-btn:hover { background: #F7F9FC; color: #2563FF; }
+.task-action-btn svg { width: 14px; height: 14px; }
+.task-fold {
+  cursor: pointer;
+  color: #9CA3AF;
+  font-size: 14px;
+  padding: 4px;
+}
+.task-fold:hover { color: #6B7280; }
+
+/* Tabs */
+.task-tabs {
+  display: flex;
+  gap: 0;
+  padding: 12px 16px 0;
+  border-bottom: 1px solid #E8EDF5;
+}
+.task-tab {
+  padding: 8px 16px;
+  font-size: 13px;
+  color: #6B7280;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all .15s;
+  font-weight: 500;
+}
+.task-tab:hover { color: #2563FF; }
+.task-tab.active { color: #2563FF; border-bottom-color: #2563FF; }
+
+/* Table - 紧凑样式确保3行能放下 */
+.task-table-wrap {
+  max-height: 180px;
+  overflow-y: auto;
+}
+.task-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.task-table th {
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 11px;
+  color: #9CA3AF;
+  font-weight: 500;
+  background: #FAFBFC;
+  border-bottom: 1px solid #E8EDF5;
+  position: sticky;
+  top: 0;
+}
+.task-table td {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: #1F2937;
+  border-bottom: 1px solid #F7F9FC;
+  vertical-align: middle;
+}
+.task-table tr:last-child td { border-bottom: none; }
+.task-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.task-thumbs { display: flex; gap: 3px; }
+.task-thumb { width: 24px; height: 24px; border-radius: 4px; overflow: hidden; flex-shrink: 0; }
+.task-thumb .img-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #e8edf5, #f0f4fa);
+}
+.task-name-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: #1F2937;
+  line-height: 1.3;
+}
+.cell-meta { font-size: 11px; color: #6B7280; }
+.cell-val { font-size: 11px; }
+
+.status-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.status-dot::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.status-dot.blue { color: #2563FF; }
+.status-dot.orange { color: #F59E0B; }
+.status-dot.green { color: #22C55E; }
+.status-dot.red { color: #EF4444; }
+
+.progress-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 80px;
+}
+.progress-bar {
+  flex: 1;
+  height: 4px;
+  background: #E8EDF5;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.progress-fill { height: 100%; border-radius: 2px; }
+.progress-fill.blue { background: #2563FF; }
+.progress-fill.green { background: #22C55E; }
+.progress-fill.orange { background: #F59E0B; }
+.progress-text {
+  font-size: 12px;
+  color: #6B7280;
+  white-space: nowrap;
+}
+
+.table-actions { display: flex; align-items: center; gap: 4px; }
+.table-action-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #9CA3AF;
+  transition: all .15s;
+}
+.table-action-icon:hover { background: #F7F9FC; color: #2563FF; }
+.table-action-icon svg { width: 15px; height: 15px; }
+
+.empty-row {
+  text-align: center;
+  color: #9CA3AF;
+  font-size: 13px;
+  padding: 24px 12px;
+}
+
+/* Tips Card - 紧凑样式 */
+.tips-card {
+  background: linear-gradient(135deg, #EEF2FF, #EFF6FF);
+  border: 1px solid #DBEAFE;
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.tips-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: #2563FF;
+  margin-top: 1px;
+}
+.tips-content { flex: 1; }
+.tips-title { font-size: 12px; font-weight: 600; color: #1F2937; margin-bottom: 3px; }
+.tips-text { font-size: 11px; color: #6B7280; line-height: 1.6; }
+
+/* ============================================================
+   Right Column (Config + AI)
+   ============================================================ */
+.right-col {
+  display: flex;
+  background: #fff;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ============================================================
+   Config Column (创作配置)
+   ============================================================ */
+.config-col {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  min-width: 0;
+  overflow: hidden;
+  transition: flex 0.2s ease;
+}
+.config-col.collapsed {
+  flex: 0 0 0 !important;
+  min-width: 0;
+  overflow: hidden;
+}
+.config-scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-width: 0;
+}
+.config-inner {
+  padding: 0 16px 16px;
+}
+
+/* Panel Header */
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  cursor: pointer;
+  user-select: none;
+}
+.panel-header span:first-child {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1F2937;
+}
+.panel-toggle-all {
+  font-size: 12px;
+  color: #2563FF;
+  cursor: pointer;
+}
+.panel-toggle-all:hover { text-decoration: underline; }
+
+/* Config Section */
+.config-section {
+  border-bottom: 1px solid #E8EDF5;
+  margin-bottom: 0;
+}
+.config-section:last-of-type {
+  border-bottom: none;
+}
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  cursor: pointer;
+  user-select: none;
+}
+.section-header:hover .section-label { color: #2563FF; }
+.section-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1F2937;
+  transition: color 0.15s;
+}
+.expand-text {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #9CA3AF;
+}
+.expand-arrow {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.2s ease;
+}
+.expand-arrow.expanded {
+  transform: rotate(180deg);
+}
+.section-body {
+  padding: 0 0 16px;
+}
+
+/* Upload Section */
+.upload-section { margin-bottom: 16px; }
+.upload-section:last-child { margin-bottom: 0; }
+.upload-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1F2937;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.upload-label .required { color: #EF4444; font-size: 12px; }
+.upload-label .optional { color: #9CA3AF; font-size: 12px; font-weight: 400; }
+.upload-zone {
+  border: 2px dashed #E8EDF5;
+  border-radius: 10px;
+  padding: 20px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all .2s;
+}
+.upload-zone:hover { border-color: #2563FF; background: #FAFBFF; }
+.upload-zone svg { width: 28px; height: 28px; color: #9CA3AF; margin-bottom: 8px; }
+.upload-text { font-size: 13px; color: #2563FF; font-weight: 500; margin-bottom: 4px; }
+.upload-hint { font-size: 11px; color: #9CA3AF; }
+.upload-count {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+.upload-count-text { font-size: 12px; color: #6B7280; }
+.upload-count-text strong { color: #1F2937; font-weight: 600; }
+.upload-clear { font-size: 12px; color: #2563FF; cursor: pointer; }
+.upload-clear:hover { text-decoration: underline; }
+
+/* Checkbox Grid */
+.checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #1F2937;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 6px;
+  transition: background .15s;
+}
+.checkbox-item:hover { background: #F7F9FC; }
+.checkbox-box {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1.5px solid #D1D5DB;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.checkbox-box.checked { background: #2563FF; border-color: #2563FF; }
+.checkbox-box svg { width: 10px; height: 10px; display: none; }
+.checkbox-box.checked svg { display: block; }
+.checkbox-add {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: #2563FF;
+  cursor: pointer;
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.checkbox-add:hover { text-decoration: underline; }
+
+/* Count Section */
+.count-sublabel { font-size: 11px; color: #9CA3AF; margin-bottom: 10px; }
+.count-row { display: flex; align-items: center; gap: 8px; }
+.count-group {
+  display: flex;
+  gap: 0;
+  border: 1px solid #E8EDF5;
+  border-radius: 8px;
+  overflow: hidden;
+  align-items: center;
+  flex: 1;
+}
+.count-btn {
+  flex: 1;
+  padding: 7px 6px;
+  font-size: 12px;
+  cursor: pointer;
+  background: #fff;
+  border: none;
+  color: #6B7280;
+  border-right: 1px solid #E8EDF5;
+  transition: all .15s;
+  font-weight: 500;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.count-btn:last-of-type { border-right: none; }
+.count-btn.active { background: #2563FF; color: #fff; }
+.count-btn:hover:not(.active) { background: #F7F9FC; }
+.count-input {
+  display: flex;
+  align-items: center;
+  border: 1px solid #E8EDF5;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.count-input input {
+  width: 42px;
+  padding: 6px 4px;
+  border: none;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1F2937;
+  outline: none;
+  font-family: inherit;
+}
+.count-input-arrows { display: flex; flex-direction: column; border-left: 1px solid #E8EDF5; }
+.count-input-arrow {
+  padding: 1px 5px;
+  font-size: 9px;
+  color: #9CA3AF;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px solid #E8EDF5;
+  line-height: 1;
+}
+.count-input-arrow:last-child { border-bottom: none; }
+.count-input-arrow:hover { background: #F7F9FC; color: #6B7280; }
+
+/* Output Section */
+.output-group { margin-bottom: 14px; }
+.output-group:last-child { margin-bottom: 0; }
+.output-label { font-size: 12px; color: #6B7280; margin-bottom: 8px; }
+.radio-group {
+  display: flex;
+  gap: 0;
+  border: 1px solid #E8EDF5;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.radio-btn {
+  flex: 1;
+  padding: 7px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  background: #fff;
+  border: none;
+  color: #6B7280;
+  text-align: center;
+  border-right: 1px solid #E8EDF5;
+  transition: all .15s;
+  font-weight: 500;
+  font-family: inherit;
+}
+.radio-btn:last-child { border-right: none; }
+.radio-btn.active { background: #2563FF; color: #fff; }
+.radio-btn:hover:not(.active) { background: #F7F9FC; }
+
+/* Size Select */
+.size-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #E8EDF5;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #1F2937;
+  outline: none;
+  background: #fff;
+  font-family: inherit;
+  cursor: pointer;
+}
+.size-select:focus { border-color: #2563FF; }
+
+/* Custom Size */
+.custom-size-row { display: flex; align-items: center; gap: 8px; }
+.size-input {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid #E8EDF5;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #1F2937;
+  outline: none;
+  font-family: inherit;
+  text-align: center;
+}
+.size-input:focus { border-color: #2563FF; }
+.size-x { font-size: 13px; color: #9CA3AF; font-weight: 500; }
+
+/* Section helper */
+.section-helper {
+  font-size: 11px;
+  color: #9CA3AF;
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+/* Generate Button - 与白底图一致 */
+.gen-btn-wrap {
+  padding: 16px 0 0;
+}
+.generate-btn {
+  width: 100%;
+  font-size: 14px;
+  font-weight: 500;
+  height: 40px;
+  border-radius: 8px;
+}
+.gen-btn-sub {
+  font-size: 11px;
+  font-weight: 400;
+  color: #9CA3AF;
+  margin-top: 6px;
+  text-align: center;
+}
+
+/* ============================================================
+   AI Column
+   ============================================================ */
+.ai-col {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-left: 1px solid #E8EDF5;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #E8EDF5; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #D1D5DB; }
+</style>

@@ -1,0 +1,28 @@
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Logs
+logs/
+*.log
+ruoyi-admin/logs/
+
+# Java build output
+target/
+*/target/
+
+# Frontend dependencies and build output
+node_modules/
+*/node_modules/
+dist/
+*/dist/
+
+# Env files
+.env.local
+.env.*.local
+# 排除的目录
+/guanghe-html/
+/ui/
+/ruoyi-admin/D:/

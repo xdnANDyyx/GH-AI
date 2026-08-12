@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.business.mapper.GhPointsRecordMapper">
+
+    <resultMap type="com.ruoyi.business.domain.GhPointsRecord" id="GhPointsRecordResult">
+        <result property="id"             column="id"               />
+        <result property="userId"         column="user_id"          />
+        <result property="changeType"     column="change_type"      />
+        <result property="changePoints"   column="change_points"    />
+        <result property="balanceAfter"   column="balance_after"    />
+        <result property="relatedOrderNo" column="related_order_no" />
+        <result property="reason"         column="reason"           />
+        <result property="operatorId"     column="operator_id"      />
+        <result property="createBy"       column="create_by"        />
+        <result property="createTime"     column="create_time"      />
+    </resultMap>
+
+    <resultMap type="com.ruoyi.business.vo.PointsRecordVO" id="PointsRecordVOResult">
+        <result property="id"             column="id"               />
+        <result property="userId"         column="user_id"          />
+        <result property="userName"       column="user_name"        />
+        <result property="changeType"     column="change_type"      />
+        <result property="changePoints"   column="change_points"    />
+        <result property="balanceAfter"   column="balance_after"    />
+        <result property="relatedOrderNo" column="related_order_no" />
+        <result property="reason"         column="reason"           />
+        <result property="operatorId"     column="operator_id"      />
+        <result property="operatorName"   column="operator_name"    />
+        <result property="createBy"       column="create_by"        />
+        <result property="createTime"     column="create_time"      />
+    </resultMap>
+
+    <sql id="selectPointsRecordVo">
+        select r.id, r.user_id, u.nick_name as user_name,
+               r.change_type, r.change_points, r.balance_after,
+               r.related_order_no, r.reason, r.operator_id,
+               u2.nick_name as operator_name,
+               r.create_by, r.create_time
+        from gh_points_record r
+        left join sys_user u on r.user_id = u.user_id
+        left join sys_user u2 on r.operator_id = u2.user_id
+    </sql>
+
+    <select id="selectPointsRecordList" resultMap="PointsRecordVOResult">
+        <include refid="selectPointsRecordVo"/>
+        <where>
+            <if test="query != null">
+                <if test="query.userId != null">
+                    and r.user_id = #{query.userId}
+                </if>
+                <if test="query.changeType != null">
+                    and r.change_type = #{query.changeType}
+                </if>
+                <if test="query.beginDate != null">
+                    and date_format(r.create_time, '%Y-%m-%d') &gt;= date_format(#{query.beginDate}, '%Y-%m-%d')
+                </if>
+                <if test="query.endDate != null">
+                    and date_format(r.create_time, '%Y-%m-%d') &lt;= date_format(#{query.endDate}, '%Y-%m-%d')
+                </if>
+            </if>
+        </where>
+        order by r.id desc
+    </select>
+
+</mapper>

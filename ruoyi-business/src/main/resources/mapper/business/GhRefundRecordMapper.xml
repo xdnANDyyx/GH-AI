@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.business.mapper.GhRefundRecordMapper">
+
+    <resultMap type="com.ruoyi.business.domain.GhRefundRecord" id="GhRefundRecordResult">
+        <result property="id"               column="id"                 />
+        <result property="refundNo"         column="refund_no"          />
+        <result property="originalOrderNo"  column="original_order_no"  />
+        <result property="userId"           column="user_id"            />
+        <result property="refundAmount"     column="refund_amount"      />
+        <result property="refundPoints"     column="refund_points"      />
+        <result property="refundReason"     column="refund_reason"      />
+        <result property="status"           column="status"             />
+        <result property="processTime"      column="process_time"       />
+        <result property="processRemark"    column="process_remark"     />
+        <result property="remark"           column="remark"             />
+        <result property="createBy"         column="create_by"          />
+        <result property="createTime"       column="create_time"        />
+        <result property="updateBy"         column="update_by"          />
+        <result property="updateTime"       column="update_time"        />
+    </resultMap>
+
+    <resultMap type="com.ruoyi.business.vo.RefundRecordVO" id="RefundRecordVOResult">
+        <result property="id"               column="id"                 />
+        <result property="refundNo"         column="refund_no"          />
+        <result property="originalOrderNo"  column="original_order_no"  />
+        <result property="userId"           column="user_id"            />
+        <result property="userName"         column="user_name"          />
+        <result property="refundAmount"     column="refund_amount"      />
+        <result property="refundPoints"     column="refund_points"      />
+        <result property="refundReason"     column="refund_reason"      />
+        <result property="status"           column="status"             />
+        <result property="processTime"      column="process_time"       />
+        <result property="processRemark"    column="process_remark"     />
+        <result property="createBy"         column="create_by"          />
+        <result property="createTime"       column="create_time"        />
+        <result property="updateBy"         column="update_by"          />
+        <result property="updateTime"       column="update_time"        />
+    </resultMap>
+
+    <sql id="selectRefundRecordVo">
+        select r.id, r.refund_no, r.original_order_no, r.user_id, u.nick_name as user_name,
+               r.refund_amount, r.refund_points, r.refund_reason,
+               r.status, r.process_time, r.process_remark,
+               r.create_by, r.create_time, r.update_by, r.update_time
+        from gh_refund_record r
+        left join sys_user u on r.user_id = u.user_id
+    </sql>
+
+    <select id="selectRefundRecordList" resultMap="RefundRecordVOResult">
+        <include refid="selectRefundRecordVo"/>
+        <where>
+            <if test="query != null">
+                <if test="query.refundNo != null and query.refundNo != ''">
+                    and r.refund_no = #{query.refundNo}
+                </if>
+                <if test="query.originalOrderNo != null and query.originalOrderNo != ''">
+                    and r.original_order_no = #{query.originalOrderNo}
+                </if>
+                <if test="query.userId != null">
+                    and r.user_id = #{query.userId}
+                </if>
+                <if test="query.status != null and query.status != ''">
+                    and r.status = #{query.status}
+                </if>
+                <if test="query.beginDate != null">
+                    and date_format(r.create_time, '%Y-%m-%d') &gt;= date_format(#{query.beginDate}, '%Y-%m-%d')
+                </if>
+                <if test="query.endDate != null">
+                    and date_format(r.create_time, '%Y-%m-%d') &lt;= date_format(#{query.endDate}, '%Y-%m-%d')
+                </if>
+            </if>
+        </where>
+        order by r.id desc
+    </select>
+
+</mapper>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.business.mapper.GhPromptLibraryMapper">
+
+    <resultMap type="com.ruoyi.business.domain.GhPromptLibrary" id="GhPromptLibraryResult">
+        <result property="id"         column="id"         />
+        <result property="category"   column="category"   />
+        <result property="promptKey"  column="prompt_key" />
+        <result property="label"      column="label"      />
+        <result property="promptText" column="prompt_text"/>
+        <result property="scope"      column="scope"      />
+        <result property="model"      column="model"      />
+        <result property="priority"   column="priority"   />
+        <result property="isDefault"  column="is_default" />
+        <result property="sort"       column="sort"       />
+        <result property="status"     column="status"     />
+        <result property="version"    column="version"    />
+        <result property="remark"     column="remark"     />
+        <result property="createBy"   column="create_by"  />
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy"   column="update_by"  />
+        <result property="updateTime" column="update_time"/>
+    </resultMap>
+
+</mapper>

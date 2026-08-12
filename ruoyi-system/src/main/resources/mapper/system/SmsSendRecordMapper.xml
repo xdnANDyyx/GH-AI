@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.SmsSendRecordMapper">
+
+    <resultMap type="com.ruoyi.system.domain.SmsSendRecord" id="SmsSendRecordResult">
+        <result property="id" column="id" />
+        <result property="phone" column="phone" />
+        <result property="scene" column="scene" />
+        <result property="signName" column="sign_name" />
+        <result property="templateCode" column="template_code" />
+        <result property="templateParam" column="template_param" />
+        <result property="providerRequestId" column="provider_request_id" />
+        <result property="providerBizId" column="provider_biz_id" />
+        <result property="providerCode" column="provider_code" />
+        <result property="providerMessage" column="provider_message" />
+        <result property="success" column="success" />
+        <result property="sendTime" column="send_time" />
+        <result property="createTime" column="create_time" />
+    </resultMap>
+
+    <sql id="selectSmsSendRecordVo">
+        select id, phone, scene, sign_name, template_code, template_param, provider_request_id, provider_biz_id, provider_code, provider_message, success, send_time, create_time
+        from sms_send_record
+    </sql>
+
+    <insert id="insertSmsSendRecord" parameterType="com.ruoyi.system.domain.SmsSendRecord" useGeneratedKeys="true" keyProperty="id">
+        insert into sms_send_record(
+            phone,
+            scene,
+            sign_name,
+            template_code,
+            template_param,
+            provider_request_id,
+            provider_biz_id,
+            provider_code,
+            provider_message,
+            success,
+            send_time,
+            create_time
+        ) values (
+            #{phone},
+            #{scene},
+            #{signName},
+            #{templateCode},
+            #{templateParam},
+            #{providerRequestId},
+            #{providerBizId},
+            #{providerCode},
+            #{providerMessage},
+            #{success},
+            #{sendTime},
+            #{createTime}
+        )
+    </insert>
+
+    <select id="selectSmsSendRecordList" parameterType="com.ruoyi.system.domain.SmsSendRecord" resultMap="SmsSendRecordResult">
+        <include refid="selectSmsSendRecordVo"/>
+        <where>
+            <if test="phone != null and phone != ''">
+                and phone = #{phone}
+            </if>
+            <if test="scene != null and scene != ''">
+                and scene = #{scene}
+            </if>
+            <if test="templateCode != null and templateCode != ''">
+                and template_code = #{templateCode}
+            </if>
+        </where>
+        order by id desc
+    </select>
+
+</mapper>
+

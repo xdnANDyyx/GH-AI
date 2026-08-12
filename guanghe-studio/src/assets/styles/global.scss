@@ -1,0 +1,201 @@
+:root {
+  --gh-primary: #2563ff;
+  --gh-primary-light: #4f83ff;
+  --gh-primary-dark: #1a4fdb;
+  --gh-primary-bg: rgba(37, 99, 255, 0.08);
+  --gh-success: #22c55e;
+  --gh-warning: #f59e0b;
+  --gh-danger: #ef4444;
+  --gh-bg-page: #f7f9fc;
+  --gh-bg-card: #ffffff;
+  --gh-border: #e5eaf4;
+  --gh-border-light: #edf1f7;
+  --gh-text-primary: #1f2937;
+  --gh-text-secondary: #667085;
+  --gh-text-placeholder: #9ca3af;
+  --gh-gray-accent: #e6edff;
+  --gh-font-page-title: 20px;
+  --gh-font-module: 16px;
+  --gh-font-body: 14px;
+  --gh-font-helper: 12px;
+  --gh-font-tag: 14px;
+  --gh-weight-semibold: 600;
+  --gh-weight-medium: 500;
+  --gh-weight-regular: 400;
+  --gh-space-4: 4px;
+  --gh-space-8: 8px;
+  --gh-space-12: 12px;
+  --gh-space-16: 16px;
+  --gh-space-20: 20px;
+  --gh-space-24: 24px;
+  --gh-space-32: 32px;
+  --gh-space-40: 40px;
+  --gh-space-48: 48px;
+  --gh-space-64: 64px;
+  --gh-radius-card: 16px;
+  --gh-radius-btn: 10px;
+  --gh-radius: 16px;
+  --gh-radius-sm: 8px;
+  --gh-radius-xs: 4px;
+  --gh-shadow-card: 0 8px 24px rgba(15, 23, 42, 0.06);
+  --gh-shadow-hover: 0 4px 12px rgba(15, 23, 42, 0.06);
+  --gh-btn-height: 40px;
+  --gh-input-height: 40px;
+  --gh-field-height: 48px;
+  --gh-nav-item-height: 48px;
+  --gh-icon-size: 20px;
+  --gh-sidebar-width: 240px;
+  --gh-sidebar-padding: 24px;
+  --gh-topbar-height: 64px;
+  --gh-logo-height: 28px;
+  --gh-content-padding: 24px;
+  --gh-content-min-height: 600px;
+  --gh-column-gap: 24px;
+  --gh-ai-panel-padding: 16px;
+  --gh-ai-input-height: 120px;
+  --gh-ai-send-size: 32px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  font-family: 'PingFang SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  font-size: var(--gh-font-body);
+  color: var(--gh-text-primary);
+  background: var(--gh-bg-page);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  overflow: hidden;
+}
+
+a {
+  color: inherit;
+}
+
+.el-button--primary {
+  --el-button-bg-color: var(--gh-primary);
+  --el-button-border-color: var(--gh-primary);
+  --el-button-hover-bg-color: var(--gh-primary-light);
+  --el-button-hover-border-color: var(--gh-primary-light);
+}
+
+.el-button--large {
+  height: var(--gh-btn-height);
+  border-radius: var(--gh-radius-btn);
+}
+
+.el-input__wrapper {
+  border-radius: var(--gh-radius-btn);
+}
+
+.el-select .el-input__wrapper {
+  height: var(--gh-field-height);
+}
+
+.gh-card {
+  background: var(--gh-bg-card);
+  border-radius: var(--gh-radius-card);
+  box-shadow: var(--gh-shadow-card);
+  padding: var(--gh-space-20);
+}
+
+.gh-page-title {
+  font-size: var(--gh-font-page-title);
+  font-weight: var(--gh-weight-semibold);
+  color: var(--gh-text-primary);
+}
+
+.gh-page-subtitle {
+  font-size: var(--gh-font-body);
+  color: var(--gh-text-secondary);
+}
+
+.gh-module-title {
+  font-size: var(--gh-font-module);
+  font-weight: var(--gh-weight-semibold);
+  color: var(--gh-text-primary);
+}
+
+.gh-upload-zone {
+  border: 2px dashed var(--gh-border);
+  border-radius: var(--gh-radius-card);
+  padding: var(--gh-space-32);
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: #fafbfc;
+}
+
+.gh-upload-zone:hover {
+  border-color: var(--gh-primary);
+  background: rgba(37, 99, 255, 0.02);
+}
+
+.gh-config-section {
+  margin-bottom: var(--gh-space-20);
+}
+
+.gh-config-section .config-label {
+  font-size: var(--gh-font-body);
+  font-weight: var(--gh-weight-medium);
+  color: var(--gh-text-primary);
+  margin-bottom: var(--gh-space-8);
+  display: flex;
+  align-items: center;
+  gap: var(--gh-space-4);
+}
+
+.gh-tag-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gh-space-8);
+}
+
+.gh-tag-group .gh-tag {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: var(--gh-font-tag);
+  border: 1px solid var(--gh-border);
+  background: var(--gh-bg-card);
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--gh-text-secondary);
+}
+
+.gh-tag-group .gh-tag:hover {
+  border-color: var(--gh-primary);
+  color: var(--gh-primary);
+}
+
+.gh-tag-group .gh-tag.active {
+  background: var(--gh-primary);
+  border-color: var(--gh-primary);
+  color: #fff;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
