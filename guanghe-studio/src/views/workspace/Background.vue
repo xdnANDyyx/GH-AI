@@ -296,7 +296,7 @@
               </div>
 
               <!-- 提示词增强 -->
-              <div class="config-section collapsible">
+              <!-- <div class="config-section collapsible">
                 <div class="panel-header collapsible" @click="toggleSection('promptBoost')">
                   <span class="section-label">提示词增强</span>
                   <span class="expand-text">
@@ -315,15 +315,9 @@
                   </div>
                   <p class="section-helper">选用的约束词会自动拼接到生图提示词中</p>
                 </div>
-              </div>
+              </div> -->
 
-              <!-- Generate button -->
-              <div class="generate-section">
-                <button class="generate-btn" @click="handleGenerate" :disabled="isGenerating || productImages.length === 0">
-                  {{ isGenerating ? '生成中...' : '开始生成' }}
-                </button>
-                <!-- <p class="generate-cost">本次生成预计消耗：2 积分</p> -->
-              </div>
+              <!-- 生成入口已移至右侧 AI 助手：在对话框输入需求后点发送即生成（每次扣积分） -->
             </div>
           </el-scrollbar>
         </div>
@@ -367,9 +361,9 @@
             <div>
               <span class="char-count">{{ aiInput.length }}/2000</span>
               <br>
-              <!-- <span class="chat-cost">本次操作将消耗 2 积分</span> -->
+              <span class="chat-cost">本次生成预计消耗：2 积分</span>
             </div>
-            <button class="chat-send" @click="sendAiMessage" :disabled="!aiInput.trim()">
+            <button class="chat-send" @click="sendAiMessage" :disabled="!aiInput.trim() || isGenerating">
               <el-icon><Promotion /></el-icon>
             </button>
           </div>
@@ -442,7 +436,7 @@ import { useWorkflowProgress } from '@/composables/useWorkflowProgress'
 // import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
 // import CanvasOverlay from '@/components/CanvasOverlay.vue'
 import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
-import { aiDialogue, favoriteMaterial, cancelFavoriteMaterial, getPublicCreationConfigByGroup, reversePrompt } from '@/api/customer'
+import { favoriteMaterial, cancelFavoriteMaterial, getPublicCreationConfigByGroup, listPromptLibraryBatch, reversePrompt } from '@/api/customer'
 import { ArrowLeft, ArrowRight, ArrowDown, UploadFilled, Promotion, MagicStick, DocumentCopy } from '@element-plus/icons-vue'
 
 const gen = useImageGeneration('render')
@@ -496,11 +490,19 @@ const referenceFiles = ref([])
 const aiInput = ref('')
 const aiMessages = ref([])
 
-const selectedPlatform = ref('taobao')
-const selectedScene = ref('home')
-const selectedLight = ref('natural')
-const selectedStyle = ref('minimal')
+const selectedPlatform = ref('opt_platform.change_bg.taobao')
+const selectedScene = ref('opt_scene.change_bg.home')
+const selectedLight = ref('opt_light.change_bg.natural')
+const selectedStyle = ref('opt_style.change_bg.minimal')
 const outputSize = ref('800:800')
+// 单次生图数量上限（从 bg_generation/max_count 配置读取，缺省 4）
+const genMaxCount = ref(4)
+
+// ===== 标签 → 提示词 映射 =====
+// 创作配置里每项的 value 即提示词库(gh_prompt_library)的 prompt_key。
+// 选中标签后按 prompt_key 反查提示词库，把 prompt_text 拼进发给 AI 的提示词。
+// 仅 platform/scene/light/style 四类进提示词；size 是出图参数，不进提示词。
+const promptMap = ref({})
 
 // ===== 提示词增强（从 gh_prompt_library 拉取） =====
 const boostProduct = ref('')
@@ -523,14 +525,14 @@ const sections = reactive({
 })
 
 
-const platformOptions = [
+const platformOptions = ref([
   { label: '淘宝/天猫', value: 'taobao' },
   { label: '京东', value: 'jd' },
   { label: '拼多多', value: 'pdd' },
   { label: '抖音', value: 'douyin' },
   { label: '小红书', value: 'xhs' },
   { label: '亚马逊', value: 'amazon' }
-]
+])
 
 const sceneOptions = ref([
   { label: '居家', value: 'home' },
@@ -560,12 +562,12 @@ const styleOptions = ref([
   { label: 'ins风', value: 'ins' }
 ])
 
-const sizeOptions = [
+const sizeOptions = ref([
   { label: '1:1（800×800）', value: '800:800' },
   { label: '3:4（800×1067）', value: '800:1067' },
   { label: '4:3（1067×800）', value: '1067:800' },
   { label: '自定义', value: 'custom' }
-]
+])
 
 const resultImages = computed(() => gen.resultImages.value)
 const isGenerating = computed(() => gen.generating.value)
@@ -640,43 +642,59 @@ function handleRefFiles(e) {
 
 async function sendAiMessage() {
   if (!aiInput.value.trim()) return
+  if (isGenerating.value) return
+  if (productFiles.value.length === 0) {
+    ElMessage.warning('请先上传商品图')
+    return
+  }
   const text = aiInput.value
   aiMessages.value.push({ text, reply: '' })
   aiInput.value = ''
   await nextTick()
   if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight
-  try {
-    const res = await aiDialogue({ content: text, sessionType: 'render' })
-    const lastMsg = aiMessages.value[aiMessages.value.length - 1]
-    lastMsg.reply = res.data?.content || res.data?.reply || res.msg || '已收到您的需求'
-    await nextTick()
-    if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight
-  } catch (e) {
-    const lastMsg = aiMessages.value[aiMessages.value.length - 1]
-    lastMsg.reply = '抱歉，AI 助手暂时无法响应，请稍后再试。'
-  }
-}
 
-async function handleGenerate() {
-  const _basePrompt = aiMessages.value.map(m => m.text).join('\n') || ''
+  // 拼提示词：用户输入 + 选中标签对应的提示词库 prompt_text + 提示词增强约束词
+  const tagPrompts = [
+    promptMap.value[selectedPlatform.value],
+    promptMap.value[selectedScene.value],
+    promptMap.value[selectedLight.value],
+    promptMap.value[selectedStyle.value]
+  ].filter(Boolean).join('；')
   const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
-  const prompt = boostText ? `${_basePrompt}；约束：${boostText}。` : _basePrompt
+  const parts = [text, tagPrompts, boostText ? `约束：${boostText}` : ''].filter(Boolean)
+  const prompt = parts.join('；')
+
   const extraParams = {
     platform: selectedPlatform.value,
     scene: selectedScene.value,
     light: selectedLight.value,
     style: selectedStyle.value,
     outputSize: outputSize.value,
-    n: 4
+    n: genMaxCount.value
   }
   if (referenceFiles.value.length) {
     extraParams.referenceImages = await gen.uploadImages(referenceFiles.value)
   }
-  if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
+  // 每次发送都扣积分
+  if (!(await gen.checkPoints(2))) {
+    ElMessage.warning('积分不足，请先充值')
+    const lastMsg = aiMessages.value[aiMessages.value.length - 1]
+    lastMsg.reply = '积分不足，请先充值后再试。'
+    return
+  }
   extraParams.consumePoints = 2
   extraParams.featureName = 'background'
   extraParams.title = '白底生成背景'
-  await gen.fullGenerate(productFiles.value, prompt, extraParams)
+  try {
+    await gen.fullGenerate(productFiles.value, prompt, extraParams)
+    const lastMsg = aiMessages.value[aiMessages.value.length - 1]
+    lastMsg.reply = '已根据您的需求开始生成，请在左侧画布查看结果。'
+    await nextTick()
+    if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight
+  } catch (e) {
+    const lastMsg = aiMessages.value[aiMessages.value.length - 1]
+    lastMsg.reply = '生成失败，请稍后重试。'
+  }
 }
 
 function clearChat() {
@@ -804,18 +822,98 @@ onMounted(() => {
     }
   })
   loadBgConfig()
+  loadPromptMap()
 })
+
+// 预加载提示词库：platform/scene/light/style 四类，scope=change_bg
+// 一次请求拉回，建 prompt_key → prompt_text 的 Map，供 sendAiMessage 反查
+async function loadPromptMap() {
+  try {
+    const res = await listPromptLibraryBatch('opt_platform,opt_scene,opt_light,opt_style', 'change_bg')
+    const groups = res.data || {}
+    const map = {}
+    Object.values(groups).forEach(list => {
+      (list || []).forEach(item => {
+        if (item.promptKey && item.promptText) map[item.promptKey] = item.promptText
+      })
+    })
+    promptMap.value = map
+  } catch { /* 标签将不带提示词，仅作展示 */
+    promptMap.value = {}
+  }
+}
 
 async function loadBgConfig() {
   try {
     const res = await getPublicCreationConfigByGroup('bg_generation')
     const list = res.data || res.rows || []
-    const cfg = list.find(c => c.configKey === 'config')
-    if (cfg && cfg.configValue) {
-      const c = JSON.parse(cfg.configValue)
+    // 按 configKey 索引：新结构为 platform_options / scene_list / light_options / style_presets / size_options / max_count 六个独立行
+    const map = {}
+    list.forEach(c => { map[c.configKey] = c })
+
+    // ---- 使用平台 ----
+    const platformCfg = map.platform_options
+    if (platformCfg && platformCfg.configValue) {
+      const arr = JSON.parse(platformCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        platformOptions.value = arr.map(s => (typeof s === 'string' ? { label: s, value: s } : s))
+      }
+    }
+
+    // ---- 场景列表 ----
+    const sceneCfg = map.scene_list
+    if (sceneCfg && sceneCfg.configValue) {
+      const arr = JSON.parse(sceneCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        sceneOptions.value = arr.map(s => (typeof s === 'string' ? { label: s, value: s } : s))
+      }
+    } else if (map.config && map.config.configValue) {
+      // 兼容旧的单对象配置 { sceneList, lightOptions, stylePresets, maxCount }
+      const c = JSON.parse(map.config.configValue)
       if (c.sceneList) sceneOptions.value = c.sceneList.map(s => ({ label: s, value: s }))
+    }
+
+    // ---- 光线选项 ----
+    const lightCfg = map.light_options
+    if (lightCfg && lightCfg.configValue) {
+      const arr = JSON.parse(lightCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        lightOptions.value = arr.map(s => (typeof s === 'string' ? { label: s, value: s } : s))
+      }
+    } else if (map.config && map.config.configValue) {
+      const c = JSON.parse(map.config.configValue)
       if (c.lightOptions) lightOptions.value = c.lightOptions.map(s => ({ label: s, value: s }))
+    }
+
+    // ---- 风格预设 ----
+    const styleCfg = map.style_presets
+    if (styleCfg && styleCfg.configValue) {
+      const arr = JSON.parse(styleCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        styleOptions.value = arr.map(s => (typeof s === 'string' ? { label: s, value: s } : s))
+      }
+    } else if (map.config && map.config.configValue) {
+      const c = JSON.parse(map.config.configValue)
       if (c.stylePresets) styleOptions.value = c.stylePresets.map(s => ({ label: s, value: s }))
+    }
+
+    // ---- 输出尺寸 ----
+    const sizeCfg = map.size_options
+    if (sizeCfg && sizeCfg.configValue) {
+      const arr = JSON.parse(sizeCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        sizeOptions.value = arr.map(s => (typeof s === 'string' ? { label: s, value: s } : s))
+      }
+    }
+
+    // ---- 生图数量上限 ----
+    const maxCfg = map.max_count
+    if (maxCfg && maxCfg.configValue) {
+      const n = Number(JSON.parse(maxCfg.configValue))
+      if (n > 0) genMaxCount.value = n
+    } else if (map.config && map.config.configValue) {
+      const c = JSON.parse(map.config.configValue)
+      if (c.maxCount) genMaxCount.value = Number(c.maxCount)
     }
   } catch { /* use defaults */ }
 }
@@ -1541,41 +1639,6 @@ onBeforeUnmount(() => {
       color: #1F2937;
     }
   }
-}
-
-// Generate section
-.generate-section {
-  padding: 16px 0 0;
-  border-top: 1px solid #E8EDF5;
-  text-align: center;
-}
-
-.generate-btn {
-  width: 100%;
-  padding: 10px 20px;
-  background: #2563FF;
-  color: #fff;
-  border: none;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s;
-
-  &:hover:not(:disabled) {
-    background: #1D4ED8;
-  }
-
-  &:disabled {
-    opacity: .6;
-    cursor: not-allowed;
-  }
-}
-
-.generate-cost {
-  font-size: 10px;
-  color: #9CA3AF;
-  margin-top: 6px;
 }
 
 // ========== AI Column ==========

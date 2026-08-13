@@ -5,7 +5,7 @@
 -- ============================================================
 
 -- 先清理旧数据（按分组删除预置数据）
-DELETE FROM `gh_creation_config` WHERE `config_group` IN ('common','white_bg','background','retouch','ai_model','main_image','detail_img','banner','size_mark','batch_process');
+DELETE FROM `gh_creation_config` WHERE `config_group` IN ('common','white_bg','bg_generation','background','retouch','ai_model','main_image','detail_img','banner','size_mark','batch_process');
 
 -- ============================================================
 -- 1. 通用配置 common
@@ -29,14 +29,20 @@ INSERT INTO `gh_creation_config` (`config_group`,`config_key`,`config_name`,`con
 ('white_bg','size_max','尺寸最大值','4096',4,'0','自定义尺寸最大值');
 
 -- ============================================================
--- 3. 白底图生成背景 background
+-- 3. 白底图生成背景 bg_generation
+--    与 AI白底图 同形式：每项一行简单值，后台通用编辑器自动渲染为友好表单。
+--    scene_list/light_options/style_presets/platform_options 为 {label,value} 对象数组，
+--    其中 value = 提示词库(gh_prompt_library) 的 prompt_key（opt_*.change_bg.*），
+--    工作台选中标签后按 value 反查提示词库拼接 prompt_text 发给 AI。
+--    size_options 的 value 为尺寸字串，作为出图参数，不进提示词；max_count 为数字。
 -- ============================================================
 INSERT INTO `gh_creation_config` (`config_group`,`config_key`,`config_name`,`config_value`,`sort`,`status`,`remark`) VALUES
-('background','platform_options','使用平台','[{"label":"Amazon","value":"amazon"},{"label":"eBay","value":"ebay"},{"label":"淘宝","value":"taobao"},{"label":"Shopee","value":"shopee"},{"label":"Shopify","value":"shopify"},{"label":"Wayfair","value":"wayfair"},{"label":"独立站","value":"independent"}]',1,'0','目标平台选择'),
-('background','scene_options','场景分类','[{"label":"客厅","value":"living_room"},{"label":"卧室","value":"bedroom"},{"label":"餐厅","value":"dining_room"},{"label":"厨房","value":"kitchen"},{"label":"书房","value":"study"},{"label":"户外花园","value":"garden"},{"label":"阳台","value":"balcony"},{"label":"酒店","value":"hotel"},{"label":"办公室","value":"office"},{"label":"商场","value":"mall"}]',2,'0','背景场景选择'),
-('background','light_options','光线选择','[{"label":"自然光","value":"natural"},{"label":"暖光","value":"warm"},{"label":"冷光","value":"cool"},{"label":"柔光","value":"soft"},{"label":"强光","value":"strong"},{"label":"侧光","value":"side"},{"label":"逆光","value":"back"},{"label":"氛围灯","value":"ambient"}]',3,'0','光线条件选择'),
-('background','style_options','风格选择','[{"label":"现代简约","value":"modern"},{"label":"北欧风","value":"nordic"},{"label":"日式","value":"japanese"},{"label":"工业风","value":"industrial"},{"label":"轻奢","value":"luxury"},{"label":"中式古典","value":"chinese"},{"label":"美式乡村","value":"american"},{"label":"地中海","value":"mediterranean"},{"label":"极简","value":"minimal"},{"label":"复古","value":"vintage"}]',4,'0','风格预设选择'),
-('background','size_options','输出尺寸','[{"label":"1024×1024","value":"1024x1024"},{"label":"1200×1200","value":"1200x1200"},{"label":"1500×1500","value":"1500x1500"},{"label":"2000×2000","value":"2000x2000"}]',5,'0','输出尺寸选择');
+('bg_generation','platform_options','使用平台','[{"label":"淘宝/天猫","value":"opt_platform.change_bg.taobao"},{"label":"京东","value":"opt_platform.change_bg.jd"},{"label":"拼多多","value":"opt_platform.change_bg.pdd"},{"label":"抖音","value":"opt_platform.change_bg.douyin"},{"label":"小红书","value":"opt_platform.change_bg.xhs"},{"label":"亚马逊","value":"opt_platform.change_bg.amazon"}]',1,'0','白底生成背景-目标平台（value=提示词库key）'),
+('bg_generation','scene_list','场景列表','[{"label":"居家","value":"opt_scene.change_bg.home"},{"label":"户外","value":"opt_scene.change_bg.outdoor"},{"label":"工作室","value":"opt_scene.change_bg.studio"},{"label":"节日主题","value":"opt_scene.change_bg.festival"},{"label":"极简","value":"opt_scene.change_bg.minimal"},{"label":"自然","value":"opt_scene.change_bg.nature"},{"label":"都市","value":"opt_scene.change_bg.urban"}]',2,'0','白底生成背景-场景（value=提示词库key）'),
+('bg_generation','light_options','光线选项','[{"label":"自然光","value":"opt_light.change_bg.natural"},{"label":"柔光","value":"opt_light.change_bg.soft"},{"label":"硬光","value":"opt_light.change_bg.hard"},{"label":"逆光","value":"opt_light.change_bg.backlight"},{"label":"暖光","value":"opt_light.change_bg.warm"},{"label":"冷光","value":"opt_light.change_bg.cool"}]',3,'0','白底生成背景-光线（value=提示词库key）'),
+('bg_generation','style_presets','风格预设','[{"label":"简约","value":"opt_style.change_bg.minimal"},{"label":"轻奢","value":"opt_style.change_bg.luxury"},{"label":"活力","value":"opt_style.change_bg.vibrant"},{"label":"复古","value":"opt_style.change_bg.retro"},{"label":"科技感","value":"opt_style.change_bg.tech"},{"label":"ins风","value":"opt_style.change_bg.ins"}]',4,'0','白底生成背景-风格（value=提示词库key）'),
+('bg_generation','size_options','输出尺寸','[{"label":"1:1（800×800）","value":"800:800"},{"label":"3:4（800×1067）","value":"800:1067"},{"label":"4:3（1067×800）","value":"1067:800"},{"label":"自定义","value":"custom"}]',5,'0','白底生成背景-输出尺寸（value=尺寸字串，出图参数）'),
+('bg_generation','max_count','生图数量上限','4',6,'0','白底生成背景-单次生成数量上限');
 
 -- ============================================================
 -- 4. 产品精修 retouch
