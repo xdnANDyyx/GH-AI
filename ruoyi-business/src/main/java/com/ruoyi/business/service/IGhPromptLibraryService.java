@@ -1,6 +1,7 @@
 package com.ruoyi.business.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ruoyi.business.domain.GhPromptLibrary;
 import com.ruoyi.business.dto.PromptLibraryQueryDTO;
 
@@ -14,12 +15,12 @@ import java.util.List;
 public interface IGhPromptLibraryService extends IService<GhPromptLibrary> {
 
     /**
-     * 查询提示词选项库列表
+     * 查询提示词选项库列表（分页）
      *
      * @param query 查询条件
-     * @return 选项列表
+     * @return 分页选项列表
      */
-    List<GhPromptLibrary> listLibrary(PromptLibraryQueryDTO query);
+    Page<GhPromptLibrary> listLibrary(PromptLibraryQueryDTO query);
 
     /**
      * 查询启用中的选项列表（C端按分类拉取）

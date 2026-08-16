@@ -1,10 +1,12 @@
 package com.ruoyi.web.controller.business;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ruoyi.business.domain.GhTag;
 import com.ruoyi.business.dto.TagQueryDTO;
 import com.ruoyi.business.dto.TagSaveDTO;
 import com.ruoyi.business.service.IGhTagService;
 import com.ruoyi.common.annotation.Log;
+import com.ruoyi.common.constant.HttpStatus;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.core.page.TableDataInfo;
@@ -47,9 +49,13 @@ public class TagController extends BaseController {
     @PreAuthorize("@ss.hasPermi('gh:tag:list') or @ss.hasRole('admin')")
     @GetMapping("/list")
     public TableDataInfo<GhTag> list(TagQueryDTO query) {
-        startPage();
-        List<GhTag> list = tagService.listTag(query);
-        return getDataTable(list);
+        Page<GhTag> page = tagService.listTag(query);
+        TableDataInfo<GhTag> rspData = new TableDataInfo<>();
+        rspData.setCode(HttpStatus.SUCCESS);
+        rspData.setMsg("查询成功");
+        rspData.setRows(page.getRecords());
+        rspData.setTotal(page.getTotal());
+        return rspData;
     }
 
     /**

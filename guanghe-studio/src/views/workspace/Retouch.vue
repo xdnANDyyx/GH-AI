@@ -5,7 +5,7 @@
     <!-- Steps bar -->
     <div class="steps-bar">
       <template v-for="(s, i) in workflowSteps" :key="i">
-        <div class="step-item" :class="getStepClass(i + 1, 3)"><div class="step-num">{{ i + 1 }}</div> {{ s.label }}</div>
+        <div class="step-item" :class="getStepClass(i + 1, 4)"><div class="step-num">{{ i + 1 }}</div> {{ s.label }}</div>
         <div v-if="i < workflowSteps.length - 1" class="step-line" :class="{ done: isStepLineDone(i + 1) }"></div>
       </template>
     </div>
@@ -52,7 +52,8 @@
             <div class="compare-side">
               <div class="label">修复后</div>
               <div class="compare-img-placeholder">
-                <img :src="processedImage" v-if="processedImage" />
+                <img :src="processedImage" v-if="processedImage"
+                  @contextmenu.prevent="openHandoffMenu($event, processedImage)" />
                 <span v-else class="empty-label">修复后（光滑洁净）</span>
               </div>
             </div>
@@ -256,17 +257,30 @@
 
     <!-- Hidden file input -->
     <input type="file" ref="fileInput" accept="image/*" multiple hidden @change="handleFileSelect" />
+
+    <!-- 右键接力菜单：将精修结果发送到下一站（占位，预留扩展） -->
+    <div
+      v-if="handoffMenu.show"
+      class="context-menu"
+      :style="{ left: handoffMenu.x + 'px', top: handoffMenu.y + 'px' }"
+      @click.stop
+    >
+      <div class="context-menu-item context-menu-cancel" @click="hideHandoffMenu">关闭菜单</div>
+    </div>
   </div>
 </template>
 
 <script>
 import { UploadFilled, ArrowDown, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
-import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onActivated, onBeforeUnmount, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { getPublicCreationConfigByGroup } from '@/api/customer'
 // import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
 // import CanvasOverlay from '@/components/CanvasOverlay.vue'
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { useWorkflowProgress } from '@/composables/useWorkflowProgress'
+import { useImageHandoffStore } from '@/store'
+import { urlToFile } from '@/utils/image'
 import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
 import { aiDialogue } from '@/api/customer'
 import { ElMessage } from 'element-plus'
@@ -275,6 +289,7 @@ export default {
   name: 'RetouchView',
   components: { PromptLibrarySelect },
   setup() {
+    const router = useRouter()
     // ---- Canvas Interactions ----
     // const { canvasUI, handleCanvasExport } = useCanvasInteractions({
     //   canvasSelector: '.canvas-box',
@@ -283,6 +298,7 @@ export default {
     // })
     const gen = useImageGeneration('render')
     const { steps: workflowSteps, getStepClass, isStepLineDone } = useWorkflowProgress()
+    const handoffStore = useImageHandoffStore()
 
     // ---- State ----
     const configCollapsed = ref(false)
@@ -344,6 +360,55 @@ export default {
     // Chat
     const chatPrompt = ref('')
     const chatMessages = ref([])
+
+    // ---- 跨页面图片接力（右键菜单） ----
+    const handoffMenu = reactive({ show: false, x: 0, y: 0, imageUrl: '' })
+
+    function openHandoffMenu(e, img) {
+      const url = typeof img === 'string' ? img : (img?.url || '')
+      handoffMenu.imageUrl = url
+      // 防止菜单超出视口右侧
+      const menuW = 200
+      const maxLeft = window.innerWidth - menuW - 8
+      handoffMenu.x = Math.min(e.clientX, maxLeft)
+      handoffMenu.y = e.clientY
+      handoffMenu.show = true
+    }
+    function hideHandoffMenu() {
+      handoffMenu.show = false
+    }
+    function handleClickOutside(e) {
+      if (handoffMenu.show && !e.target.closest('.context-menu')) {
+        hideHandoffMenu()
+      }
+    }
+
+    /**
+     * 消费接力图片（来自 白底图 / 背景生成 的右键“放入产品精修”）
+     * - 用 urlToFile 重建可上传的 File
+     * - 用 FileReader 转 dataURL 作为展示原图（避免 blob: URL 在 keep-alive 重激活后失效）
+     */
+    async function consumeHandoffImage() {
+      const pending = handoffStore.consume()
+      if (!pending) return
+      const url = pending.url
+      if (!url) return
+      try {
+        const file = await urlToFile(url, 'retouch-source')
+        productFiles.value.push(file)
+        const reader = new FileReader()
+        reader.onload = ev => {
+          uploadedFiles.value.push(ev.target.result)
+          // 若当前没有展示原图，则把接力图片作为主展示图
+          if (!originalImage.value) originalImage.value = ev.target.result
+          ElMessage.success('已载入接力图片，可直接进行精修')
+        }
+        reader.readAsDataURL(file)
+      } catch (e) {
+        console.warn('载入接力图片失败:', e)
+        ElMessage.error('图片载入失败，请手动上传')
+      }
+    }
 
     // ---- Computed ----
     const allExpanded = computed(() => {
@@ -443,7 +508,13 @@ export default {
       document.addEventListener('mouseup', onMouseUp)
       document.addEventListener('mousemove', onAiMouseMove)
       document.addEventListener('mouseup', onAiMouseUp)
+      document.addEventListener('click', handleClickOutside)
       loadRetouchConfig()
+      consumeHandoffImage()
+    })
+
+    onActivated(() => {
+      consumeHandoffImage()
     })
 
     async function loadRetouchConfig() {
@@ -465,6 +536,7 @@ export default {
       document.removeEventListener('mouseup', onMouseUp)
       document.removeEventListener('mousemove', onAiMouseMove)
       document.removeEventListener('mouseup', onAiMouseUp)
+      document.removeEventListener('click', handleClickOutside)
     })
 
     // ---- Methods ----
@@ -578,6 +650,8 @@ export default {
       sendMessage, clearChat,
       startColResize, startAiResize,
       // canvasUI, handleCanvasExport,
+      // ---- 图片接力右键菜单 ----
+      handoffMenu, openHandoffMenu, hideHandoffMenu,
     }
   }
 }
@@ -1108,5 +1182,50 @@ export default {
   .ai-col { flex: 1 1 auto !important; min-height: 250px; }
   .ai-resize-handle { display: none; }
   .tool-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* ============================================================
+   右键接力菜单（跨页面图片传递）
+   ============================================================ */
+.context-menu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 180px;
+  max-width: 220px;
+  background: #FFFFFF;
+  border: 1px solid #E8EDF5;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  padding: 4px;
+  overflow: hidden;
+}
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  font-size: 13px;
+  color: #1F2937;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.context-menu-item:hover {
+  background: #EEF2FF;
+  color: #4F46E5;
+}
+.context-menu-item .el-icon {
+  font-size: 16px;
+}
+.context-menu-cancel {
+  justify-content: center;
+  color: #6B7280;
+  border-top: 1px solid #F1F5F9;
+  margin-top: 4px;
+  border-radius: 6px 6px 0 0;
+}
+.context-menu-cancel:hover {
+  background: #F8FAFC;
+  color: #6B7280;
 }
 </style>

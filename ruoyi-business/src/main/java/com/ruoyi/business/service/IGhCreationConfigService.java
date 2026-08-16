@@ -1,6 +1,7 @@
 package com.ruoyi.business.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ruoyi.business.domain.GhCreationConfig;
 import com.ruoyi.business.dto.CreationConfigQueryDTO;
 
@@ -14,12 +15,12 @@ import java.util.List;
 public interface IGhCreationConfigService extends IService<GhCreationConfig> {
 
     /**
-     * 查询配置列表
+     * 查询创作配置列表（分页）
      *
      * @param query 查询条件
-     * @return 配置列表
+     * @return 分页配置列表
      */
-    List<GhCreationConfig> listConfig(CreationConfigQueryDTO query);
+    Page<GhCreationConfig> listConfig(CreationConfigQueryDTO query);
 
     /**
      * 根据分组和键查询配置

@@ -2,6 +2,7 @@ package com.ruoyi.business.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ruoyi.business.domain.GhPromptTemplate;
 import com.ruoyi.business.dto.PromptTemplateQueryDTO;
@@ -23,7 +24,7 @@ import java.util.List;
 public class GhPromptTemplateServiceImpl extends ServiceImpl<GhPromptTemplateMapper, GhPromptTemplate> implements IGhPromptTemplateService {
 
     @Override
-    public List<GhPromptTemplate> listTemplate(PromptTemplateQueryDTO query) {
+    public Page<GhPromptTemplate> listTemplate(PromptTemplateQueryDTO query) {
         LambdaQueryWrapper<GhPromptTemplate> wrapper = new LambdaQueryWrapper<>();
         if (query != null) {
             wrapper.eq(StringUtils.isNotEmpty(query.getModule()), GhPromptTemplate::getModule, query.getModule());
@@ -31,7 +32,9 @@ public class GhPromptTemplateServiceImpl extends ServiceImpl<GhPromptTemplateMap
             wrapper.eq(StringUtils.isNotEmpty(query.getStatus()), GhPromptTemplate::getStatus, query.getStatus());
         }
         wrapper.orderByAsc(GhPromptTemplate::getSort);
-        return list(wrapper);
+        int pageNum = query != null && query.getPageNum() != null ? query.getPageNum() : 1;
+        int pageSize = query != null && query.getPageSize() != null ? query.getPageSize() : 20;
+        return page(new Page<>(pageNum, pageSize), wrapper);
     }
 
     @Override

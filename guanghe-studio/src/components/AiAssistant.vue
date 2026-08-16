@@ -91,20 +91,35 @@
             show-word-limit
             placeholder="描述你的设计需求，或向AI助手提问..."
             @keydown.enter.exact.prevent="sendMessage"
-            resize="none"
+            resize="vertical"
           />
           <div class="input-actions">
             <span class="char-counter">{{ inputText.length }}/2000</span>
-            <el-button
-              type="primary"
-              :disabled="!inputText.trim() || isLoading"
-              :loading="isGenerating"
-              @click="sendMessage"
-              class="send-btn"
-            >
-              <el-icon><Promotion /></el-icon>
-              {{ isGenerating ? '生成中...' : '-2积分' }}
-            </el-button>
+            <div class="actions-right">
+              <el-select
+                v-model="selectedModel"
+                size="small"
+                class="model-select"
+                :disabled="isLoading"
+              >
+                <el-option
+                  v-for="m in modelOptions"
+                  :key="m.value"
+                  :label="m.label"
+                  :value="m.value"
+                />
+              </el-select>
+              <el-button
+                type="primary"
+                :disabled="!inputText.trim() || isLoading"
+                :loading="isGenerating"
+                @click="sendMessage"
+                class="send-btn"
+              >
+                <el-icon><Promotion /></el-icon>
+                {{ isGenerating ? '生成中...' : '发送' }}
+              </el-button>
+            </div>
           </div>
         </div>
       </div>
@@ -121,7 +136,6 @@
 
 <script setup>
 import { ref, nextTick } from 'vue'
-import { aiDialogue } from '@/api/customer.js'
 
 const props = defineProps({
   collapsed: { type: Boolean, default: false },
@@ -145,6 +159,15 @@ const quickQuestions = [
   '白底图最佳输出尺寸是多少？'
 ]
 
+// ===== 模型选择（占位，后续对接真实模型） =====
+const selectedModel = ref('deepseek')
+const modelOptions = [
+  { label: 'DeepSeek', value: 'deepseek' },
+  { label: '通义千问 Qwen', value: 'qwen-plus' },
+  { label: '智谱 GLM-4', value: 'glm-4' },
+  { label: '豆包 Doubao', value: 'doubao' }
+]
+
 function scrollToBottom() {
   nextTick(() => {
     if (messagesRef.value) {
@@ -162,43 +185,21 @@ async function sendMessage() {
   const text = inputText.value.trim()
   if (!text || isLoading.value) return
 
+  // 记录用户消息
   messages.value.push({ role: 'user', content: text })
   inputText.value = ''
   isLoading.value = true
   scrollToBottom()
 
-  // 触发生成白底图（如果有 generateFn）
+  // 直接触发生成白底图（不走 deepseek 对话，仅生图）
   if (props.generateFn) {
     props.generateFn().catch(e => {
       console.error('白底图生成触发失败:', e)
     })
   }
 
-  try {
-    // 调用后端 AI 对话接口
-    const historyMessages = messages.value
-      .filter(m => m.role !== 'assistant' || m !== messages.value[messages.value.length - 1])
-      .slice(0, -1) // 排除当前刚加的用户消息，由后端统一处理
-      .map(m => ({ role: m.role, content: m.content }))
-
-    const res = await aiDialogue({
-      messages: historyMessages,
-      content: text,
-      model: 'deepseek'
-    })
-
-    const reply = res?.data?.reply || '抱歉，暂时无法获取回复，请稍后再试。'
-    messages.value.push({ role: 'assistant', content: reply })
-  } catch (err) {
-    console.error('AI 对话接口调用失败:', err)
-    messages.value.push({
-      role: 'assistant',
-      content: '抱歉，AI 服务暂时不可用，请稍后再试。'
-    })
-  } finally {
-    isLoading.value = false
-    scrollToBottom()
-  }
+  isLoading.value = false
+  scrollToBottom()
 }
 
 function clearChat() {
@@ -472,6 +473,16 @@ function clearChat() {
 .char-counter {
   font-size: 12px;
   color: var(--gh-text-placeholder);
+}
+
+.actions-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-select {
+  width: 128px;
 }
 
 .send-btn {

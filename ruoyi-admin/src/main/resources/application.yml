@@ -311,6 +311,9 @@ vertex:
     location: global
     # 模型名称
     model: gemini-3-pro-image
+    # 反推提示词（图生文）使用的视觉文本模型
+    # 生图模型 gemini-3-pro-image 只会返回图片不会返回描述文本，反推必须用支持图像理解的文本模型
+    reverse-model: gemini-2.5-flash
     # 读超时（秒）
     read-timeout: 120
     # 默认宽高比（前端未传 extraOptions.aspect_ratio 时使用）

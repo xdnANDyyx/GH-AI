@@ -57,6 +57,14 @@ public class CustomerAiImageService {
     @Value("${vertex.ai.default-image-size:1K}")
     private String defaultImageSize;
 
+    /**
+     * 反推提示词（图生文）使用的视觉文本模型。
+     * gemini-3-pro-image 是图片生成模型，只会返回图片而不会返回描述文本，
+     * 因此反推场景必须改用支持"图像理解 + 文本输出"的模型，如 gemini-2.5-flash。
+     */
+    @Value("${vertex.ai.reverse-model:gemini-2.5-flash}")
+    private String vertexReverseModel;
+
     // ============================================
     // 代理配置（仅 Vertex AI 生图接口走新加坡 Squid）
     // ============================================
@@ -404,7 +412,8 @@ public class CustomerAiImageService {
     public String reversePrompt(String imageBase64OrUrl, String prompt) {
         try {
             String accessToken = getVertexAccessToken();
-            String url = buildVertexAiUrl();
+            // 反推用专门的视觉文本模型（gemini-2.5-flash），不是生图模型 gemini-3-pro-image
+            String url = buildVertexAiUrl(vertexReverseModel);
 
             JSONObject requestBody = new JSONObject();
             JSONArray contents = new JSONArray();
@@ -447,12 +456,17 @@ public class CustomerAiImageService {
             contents.add(content);
             requestBody.put("contents", contents);
 
-            // 文本生成配置（不需要 IMAGE）
+            // 文本生成配置
+            // 反推用的是 gemini-2.5-flash 这类视觉文本模型，只要文本输出，
+            // responseModalities 设为 TEXT 即可（生图模型才需要 IMAGE）。
             JSONObject generationConfig = new JSONObject();
             JSONArray responseModalities = new JSONArray();
             responseModalities.add("TEXT");
             generationConfig.put("responseModalities", responseModalities);
             requestBody.put("generationConfig", generationConfig);
+
+            log.info("反推提示词调用 Vertex AI, 模型: {}, prompt 长度: {}, 含图片: {}",
+                    vertexReverseModel, prompt != null ? prompt.length() : 0, imageBase64OrUrl != null && !imageBase64OrUrl.isEmpty());
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
@@ -464,16 +478,36 @@ public class CustomerAiImageService {
 
             HttpResponse<String> response = getVertexHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
 
+            log.info("反推提示词 Vertex AI 响应状态: {}, body 长度: {}", response.statusCode(),
+                    response.body() != null ? response.body().length() : 0);
+
             if (response.statusCode() != 200) {
-                log.error("反推提示词 Vertex AI 调用失败, 状态码: {}", response.statusCode());
-                throw new RuntimeException("AI 分析失败: HTTP " + response.statusCode());
+                String responseBody = response.body();
+                String errorDetail = "";
+                if (responseBody != null && !responseBody.isEmpty()) {
+                    // 提取 Google API 标准错误格式中的 message，便于全链路排查
+                    try {
+                        JSONObject respJson = JSON.parseObject(responseBody);
+                        JSONObject error = respJson.getJSONObject("error");
+                        if (error != null && error.getString("message") != null) {
+                            errorDetail = ", message: " + error.getString("message");
+                        }
+                    } catch (Exception ignore) {
+                        errorDetail = ", body: " + (responseBody.length() > 500 ? responseBody.substring(0, 500) : responseBody);
+                    }
+                }
+                log.error("反推提示词 Vertex AI 调用失败, 状态码: {}, 响应: {}", response.statusCode(), responseBody);
+                throw new RuntimeException("AI 分析失败: HTTP " + response.statusCode() + errorDetail);
             }
 
             // 提取文本
             JSONObject respJson = JSON.parseObject(response.body());
+            log.info("反推提示词响应顶层字段: {}", respJson.keySet());
             JSONArray candidates = respJson.getJSONArray("candidates");
             if (candidates != null && !candidates.isEmpty()) {
                 JSONObject candidate = candidates.getJSONObject(0);
+                // 若被安全策略拦截，candidate 会有 finishReason=SAFETY 等，content 可能为空
+                String finishReason = candidate.getString("finishReason");
                 JSONObject respContent = candidate.getJSONObject("content");
                 if (respContent != null) {
                     JSONArray respParts = respContent.getJSONArray("parts");
@@ -487,6 +521,19 @@ public class CustomerAiImageService {
                         }
                         if (sb.length() > 0) return sb.toString();
                     }
+                }
+                // 有 candidate 但没有取到文本：记录 finishReason 便于排查
+                if (finishReason != null) {
+                    log.warn("反推提示词未取到文本, finishReason: {}", finishReason);
+                }
+            }
+            // 兜底：检查 promptFeedback 中的 blockReason
+            JSONObject promptFeedback = respJson.getJSONObject("promptFeedback");
+            if (promptFeedback != null) {
+                String blockReason = promptFeedback.getString("blockReason");
+                if (blockReason != null) {
+                    log.warn("反推提示词被拦截, blockReason: {}", blockReason);
+                    return "图片被安全策略拦截（" + blockReason + "），请更换图片后重试";
                 }
             }
             return "AI 分析完成，但未返回文本结果";
@@ -794,6 +841,21 @@ public class CustomerAiImageService {
      * Python SDK(genai.Client(vertexai=True)) 内部自动处理了这个特例，所以 Python 能跑通。
      */
     private String buildVertexAiUrl() {
+        return buildVertexAiUrl(vertexModel);
+    }
+
+    /**
+     * 构建 Vertex AI generateContent 端点 URL（可指定模型）。
+     *
+     * 关键规则：location=global 时主机名不能带区域前缀！
+     * - location=global      -> https://aiplatform.googleapis.com/v1beta1/...
+     * - location=us-central1 -> https://us-central1-aiplatform.googleapis.com/v1beta1/...
+     *
+     * 如果 location=global 也拼成 global-aiplatform.googleapis.com，
+     * 该域名不存在，Google 会返回 404 "URL was not found on this server"。
+     * Python SDK(genai.Client(vertexai=True)) 内部自动处理了这个特例，所以 Python 能跑通。
+     */
+    private String buildVertexAiUrl(String model) {
         String host;
         if ("global".equalsIgnoreCase(vertexLocation)) {
             host = "aiplatform.googleapis.com";
@@ -802,7 +864,7 @@ public class CustomerAiImageService {
         }
         String url = String.format(
                 "https://%s/v1beta1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
-                host, vertexProjectId, vertexLocation, vertexModel);
+                host, vertexProjectId, vertexLocation, model);
         log.info("Vertex AI 端点: {}", url);
         return url;
     }

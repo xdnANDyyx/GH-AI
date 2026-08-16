@@ -14,7 +14,6 @@
 
         <el-table v-loading="configLoading" :data="configList" :header-cell-style="headerStyle">
           <el-table-column prop="configName" label="参数名称" min-width="180" />
-          <el-table-column prop="configKey" label="参数键名" min-width="220" show-overflow-tooltip />
           <el-table-column prop="configValue" label="参数值" min-width="220" show-overflow-tooltip />
           <el-table-column prop="configType" label="内置" width="100">
             <template #default="{ row }">
@@ -30,7 +29,85 @@
           </el-table-column>
         </el-table>
       </el-tab-pane>
+        <el-tab-pane label="提示词配置" name="prompt">
+        <!-- 提示词模板（原提示词选项库） -->
+          <div class="section-header">
+            <div>
+              <h3 class="form-section-title">提示词模板</h3>
+              <p class="section-desc">维护生图时可选择的提示词选项（产品类别、材质、场景、风格、卖点、镜头等）。配置后前台 AI 配置面板即时联动生效。</p>
+            </div>
+            <div class="filter-inline">
 
+              <el-select v-model="libraryFilters.category" placeholder="分类" clearable filterable style="width: 160px">
+                <el-option v-for="c in libraryFilterCategoryOptions" :key="c.value" :label="c.label" :value="c.value" />
+              </el-select>
+              <el-input v-model="libraryFilters.label" placeholder="显示名" clearable style="width: 160px" />
+              <!-- <el-input v-model="libraryFilters.promptKey" placeholder="Key" clearable style="width: 180px" /> -->
+              <el-select v-model="libraryFilters.scope" placeholder="适用功能" clearable filterable style="width: 160px">
+                <el-option v-for="s in promptPickerScopeOptions.filter(o => o.value)" :key="s.value" :label="s.label" :value="s.value" />
+              </el-select>
+              <el-select v-model="libraryFilters.status" placeholder="状态" clearable style="width: 120px">
+                <el-option label="全部" value="" />
+                <el-option label="启用" value="0" />
+                <el-option label="停用" value="1" />
+              </el-select>
+              <el-button @click="fetchPromptLibrary">查询</el-button>
+              <el-button type="primary" @click="openLibraryDialog()">新增选项</el-button>
+            </div>
+          </div>
+
+          <el-table v-loading="libraryLoading" :data="promptLibraryList" :header-cell-style="headerStyle">
+            <el-table-column prop="category" label="分类" width="120">
+              <template #default="{ row }">{{ getCategoryLabel(row.category) }}</template>
+            </el-table-column>
+            <el-table-column prop="label" label="显示名" min-width="140" show-overflow-tooltip />
+            <el-table-column prop="promptText" label="提示词内容" min-width="260" show-overflow-tooltip />
+            <el-table-column prop="scope" label="适用功能" width="150" show-overflow-tooltip>
+              <template #default="{ row }">{{ getScopeLabel(row.scope) }}</template>
+            </el-table-column>
+            <el-table-column prop="priority" label="优先级" width="90" />
+            <el-table-column prop="sort" label="排序" width="80" />
+            <el-table-column prop="status" label="状态" width="100">
+              <template #default="{ row }">
+                <el-switch :model-value="row.status === '0'" @change="(value) => toggleLibraryStatus(row, value)" />
+              </template>
+            </el-table-column>
+            <el-table-column prop="isDefault" label="默认" width="80">
+              <template #default="{ row }">
+                <el-tag :type="row.isDefault === '1' ? 'warning' : 'info'" size="small">{{ row.isDefault === '1' ? '默认' : '普通' }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="referenced" label="引用状态" width="100">
+              <template #default="{ row }">
+                <el-tag v-if="referencedPromptKeys.has(row.promptKey)" type="warning" size="small">已引用</el-tag>
+                <el-tag v-else type="info" size="small">未引用</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="180" fixed="right">
+              <template #default="{ row }">
+                <el-button link type="primary" size="small" @click="openLibraryDialog(row)">编辑</el-button>
+                <el-tooltip v-if="referencedPromptKeys.has(row.promptKey)" content="该选项已被创作配置引用" placement="top">
+                  <el-button link type="danger" size="small" disabled>删除</el-button>
+                </el-tooltip>
+                <el-button v-else link type="danger" size="small" @click="handleDeleteLibrary(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <el-pagination
+            v-if="libraryTotal > 0"
+            class="table-pagination"
+            background
+            layout="total, sizes, prev, pager, next, jumper"
+            :current-page="libraryPageNum"
+            :page-sizes="[10, 20, 50, 100]"
+            :page-size="libraryPageSize"
+            :total="libraryTotal"
+            @size-change="(val) => { libraryPageSize = val; libraryPageNum = 1; fetchPromptLibrary() }"
+            @current-change="(val) => { libraryPageNum = val; fetchPromptLibrary() }"
+          />
+
+      </el-tab-pane>
       <el-tab-pane label="创作配置" name="creation">
         <div class="section-header">
           <div>
@@ -47,7 +124,7 @@
               <el-option label="停用" value="1" />
             </el-select>
             <el-button @click="fetchCreationConfigs">查询</el-button>
-            <el-button type="primary" @click="openCreationDialog()">新增配置</el-button>
+            <el-button v-if="creationFilters.configGroup !== 'white_bg' && creationFilters.configGroup !== 'bg_generation'" type="primary" @click="openCreationDialog()">新增配置</el-button>
           </div>
         </div>
 
@@ -67,7 +144,6 @@
             <template #default="{ row }">{{ getGroupLabel(row.configGroup) }}</template>
           </el-table-column>
           <el-table-column prop="configName" label="配置名称" min-width="180" />
-          <el-table-column prop="configKey" label="配置键" min-width="200" show-overflow-tooltip />
           <el-table-column prop="configValue" label="配置值" min-width="280" show-overflow-tooltip />
           <el-table-column prop="sort" label="排序" width="90" />
           <el-table-column prop="status" label="状态" width="110">
@@ -82,80 +158,22 @@
             </template>
           </el-table-column>
         </el-table>
+
+        <el-pagination
+          v-if="creationTotal > 0"
+          class="table-pagination"
+          background
+          layout="total, sizes, prev, pager, next, jumper"
+          :current-page="creationPageNum"
+          :page-sizes="[10, 20, 50, 100]"
+          :page-size="creationPageSize"
+          :total="creationTotal"
+          @size-change="(val) => { creationPageSize = val; creationPageNum = 1; fetchCreationConfigs() }"
+          @current-change="(val) => { creationPageNum = val; fetchCreationConfigs() }"
+        />
       </el-tab-pane>
 
-      <el-tab-pane label="提示词配置" name="prompt">
-        <!-- 提示词模板（原提示词选项库） -->
-          <div class="section-header">
-            <div>
-              <h3 class="form-section-title">提示词模板</h3>
-              <p class="section-desc">维护生图时可选择的提示词选项（产品类别、材质、场景、风格、卖点、镜头等）。配置后前台 AI 配置面板即时联动生效。</p>
-            </div>
-            <div class="filter-inline">
 
-              <el-select v-model="libraryFilters.category" placeholder="分类" clearable filterable style="width: 160px">
-                <el-option v-for="c in libraryCategoryOptions" :key="c.value" :label="c.label" :value="c.value" />
-              </el-select>
-              <el-input v-model="libraryFilters.label" placeholder="显示名" clearable style="width: 160px" />
-              <!-- <el-input v-model="libraryFilters.promptKey" placeholder="Key" clearable style="width: 180px" /> -->
-              <el-select v-model="libraryFilters.status" placeholder="状态" clearable style="width: 120px">
-                <el-option label="全部" value="" />
-                <el-option label="启用" value="0" />
-                <el-option label="停用" value="1" />
-              </el-select>
-              <el-button @click="fetchPromptLibrary">查询</el-button>
-              <el-button type="primary" @click="openLibraryDialog()">新增选项</el-button>
-              <el-button @click="openAbTestDialog()">A/B对比</el-button>
-              <el-button @click="openAutoRecommendDialog()">自动推荐</el-button>
-            </div>
-          </div>
-
-          <el-table v-loading="libraryLoading" :data="promptLibraryList" :header-cell-style="headerStyle">
-            <el-table-column prop="category" label="分类" width="120" />
-            <el-table-column prop="promptKey" label="Key" min-width="180" show-overflow-tooltip />
-            <el-table-column prop="label" label="显示名" min-width="140" show-overflow-tooltip />
-            <el-table-column prop="promptText" label="提示词内容" min-width="260" show-overflow-tooltip />
-            <el-table-column prop="scope" label="适用功能" width="150" show-overflow-tooltip />
-            <el-table-column prop="priority" label="优先级" width="90" />
-            <el-table-column prop="sort" label="排序" width="80" />
-            <el-table-column prop="version" label="版本" width="90">
-              <template #default="{ row }">
-                <el-tag v-if="row.version" size="small" type="info">{{ row.version }}</el-tag>
-                <span v-else>-</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="abGroup" label="A/B组" width="80">
-              <template #default="{ row }">
-                <el-tag v-if="row.abGroup" size="small" type="success">{{ row.abGroup }}</el-tag>
-                <span v-else>-</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="successRate" label="成功率" width="90">
-              <template #default="{ row }">
-                <span v-if="row.successRate != null" :style="{ color: row.successRate >= 70 ? '#22C55E' : row.successRate >= 40 ? '#F59E0B' : '#EF4444', fontWeight: 600 }">{{ row.successRate }}%</span>
-                <span v-else>-</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="status" label="状态" width="100">
-              <template #default="{ row }">
-                <el-switch :model-value="row.status === '0'" @change="(value) => toggleLibraryStatus(row, value)" />
-              </template>
-            </el-table-column>
-            <el-table-column prop="isDefault" label="默认" width="80">
-              <template #default="{ row }">
-                <el-tag :type="row.isDefault === '1' ? 'warning' : 'info'" size="small">{{ row.isDefault === '1' ? '默认' : '普通' }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="220" fixed="right">
-              <template #default="{ row }">
-                <el-button link type="primary" size="small" @click="openLibraryDialog(row)">编辑</el-button>
-                <el-button link type="success" size="small" @click="openFeedbackDialog(row)">反馈</el-button>
-                <el-button link type="danger" size="small" @click="handleDeleteLibrary(row)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-
-      </el-tab-pane>
 
       <el-tab-pane label="标签配置" name="tag">
         <div class="section-header">
@@ -247,11 +265,8 @@
       <el-form :model="libraryForm" label-width="100px">
         <el-form-item label="分类" required>
           <el-select v-model="libraryForm.category" placeholder="请选择分类" filterable style="width: 100%">
-            <el-option v-for="c in libraryCategoryOptions" :key="c.value" :label="c.label" :value="c.value" />
+            <el-option v-for="c in libraryFilterCategoryOptions" :key="c.value" :label="c.label" :value="c.value" />
           </el-select>
-        </el-form-item>
-        <el-form-item label="Key" required>
-          <el-input v-model="libraryForm.promptKey" placeholder="点分式唯一标识，如 product.sofa" />
         </el-form-item>
         <el-form-item label="显示名" required>
           <el-input v-model="libraryForm.label" placeholder="前端显示名称" />
@@ -259,14 +274,18 @@
         <el-form-item label="提示词内容">
           <el-input v-model="libraryForm.promptText" type="textarea" :rows="5" placeholder="提示词内容（正向约束/负向约束/参数描述）" />
         </el-form-item>
-        <el-form-item label="适用功能">
-          <el-input v-model="libraryForm.scope" placeholder="逗号分隔，如 white_bg,change_bg；留空表示所有功能" />
-        </el-form-item>
-        <el-form-item label="适配模型">
-          <el-select v-model="libraryForm.model" style="width: 160px">
-            <el-option label="全部" value="all" />
-            <el-option label="GPT" value="gpt" />
-            <el-option label="Gemini" value="gemini" />
+        <el-form-item label="适用功能" required>
+          <el-select
+            v-model="libraryScopeArray"
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            clearable
+            filterable
+            placeholder="请选择适用功能"
+            style="width: 100%"
+          >
+            <el-option v-for="s in promptPickerScopeOptions.filter(o => o.value)" :key="s.value" :label="s.label" :value="s.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="优先级">
@@ -286,19 +305,6 @@
             <el-option label="启用" value="0" />
             <el-option label="停用" value="1" />
           </el-select>
-        </el-form-item>
-        <el-form-item label="版本">
-          <el-input v-model="libraryForm.version" placeholder="如 1.0.0" />
-        </el-form-item>
-        <el-form-item label="A/B测试组">
-          <el-select v-model="libraryForm.abGroup" style="width: 160px" placeholder="选择测试组">
-            <el-option label="无" value="" />
-            <el-option label="A组" value="A" />
-            <el-option label="B组" value="B" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="成功率(%)">
-          <el-input-number v-model="libraryForm.successRate" :min="0" :max="100" :precision="2" :step="0.1" />
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="libraryForm.remark" type="textarea" :rows="2" />
@@ -335,15 +341,12 @@
     <el-dialog v-model="creationDialogVisible" :title="creationForm.id ? '编辑创作配置' : '新增创作配置'" width="620px">
       <el-form :model="creationForm" label-width="100px">
         <el-form-item label="工作台" required>
-          <el-select v-model="creationForm.configGroup" placeholder="请选择工作台" filterable style="width: 100%">
+          <el-select v-model="creationForm.configGroup" placeholder="请选择工作台" filterable style="width: 100%" @change="onConfigGroupInput">
             <el-option v-for="g in creationGroupOptions" :key="g.value" :label="g.label" :value="g.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="配置名称" required>
           <el-input v-model="creationForm.configName" placeholder="请输入配置名称，如：输出尺寸预设" />
-        </el-form-item>
-        <el-form-item label="配置键" required>
-          <el-input v-model="creationForm.configKey" placeholder="请输入配置键（英文唯一标识），如：size_presets" />
         </el-form-item>
         <el-form-item label="配置值类型">
           <el-select :model-value="creationEditorType" style="width: 200px" @change="onEditorTypeChange">
@@ -358,57 +361,114 @@
 
         <el-form-item v-if="creationEditorType === 'options'" label="选项列表">
           <div class="option-editor">
+            <!-- 提示词库绑定工具条：先在「提示词配置」建好显示名，这里下拉选择即自动绑定其提示词Key -->
+            <div class="option-picker-bar">
+              <span class="option-picker-bar-label">🔗 从提示词库绑定</span>
+              <el-select
+                v-model="promptPickerCategory"
+                placeholder="选择分类"
+                filterable
+                size="small"
+                style="width: 150px"
+                @change="onPickerCategoryManualChange"
+              >
+                <el-option v-for="c in promptPickerCategoryOptions" :key="c.value" :label="c.label" :value="c.value" />
+              </el-select>
+              <el-select
+                v-model="promptPickerScope"
+                placeholder="适用功能"
+                filterable
+                clearable
+                size="small"
+                style="width: 150px"
+                @change="onPickerCategoryManualChange"
+              >
+                <el-option v-for="s in promptPickerScopeOptions" :key="s.value" :label="s.label" :value="s.value" />
+              </el-select>
+              <el-button link type="primary" size="small" :loading="promptPickerLoading" @click="loadPromptPicker">刷新</el-button>
+              <span class="option-picker-bar-hint">选中显示名即等于选中其对应提示词，值自动填为提示词Key。</span>
+            </div>
+
             <div v-for="(item, idx) in creationOptions" :key="idx" class="option-row">
+              <!-- 绑定提示词库下拉：选择显示名 → 自动填 label / value -->
+              <el-select
+                :model-value="item._pickerKey"
+                placeholder="从提示词库选择"
+                filterable
+                clearable
+                no-data-text="请先在上方选择分类"
+                class="option-picker"
+                :loading="promptPickerLoading"
+                @change="(val) => onPickPromptItem(item, val)"
+              >
+                <el-option v-for="p in promptPickerItems" :key="p.promptKey" :label="p.label" :value="p.promptKey">
+                  <span class="picker-opt-label">{{ p.label }}</span>
+                  <span class="picker-opt-key">{{ p.promptKey }}</span>
+                </el-option>
+              </el-select>
+
               <template v-for="field in creationOptionFields" :key="field.key">
-                <el-input-number
-                  v-if="field.type === 'number'"
-                  v-model="item[field.key]"
-                  :placeholder="field.label"
-                  :controls="false"
-                  class="option-input option-input-num"
-                />
-                <div v-else-if="field.type === 'image'" class="option-image-cell">
-                  <div class="option-image-input-wrap">
-                    <el-input
-                      v-model="item[field.key]"
-                      :placeholder="field.label + '（粘贴公网链接或点击右侧上传）'"
-                      class="option-input"
-                    />
-                    <el-upload
-                      class="option-image-uploader"
-                      accept="image/*"
-                      :show-file-list="false"
-                      :action="creationUploadUrl"
-                      :headers="creationUploadHeaders"
-                      :before-upload="beforeOptionImageUpload"
-                      :on-success="(res) => handleOptionImageSuccess(res, item)"
-                      :on-error="handleOptionImageError"
-                    >
-                      <el-button size="small" type="primary" plain>上传</el-button>
-                    </el-upload>
-                  </div>
-                  <img
-                    v-if="item[field.key]"
-                    :src="getImageUrl(item[field.key])"
-                    class="option-image-preview"
-                    alt=""
+                <!-- 列表绑定类配置（图片/阴影/尺寸）：选显示名即由下拉自动填好 label、value（及宽/高），
+                     无需再手动填写这些列，故隐藏它们；图片列（仅图片/阴影类有）保留供上传/填写。 -->
+                <template v-if="!(pickerBoundOptionConfig && (field.key === 'label' || field.key === 'value' || field.key === 'w' || field.key === 'h'))">
+                  <el-input-number
+                    v-if="field.type === 'number'"
+                    v-model="item[field.key]"
+                    :placeholder="field.label"
+                    :controls="false"
+                    class="option-input option-input-num"
                   />
-                </div>
-                <el-input
-                  v-else
-                  v-model="item[field.key]"
-                  :placeholder="field.label"
-                  class="option-input"
-                />
+                  <div v-else-if="field.type === 'image'" class="option-image-cell">
+                    <div class="option-image-input-wrap">
+                      <el-input
+                        v-model="item[field.key]"
+                        :placeholder="field.label + '（粘贴公网链接或点击右侧上传）'"
+                        class="option-input"
+                      />
+                      <el-upload
+                        class="option-image-uploader"
+                        accept="image/*"
+                        :show-file-list="false"
+                        :action="creationUploadUrl"
+                        :headers="creationUploadHeaders"
+                        :before-upload="beforeOptionImageUpload"
+                        :on-success="(res) => handleOptionImageSuccess(res, item)"
+                        :on-error="handleOptionImageError"
+                      >
+                        <el-button size="small" type="primary" plain>上传</el-button>
+                      </el-upload>
+                    </div>
+                    <img
+                      v-if="item[field.key]"
+                      :src="getImageUrl(item[field.key])"
+                      class="option-image-preview"
+                      alt=""
+                    />
+                  </div>
+                  <el-input
+                    v-else
+                    v-model="item[field.key]"
+                    :placeholder="field.label"
+                    class="option-input"
+                  />
+                </template>
               </template>
               <el-button link type="danger" size="small" @click="removeOption(idx)">
                 <el-icon><Delete /></el-icon>
               </el-button>
+              <!-- 已绑定提示词内容预览：让"选显示名=选提示词"一目了然 -->
+              <div v-if="getPickerPromptText(item.value)" class="option-prompt-hint">
+                📝 {{ getPickerPromptText(item.value) }}
+              </div>
             </div>
             <el-button type="primary" plain size="small" @click="addOption">
               <el-icon><Plus /></el-icon>添加选项
             </el-button>
-            <div class="option-tip">每项至少填写"显示名"和"值"。尺寸类配置可填宽/高；图片字段可填公网链接或上传到服务器。</div>
+            <div class="option-tip">
+              <template v-if="isImageOptionConfig">从提示词库选择显示名即自动填好名称与值（无需手动填），再为每项上传或填写图片即可。</template>
+              <template v-else-if="pickerBoundOptionConfig">从提示词库选择显示名即自动填好名称与值（含尺寸），后续的值/宽/高无需手动填写。</template>
+              <template v-else>每项至少填写"显示名"和"值"。可点上方"从提示词库选择"直接绑定已建好的显示名（值自动填为其提示词Key）。尺寸类配置可填宽/高；图片字段可填公网链接或上传到服务器。</template>
+            </div>
           </div>
         </el-form-item>
 
@@ -469,88 +529,6 @@
         <el-button type="primary" :loading="savingCreation" @click="submitCreation">保存</el-button>
       </template>
     </el-dialog>
-
-    <!-- 效果反馈弹窗 -->
-    <el-dialog v-model="feedbackDialogVisible" title="效果反馈录入" width="520px">
-      <el-form :model="feedbackForm" label-width="120px">
-        <el-form-item label="提示词">{{ feedbackForm.label }}</el-form-item>
-        <el-form-item label="分类">{{ feedbackForm.category }}</el-form-item>
-        <el-form-item label="A/B测试组">
-          <el-select v-model="feedbackForm.abGroup" style="width: 160px" placeholder="选择测试组">
-            <el-option label="无" value="" />
-            <el-option label="A组" value="A" />
-            <el-option label="B组" value="B" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="成功率(%)">
-          <el-input-number v-model="feedbackForm.successRate" :min="0" :max="100" :precision="2" :step="0.1" style="width: 200px" />
-        </el-form-item>
-        <el-form-item label="版本号">
-          <el-input v-model="feedbackForm.version" placeholder="如 1.0.0" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="feedbackDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="savingFeedback" @click="submitFeedback">保存</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- A/B对比弹窗 -->
-    <el-dialog v-model="abTestDialogVisible" title="A/B测试对比" width="800px">
-      <el-table :data="abTestData" :header-cell-style="headerStyle" max-height="500">
-        <el-table-column prop="category" label="分类" width="120" />
-        <el-table-column prop="label" label="提示词" min-width="160" />
-        <el-table-column prop="abGroup" label="组别" width="80">
-          <template #default="{ row }">
-            <el-tag :type="row.abGroup === 'A' ? 'primary' : 'success'" size="small">{{ row.abGroup }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="successRate" label="成功率" width="100">
-          <template #default="{ row }">
-            <span v-if="row.successRate != null" :style="{ color: row.successRate >= 70 ? '#22C55E' : row.successRate >= 40 ? '#F59E0B' : '#EF4444', fontWeight: 600 }">{{ row.successRate }}%</span>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="version" label="版本" width="90" />
-        <el-table-column label="推荐" width="80">
-          <template #default="{ row }">
-            <el-tag v-if="row.successRate != null && row.successRate >= 70" type="success" size="small">推荐</el-tag>
-          </template>
-        </el-table-column>
-      </el-table>
-      <div class="ab-test-summary" v-if="abTestData.length">
-        <p><strong>A组平均成功率：</strong>{{ getAbAvgRate('A') }}%</p>
-        <p><strong>B组平均成功率：</strong>{{ getAbAvgRate('B') }}%</p>
-        <p><strong>最优组：</strong>{{ getAbAvgRate('A') >= getAbAvgRate('B') ? 'A组' : 'B组' }}</p>
-      </div>
-    </el-dialog>
-
-    <!-- 自动推荐弹窗 -->
-    <el-dialog v-model="autoRecommendDialogVisible" title="自动推荐（按成功率排序）" width="800px">
-      <p class="section-desc" style="margin-bottom: 12px;">系统根据历史效果反馈数据，自动推荐成功率最高的提示词选项。</p>
-      <el-table :data="autoRecommendData" :header-cell-style="headerStyle" max-height="500">
-        <el-table-column label="排名" width="70" type="index" :index="1" />
-        <el-table-column prop="category" label="分类" width="120" />
-        <el-table-column prop="label" label="提示词" min-width="160" />
-        <el-table-column prop="successRate" label="成功率" width="100">
-          <template #default="{ row }">
-            <span :style="{ color: row.successRate >= 70 ? '#22C55E' : row.successRate >= 40 ? '#F59E0B' : '#EF4444', fontWeight: 600 }">{{ row.successRate }}%</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="version" label="版本" width="90" />
-        <el-table-column prop="abGroup" label="A/B组" width="80">
-          <template #default="{ row }">
-            <el-tag v-if="row.abGroup" size="small" type="success">{{ row.abGroup }}</el-tag>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="100">
-          <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openLibraryDialog(row)">编辑</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-dialog>
   </div>
 </template>
 
@@ -603,6 +581,16 @@ const creationConfigList = ref([])
 const promptTemplateList = ref([])
 const tagList = ref([])
 
+// ===== 分页状态 =====
+// 提示词配置
+const libraryPageNum = ref(1)
+const libraryPageSize = ref(20)
+const libraryTotal = ref(0)
+// 创作配置
+const creationPageNum = ref(1)
+const creationPageSize = ref(20)
+const creationTotal = ref(0)
+
 const creationFilters = reactive({ configGroup: '', status: '' })
 const promptFilters = reactive({ module: '', status: '' })
 const tagFilters = reactive({ tagName: '', tagType: '', status: '' })
@@ -612,22 +600,76 @@ const libraryLoading = ref(false)
 const savingLibrary = ref(false)
 const libraryDialogVisible = ref(false)
 const promptLibraryList = ref([])
-const libraryFilters = reactive({ category: '', label: '', promptKey: '', status: '' })
-const libraryCategoryOptions = [
-  { value: 'function', label: '功能' },
-  { value: 'platform', label: '平台' },
-  { value: 'product', label: '产品类别' },
-  { value: 'material', label: '材质' },
-  { value: 'scene', label: '场景' },
-  { value: 'style', label: '风格' },
-  { value: 'selling', label: '卖点' },
-  { value: 'size', label: '尺寸/输出' },
-  { value: 'quality', label: '质量约束' },
-  { value: 'negative', label: '负向约束' },
-  { value: 'camera', label: '镜头/角度/占比' },
-  { value: 'option', label: '功能内选项' },
-  { value: 'model_adapt', label: '模型适配' }
+const libraryFilters = reactive({ category: '', label: '', promptKey: '', scope: '', status: '' })
+// 存储被创作配置引用的 promptKeys
+const referencedPromptKeys = ref(new Set())
+// ===== 统一分类选项（提示词配置过滤 + 创作配置绑定共用一套值） =====
+const unifiedCategoryOptions = [
+  { value: 'opt_platform',   label: '平台' },
+  { value: 'opt_scene',      label: '场景' },
+  { value: 'opt_light',      label: '光线' },
+  { value: 'opt_style',      label: '风格' },
+  { value: 'opt_selling',    label: '卖点' },
+  { value: 'opt_purpose',    label: '用途' },
+  { value: 'opt_size',       label: '尺寸' },
+  { value: 'opt_age',        label: '年龄' },
+  { value: 'opt_hairstyle',  label: '发型' },
+  { value: 'opt_ethnicity',  label: '人种' },
+  { value: 'opt_pose',       label: '姿势' },
+  { value: 'opt_clothing',   label: '服装' },
+  { value: 'opt_tool',       label: '精修工具' },
+  { value: 'opt_ratio',      label: '比例' },
+  { value: 'opt_banner_type',label: 'Banner类型' },
+  { value: 'opt_template',   label: 'Banner模板' },
+  { value: 'opt_page',       label: '详情页模块' },
+  { value: 'opt_quality',    label: '质量' },
+  { value: 'opt_language',   label: '语言' },
+  { value: 'opt_shadow',     label: '阴影' },
+  { value: 'function',       label: '功能' },
+  { value: 'product',        label: '产品类别' },
+  { value: 'material',       label: '材质' },
+  { value: 'camera',         label: '镜头/角度' },
+  { value: 'negative',       label: '负向约束' },
+  { value: 'option',         label: '功能内选项' },
+  { value: 'model_adapt',    label: '模型适配' }
 ]
+
+// 兼容旧值 → 新值的映射（数据迁移用，将无 opt_ 前缀的分类值转为带 opt_ 的统一值）
+const legacyCategoryMap = {
+  function:    'opt_platform',   // "功能" → 归入"平台"（前台统一 scope=platform）
+  platform:    'opt_platform',
+  product:     'opt_platform',
+  material:    'opt_platform',
+  scene:       'opt_scene',
+  style:       'opt_style',
+  selling:     'opt_selling',
+  size:        'opt_size',
+  quality:     'opt_quality',
+  negative:    'opt_quality',
+  camera:      'opt_camera',
+  option:      'opt_tool',
+  model_adapt: 'opt_quality'
+}
+
+// 废弃：libraryCategoryOptions（已合并到 unifiedCategoryOptions）
+// const libraryCategoryOptions = [...]
+// 废弃：promptPickerCategoryOptions（已合并到 unifiedCategoryOptions）
+// const promptPickerCategoryOptions = [...]
+
+// 提示词配置过滤用（全量分类，管理员可见所有分类）
+const libraryFilterCategoryOptions = unifiedCategoryOptions
+
+// 创作配置绑定用（从统一列表中只取 opt_ 开头的 UI 选项库分类；AI白底图仅显示阴影+尺寸；白底图生成背景仅显示平台/场景/光线/风格/尺寸）
+const promptPickerCategoryOptions = computed(() => {
+  const optList = unifiedCategoryOptions.filter(o => o.value.startsWith('opt_'))
+  if (creationForm.configGroup === 'white_bg') {
+    return optList.filter(o => ['opt_shadow', 'opt_size'].includes(o.value))
+  }
+  if (creationForm.configGroup === 'bg_generation') {
+    return optList.filter(o => ['opt_platform', 'opt_scene', 'opt_light', 'opt_style', 'opt_size'].includes(o.value))
+  }
+  return optList
+})
 
 const creationGroupOptions = [
   { value: 'common', label: '通用配置', desc: '语言列表、生成数量上限等', icon: '⚙' },
@@ -668,11 +710,35 @@ function getTagTypeLabel(value) {
   return t ? t.label : value
 }
 
+// 提示词库分类/适用功能 中文显示（表格列展示用）
+function getCategoryLabel(value) {
+  if (!value) return '-'
+  const c = unifiedCategoryOptions.find(o => o.value === value)
+  return c ? c.label : value
+}
+
+function getScopeLabel(value) {
+  if (!value) return '不限'
+  // 支持逗号分隔的多 scope
+  const parts = String(value).split(',').map(v => v.trim()).filter(Boolean)
+  if (!parts.length) return '不限'
+  const labels = parts.map(p => {
+    const s = promptPickerScopeOptions.find(o => o.value === p)
+    return s ? s.label : p
+  })
+  return labels.join('、')
+}
+
 const configForm = reactive(createDefaultConfigForm())
 const promptForm = reactive(createDefaultPromptForm())
 const tagForm = reactive(createDefaultTagForm())
 const creationForm = reactive(createDefaultCreationForm())
 const libraryForm = reactive(createDefaultLibraryForm())
+
+// 提示词选项编辑：适用功能(scope)的多选绑定。scope 在后端为逗号分隔字符串，
+// 这里用数组做下拉多选，提交时在 submitLibrary 中合并回 libraryForm.scope。
+const libraryScopeArray = ref([])
+
 
 // ========== 创作配置值结构化编辑器 ==========
 const creationEditorType = ref('options')
@@ -684,6 +750,148 @@ const creationStringInputRef = ref(null)
 const creationNumberValue = ref(0)
 const creationStringValue = ref('')
 const creationJsonValue = ref('')
+
+// ========== 创作配置 ↔ 提示词库 联动选择器 ==========
+// 选项列表编辑器里，每行可通过下拉直接选择提示词库的"显示名"，
+// 选中后自动以其 promptKey 作为该选项的"值"，实现"选显示名=选对应提示词"。
+const promptPickerItems = ref([])
+const promptPickerLoading = ref(false)
+const promptPickerCategory = ref('')
+const promptPickerScope = ref('')
+const promptPickerLoadedKey = ref('')
+const promptPickerUserOverride = ref(false)
+
+// 适用功能 scope（configGroup → scope 映射）
+const promptPickerScopeOptions = [
+  { value: '', label: '不限' },
+  { value: 'change_bg', label: '白底图生成背景' },
+  { value: 'white_bg', label: 'AI白底图' },
+  { value: 'ai_model', label: 'AI模特' },
+  { value: 'main_image', label: '主图设计' },
+  { value: 'retouch', label: '产品精修' },
+  { value: 'detail', label: '详情图/A+' },
+  { value: 'dimension', label: '尺寸标记' },
+  { value: 'banner', label: 'Banner设计' },
+  { value: 'batch', label: '批量生成' }
+]
+
+// 由配置键反推提示词库分类（仅对"值=提示词Key"的配置键做自动推断；
+// 出图参数类配置键不在此列，避免把尺寸字串误绑成 promptKey）
+function inferPromptCategory(configKey) {
+  const map = {
+    platform_options: 'opt_platform',
+    scene_list: 'opt_scene',
+    light_options: 'opt_light',
+    style_presets: 'opt_style',
+    selling_options: 'opt_selling',
+    purpose_options: 'opt_purpose',
+    shadow_styles: 'opt_shadow',
+    size_presets: 'opt_size',
+    size_options: 'opt_size',
+    output_sizes: 'opt_size',
+    page_sizes: 'opt_size'
+  }
+  return map[configKey] || ''
+}
+
+// 由工作台 configGroup 反推提示词库 scope
+function inferPromptScope(configGroup) {
+  const map = {
+    bg_generation: 'change_bg',
+    white_bg: 'white_bg',
+    ai_model: 'ai_model',
+    main_image: 'main_image',
+    retouch: 'retouch',
+    detail_img: 'detail',
+    size_mark: 'dimension',
+    banner: 'banner',
+    batch_process: 'batch'
+  }
+  return map[configGroup] || ''
+}
+
+async function loadPromptPicker() {
+  const cat = promptPickerCategory.value
+  if (!cat) {
+    promptPickerItems.value = []
+    return
+  }
+  const key = `${cat}|${promptPickerScope.value || ''}`
+  if (key === promptPickerLoadedKey.value && promptPickerItems.value.length) return
+  promptPickerLoading.value = true
+  try {
+    const res = await listAdminPromptLibrary({
+      pageNum: 1,
+      pageSize: 500,
+      category: cat,
+      scope: promptPickerScope.value || undefined,
+      status: '0'
+    })
+    promptPickerItems.value = res.rows || []
+    promptPickerLoadedKey.value = key
+    syncPickerSelection()
+  } catch {
+    promptPickerItems.value = []
+  } finally {
+    promptPickerLoading.value = false
+  }
+}
+
+// 已绑定的选项行回显选中态：若行 value 命中提示词库某个 promptKey，则下拉回显该显示名
+function syncPickerSelection() {
+  const keys = new Set(promptPickerItems.value.map(p => p.promptKey))
+  creationOptions.value.forEach(item => {
+    if (item._pickerKey === undefined) item._pickerKey = ''
+    if (item.value && keys.has(item.value)) item._pickerKey = item.value
+    else if (!keys.has(item._pickerKey)) item._pickerKey = ''
+  })
+}
+
+function onPickerCategoryManualChange() {
+  promptPickerUserOverride.value = true
+  promptPickerLoadedKey.value = ''
+  loadPromptPicker()
+}
+
+function onConfigKeyInput() {
+  if (promptPickerUserOverride.value) return
+  const inferred = inferPromptCategory(creationForm.configKey)
+  if (inferred !== promptPickerCategory.value) {
+    promptPickerCategory.value = inferred
+    promptPickerLoadedKey.value = ''
+    loadPromptPicker()
+  }
+}
+
+function onConfigGroupInput() {
+  if (promptPickerUserOverride.value) return
+  const inferred = inferPromptScope(creationForm.configGroup)
+  if (inferred !== promptPickerScope.value) {
+    promptPickerScope.value = inferred
+    promptPickerLoadedKey.value = ''
+    loadPromptPicker()
+  }
+}
+
+// 选中某个提示词显示名：用其 label 作为选项显示名，promptKey 作为选项值
+function onPickPromptItem(item, val) {
+  if (!val) {
+    item._pickerKey = ''
+    return
+  }
+  const picked = promptPickerItems.value.find(p => p.promptKey === val)
+  if (!picked) return
+  item.label = picked.label
+  item.value = picked.promptKey
+  item._pickerKey = val
+}
+
+// 取某 promptKey 对应的提示词内容，用于在选项行下方展示
+function getPickerPromptText(promptKey) {
+  if (!promptKey) return ''
+  const p = promptPickerItems.value.find(x => x.promptKey === promptKey)
+  return p && p.promptText ? p.promptText : ''
+}
 
 const creationUploadUrl = '/api/common/upload'
 const creationUploadHeaders = computed(() => ({
@@ -717,11 +925,51 @@ function handleOptionImageError() {
   ElMessage.error('图片上传请求失败，请检查网络或登录状态')
 }
 
+// 图片/阴影类配置（shadow_styles、bg_styles、preview_styles、style_presets）：
+// 选项由提示词库下拉绑定，选中显示名即自动填好 label 与 value（英文Key），无需用户手动填写这两列，仅保留图片列。
+// 尺寸类配置（size_presets/size_options/output_sizes/page_sizes）同理：选显示名即得值，
+// 后面的"值/宽/高"等手动填写列无需用户填，由下拉自动填好。
+// 仅当该配置键能反推出提示词库分类（即下拉有内容可绑）时才隐藏手动填写列，否则保留输入框作为兜底。
+const imageOptionKeys = ['shadow_styles', 'bg_styles', 'preview_styles', 'style_presets']
+const sizeOptionKeys = ['size_presets', 'size_options', 'output_sizes', 'page_sizes']
+// 列表绑定类配置：选了显示名即得 label+value（及图片），无需用户手动填这些列，仅保留下拉与图片列。
+const pickerBoundOptionConfig = computed(() =>
+  (imageOptionKeys.includes(creationForm.configKey) || sizeOptionKeys.includes(creationForm.configKey))
+  && !!inferPromptCategory(creationForm.configKey)
+)
+// 兼容旧名（图片/阴影类专用分支用），等价于 pickerBoundOptionConfig && 含图片列
+const isImageOptionConfig = computed(() =>
+  imageOptionKeys.includes(creationForm.configKey) && !!inferPromptCategory(creationForm.configKey)
+)
+
 const creationOptionFields = computed(() => {
+  // 图片/阴影类配置：固定为 显示名/值/图片 三列。
+  // label 与 value 由提示词库下拉自动填好（界面隐藏这两列），image 列保留供上传/填写图片。
+  // 即使已存数据没有 image 字段，也强制补出该列，确保图片栏始终可见且参与序列化。
+  if (isImageOptionConfig.value) {
+    return [
+      { key: 'label', label: '显示名', type: 'text' },
+      { key: 'value', label: '值', type: 'text' },
+      { key: 'image', label: '图片', type: 'image' }
+    ]
+  }
+  // 尺寸类配置：固定为 显示名/值/宽/高 四列。label 与 value 由下拉自动填好（界面隐藏），
+  // 宽/高也由下拉自动填好（界面隐藏），保留这几列仅为序列化兜底。
+  if (sizeOptionKeys.includes(creationForm.configKey) && !!inferPromptCategory(creationForm.configKey)) {
+    return [
+      { key: 'label', label: '显示名', type: 'text' },
+      { key: 'value', label: '值', type: 'text' },
+      { key: 'w', label: '宽', type: 'number' },
+      { key: 'h', label: '高', type: 'number' }
+    ]
+  }
   const samples = creationOptions.value.filter(i => i && typeof i === 'object')
   const knownOrder = ['label', 'value', 'key', 'name', 'desc', 'image', 'w', 'h']
   const keySet = new Set()
-  samples.forEach(item => Object.keys(item).forEach(k => { if (k) keySet.add(k) }))
+  samples.forEach(item => Object.keys(item).forEach(k => {
+    // 跳过内部字段（下划线前缀，如 _pickerKey），不作为可编辑列、也不参与序列化
+    if (k && !k.startsWith('_')) keySet.add(k)
+  }))
   if (keySet.size === 0) {
     return guessOptionFieldsByKey(creationForm.configKey)
   }
@@ -778,6 +1026,7 @@ function createEmptyOption() {
   activeOptionFields().forEach(f => {
     obj[f.key] = f.type === 'number' ? 0 : ''
   })
+  obj._pickerKey = ''
   return obj
 }
 
@@ -847,7 +1096,7 @@ function loadCreationEditor(raw) {
   if (result.type === 'options') {
     creationOptions.value = (result.data || []).map(item => {
       const base = createEmptyOption()
-      return { ...base, ...item }
+      return { ...base, ...item, _pickerKey: '' }
     })
     if (creationOptions.value.length === 0) {
       creationOptions.value.push(createEmptyOption())
@@ -860,6 +1109,14 @@ function loadCreationEditor(raw) {
     creationStringValue.value = result.data
   } else if (result.type === 'json') {
     creationJsonValue.value = result.data
+  }
+  // 编辑回显：根据当前 configGroup / configKey 推断分类与 scope，并尝试回显已绑定项
+  promptPickerCategory.value = inferPromptCategory(creationForm.configKey)
+  promptPickerScope.value = inferPromptScope(creationForm.configGroup)
+  promptPickerUserOverride.value = false
+  promptPickerLoadedKey.value = ''
+  if (creationEditorType.value === 'options' && promptPickerCategory.value) {
+    loadPromptPicker()
   }
 }
 
@@ -886,6 +1143,7 @@ function serializeCreationEditor() {
     if (items.length === 0) return null
     return JSON.stringify(items)
   }
+  // 注意：内部字段 _pickerKey 仅用于界面回显，不参与序列化（上述只取 fields 定义的字段，已天然排除）
   if (type === 'string_list') {
     const items = creationStringList.value.map(s => String(s).trim()).filter(Boolean)
     if (items.length === 0) return null
@@ -923,11 +1181,17 @@ function onEditorTypeChange(newType) {
   if (newType === 'options') {
     const parsed = parseCreationValue(current || '')
     if (parsed.type === 'options' && parsed.data.length) {
-      creationOptions.value = parsed.data.map(item => ({ ...createEmptyOption(), ...item }))
+      creationOptions.value = parsed.data.map(item => ({ ...createEmptyOption(), ...item, _pickerKey: '' }))
     }
     if (creationOptions.value.length === 0) {
       creationOptions.value.push(createEmptyOption())
     }
+    // 切到选项列表时，若有可绑定的分类则同步加载并回显
+    promptPickerCategory.value = inferPromptCategory(creationForm.configKey)
+    promptPickerScope.value = inferPromptScope(creationForm.configGroup)
+    promptPickerUserOverride.value = false
+    promptPickerLoadedKey.value = ''
+    if (promptPickerCategory.value) loadPromptPicker()
   } else if (newType === 'string_list') {
     const parsed = parseCreationValue(current || '')
     if (parsed.type === 'string_list') creationStringList.value = [...parsed.data]
@@ -990,14 +1254,10 @@ function createDefaultLibraryForm() {
     label: '',
     promptText: '',
     scope: '',
-    model: 'all',
     priority: 100,
     isDefault: '0',
     sort: 0,
     status: '0',
-    version: '1.0.0',
-    abGroup: '',
-    successRate: null,
     remark: ''
   }
 }
@@ -1022,12 +1282,16 @@ async function fetchCreationConfigs() {
   creationLoading.value = true
   try {
     const res = await listAdminCreationConfigs({
-      pageNum: 1,
-      pageSize: 100,
+      pageNum: creationPageNum.value,
+      pageSize: creationPageSize.value,
       configGroup: creationFilters.configGroup || undefined,
       status: creationFilters.status || undefined
     })
     creationConfigList.value = res.rows || []
+    creationTotal.value = res.total || 0
+
+    // 创作配置变化后，重新收集引用关系
+    await collectReferencedPromptKeys()
   } catch (error) {
     ElMessage.error(error.message || '获取创作配置失败')
   } finally {
@@ -1159,8 +1423,9 @@ async function submitCreation() {
   if (!creationForm.configName) {
     return ElMessage.warning('请输入配置名称')
   }
+  // 配置键已对用户隐藏：新增时若未填写则自动生成（数据库 config_key 非空，且与 config_group 联合唯一）
   if (!creationForm.configKey) {
-    return ElMessage.warning('请输入配置键')
+    creationForm.configKey = 'cfg_' + Date.now()
   }
   const serialized = serializeCreationEditor()
   if (serialized === null) {
@@ -1288,14 +1553,19 @@ async function fetchPromptLibrary() {
   libraryLoading.value = true
   try {
     const res = await listAdminPromptLibrary({
-      pageNum: 1,
-      pageSize: 200,
+      pageNum: libraryPageNum.value,
+      pageSize: libraryPageSize.value,
       category: libraryFilters.category || undefined,
       label: libraryFilters.label || undefined,
       promptKey: libraryFilters.promptKey || undefined,
+      scope: libraryFilters.scope || undefined,
       status: libraryFilters.status || undefined
     })
     promptLibraryList.value = res.rows || []
+    libraryTotal.value = res.total || 0
+
+    // 收集被创作配置引用的 promptKeys
+    await collectReferencedPromptKeys()
   } catch (error) {
     ElMessage.error(error.message || '获取提示词选项库失败')
   } finally {
@@ -1303,9 +1573,48 @@ async function fetchPromptLibrary() {
   }
 }
 
+// 收集所有被创作配置引用的 promptKeys
+async function collectReferencedPromptKeys() {
+  try {
+    const res = await listAdminCreationConfigs({
+      pageNum: 1,
+      pageSize: 1000  // 获取所有创作配置
+    })
+    const configs = res.rows || []
+    const referencedKeys = new Set()
+
+    configs.forEach(config => {
+      if (config.configValue) {
+        try {
+          const items = JSON.parse(config.configValue)
+          if (Array.isArray(items)) {
+            items.forEach(item => {
+              if (item.value && typeof item.value === 'string') {
+                referencedKeys.add(item.value)
+              }
+            })
+          }
+        } catch {
+          // 忽略无法解析的配置
+        }
+      }
+    })
+
+    referencedPromptKeys.value = referencedKeys
+  } catch (error) {
+    console.error('收集引用关系失败:', error)
+    referencedPromptKeys.value = new Set()
+  }
+}
+
 function openLibraryDialog(row) {
   resetLibraryForm()
   if (row) Object.assign(libraryForm, row)
+  // 同步 scope 字符串 → 多选数组（编辑回显）
+  libraryScopeArray.value = String(libraryForm.scope || '')
+    .split(',')
+    .map(v => v.trim())
+    .filter(Boolean)
   libraryDialogVisible.value = true
 }
 
@@ -1313,11 +1622,17 @@ async function submitLibrary() {
   if (!libraryForm.category) {
     return ElMessage.warning('请选择分类')
   }
-  if (!libraryForm.promptKey) {
-    return ElMessage.warning('请输入Key')
-  }
   if (!libraryForm.label) {
     return ElMessage.warning('请输入显示名')
+  }
+  if (!libraryScopeArray.value || libraryScopeArray.value.length === 0) {
+    return ElMessage.warning('请选择适用功能')
+  }
+  // 适用功能多选 → 逗号分隔字符串（与后端 scope 字段约定一致）
+  libraryForm.scope = libraryScopeArray.value.join(',')
+  // promptKey 已对用户隐藏：新增时若为空则自动生成（数据库要求唯一标识）
+  if (!libraryForm.promptKey) {
+    libraryForm.promptKey = 'pk_' + Date.now()
   }
   savingLibrary.value = true
   try {
@@ -1349,6 +1664,12 @@ async function toggleLibraryStatus(row, enabled) {
 }
 
 async function handleDeleteLibrary(row) {
+  // 检查是否被创作配置引用
+  if (referencedPromptKeys.value.has(row.promptKey)) {
+    ElMessage.warning('该提示词选项已被创作配置引用，无法删除')
+    return
+  }
+
   try {
     await ElMessageBox.confirm('确认删除该提示词选项吗？', '提示', {
       confirmButtonText: '确定',
@@ -1363,87 +1684,6 @@ async function handleDeleteLibrary(row) {
       ElMessage.error(error.message || '删除提示词选项失败')
     }
   }
-}
-
-// ========== 效果反馈 ==========
-const feedbackDialogVisible = ref(false)
-const savingFeedback = ref(false)
-const feedbackForm = reactive({ id: null, label: '', category: '', abGroup: '', successRate: null, version: '' })
-
-function openFeedbackDialog(row) {
-  Object.assign(feedbackForm, {
-    id: row.id,
-    label: row.label,
-    category: row.category,
-    abGroup: row.abGroup || '',
-    successRate: row.successRate ?? null,
-    version: row.version || ''
-  })
-  feedbackDialogVisible.value = true
-}
-
-async function submitFeedback() {
-  savingFeedback.value = true
-  try {
-    const row = promptLibraryList.value.find(r => r.id === feedbackForm.id)
-    if (row) {
-      await updateAdminPromptLibrary({
-        ...row,
-        abGroup: feedbackForm.abGroup,
-        successRate: feedbackForm.successRate,
-        version: feedbackForm.version
-      })
-      ElMessage.success('效果反馈已保存')
-      feedbackDialogVisible.value = false
-      fetchPromptLibrary()
-    }
-  } catch (error) {
-    ElMessage.error(error.message || '保存效果反馈失败')
-  } finally {
-    savingFeedback.value = false
-  }
-}
-
-// ========== A/B 测试对比 ==========
-const abTestDialogVisible = ref(false)
-const abTestData = ref([])
-
-function openAbTestDialog() {
-  abTestData.value = promptLibraryList.value
-    .filter(r => r.abGroup === 'A' || r.abGroup === 'B')
-    .sort((a, b) => {
-      if (a.category !== b.category) return a.category.localeCompare(b.category)
-      if (a.abGroup !== b.abGroup) return a.abGroup.localeCompare(b.abGroup)
-      return (b.successRate ?? 0) - (a.successRate ?? 0)
-    })
-  if (!abTestData.value.length) {
-    ElMessage.info('暂无A/B测试数据，请先在提示词选项中设置A/B组')
-    return
-  }
-  abTestDialogVisible.value = true
-}
-
-function getAbAvgRate(group) {
-  const items = abTestData.value.filter(r => r.abGroup === group && r.successRate != null)
-  if (!items.length) return '0.00'
-  const sum = items.reduce((acc, r) => acc + r.successRate, 0)
-  return (sum / items.length).toFixed(2)
-}
-
-// ========== 自动推荐 ==========
-const autoRecommendDialogVisible = ref(false)
-const autoRecommendData = ref([])
-
-function openAutoRecommendDialog() {
-  autoRecommendData.value = promptLibraryList.value
-    .filter(r => r.successRate != null && r.status === '0')
-    .sort((a, b) => (b.successRate ?? 0) - (a.successRate ?? 0))
-    .slice(0, 20)
-  if (!autoRecommendData.value.length) {
-    ElMessage.info('暂无效果反馈数据，请先录入成功率')
-    return
-  }
-  autoRecommendDialogVisible.value = true
 }
 
 onMounted(() => {
@@ -1573,19 +1813,6 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.ab-test-summary {
-  margin-top: 16px;
-  padding: 16px;
-  background: #f8fafc;
-  border-radius: 8px;
-
-  p {
-    margin: 4px 0;
-    font-size: 14px;
-    color: #1e293b;
-  }
-}
-
 .prompt-sub-tabs {
   margin-bottom: 16px;
 
@@ -1667,6 +1894,61 @@ onMounted(() => {
   color: #94a3b8;
 }
 
+/* 提示词库绑定工具条 */
+.option-picker-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  background: #f0f7ff;
+  border: 1px dashed #93c5fd;
+  border-radius: 8px;
+}
+
+.option-picker-bar-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1d4ed8;
+  white-space: nowrap;
+}
+
+.option-picker-bar-hint {
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* 行内"从提示词库选择"下拉 */
+.option-picker {
+  width: 200px;
+  flex: 0 0 200px;
+}
+
+.picker-opt-label {
+  float: left;
+}
+
+.picker-opt-key {
+  float: right;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+/* 已绑定提示词内容预览 */
+.option-prompt-hint {
+  flex: 1 1 100%;
+  margin: -2px 0 6px 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: #475569;
+  background: #f8fafc;
+  border-left: 3px solid #2563ff;
+  border-radius: 4px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
 .tag-input-wrap {
   display: flex;
   flex-wrap: wrap;
@@ -1678,5 +1960,12 @@ onMounted(() => {
   margin-left: 10px;
   font-size: 12px;
   color: #94a3b8;
+}
+
+// ===== 表格分页 =====
+.table-pagination {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
 }
 </style>

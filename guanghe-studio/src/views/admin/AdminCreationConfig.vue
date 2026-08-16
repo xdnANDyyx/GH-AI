@@ -144,7 +144,7 @@
     </el-card> -->
 
     <!-- ===== 产品精修配置 ===== -->
-    <el-card shadow="never" class="config-card">
+    <!-- <el-card shadow="never" class="config-card">
       <template #header>
         <div class="card-header">
           <span class="card-header-title">产品精修配置</span>
@@ -193,7 +193,7 @@
       <div style="margin-top: 16px">
         <el-button type="primary" :loading="retouchSaving" @click="saveRetouchConfig">保存产品精修配置</el-button>
       </div>
-    </el-card>
+    </el-card> -->
   </div>
 </template>
 

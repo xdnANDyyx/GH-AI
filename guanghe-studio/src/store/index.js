@@ -396,3 +396,32 @@ export const useUserStore = defineStore('user', () => {
     logout, logoutLocal
   }
 })
+
+/**
+ * 图片接力 Store
+ * 跨页面传递一张图片，供目标工作台消费：
+ *   - 白底图结果 → 右键「放入白底生成背景 / 产品精修」
+ *   - 背景生成结果 → 右键「放入产品精修」
+ * setImage(url, meta) 写入；consume() 读取并清除（一次性）。
+ * 目标工作台在 onActivated / onMounted 里调用 consume()，并把图片作为输入接入。
+ */
+export const useImageHandoffStore = defineStore('imageHandoff', () => {
+  const pendingImage = ref(null) // { url, from, to, timestamp }
+
+  function setImage(url, meta = {}) {
+    if (!url) return
+    pendingImage.value = { url, ...meta, timestamp: Date.now() }
+  }
+
+  function consume() {
+    const img = pendingImage.value
+    pendingImage.value = null
+    return img
+  }
+
+  function clear() {
+    pendingImage.value = null
+  }
+
+  return { pendingImage, setImage, consume, clear }
+})

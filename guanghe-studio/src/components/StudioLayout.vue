@@ -194,10 +194,10 @@ const toggleToMenuPath = {
 const allWorkMenus = [
   { path: '/whiteBg', title: 'AI 白底图', icon: 'House', toggleKey: 'white_bg' },
   { path: '/whiteToBg', title: '白底生成背景', icon: 'PictureFilled', toggleKey: 'white_to_bg' },
-  { path: '/refine', title: '产品精修', icon: 'MagicStick', toggleKey: 'refine' },
-  { path: '/aiModel', title: 'AI 模特', icon: 'User', toggleKey: 'ai_model' },
   { path: '/mainImage', title: '主图设计', icon: 'DataBoard', toggleKey: 'main_image' },
   { path: '/detailImg', title: '详情图 / A+', icon: 'Document', toggleKey: 'detail_img' },
+  { path: '/refine', title: '产品精修', icon: 'MagicStick', toggleKey: 'refine' },
+  { path: '/aiModel', title: 'AI 模特', icon: 'User', toggleKey: 'ai_model' },
   { path: '/size', title: '尺寸标记', icon: 'ScaleToOriginal', toggleKey: 'size_mark' },
   { path: '/banner', title: 'Banner 设计', icon: 'Postcard', toggleKey: 'banner' },
   { path: '/batchProcess', title: '批量生成', icon: 'Files', toggleKey: 'batch_process' }

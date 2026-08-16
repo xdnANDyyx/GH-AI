@@ -1,10 +1,12 @@
 package com.ruoyi.web.controller.business;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ruoyi.business.domain.GhPromptLibrary;
 import com.ruoyi.business.dto.PromptLibraryQueryDTO;
 import com.ruoyi.business.dto.PromptLibrarySaveDTO;
 import com.ruoyi.business.service.IGhPromptLibraryService;
 import com.ruoyi.common.annotation.Log;
+import com.ruoyi.common.constant.HttpStatus;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.core.page.TableDataInfo;
@@ -47,9 +49,13 @@ public class PromptLibraryController extends BaseController {
     @PreAuthorize("@ss.hasPermi('gh:promptLibrary:list') or @ss.hasRole('admin')")
     @GetMapping("/list")
     public TableDataInfo<GhPromptLibrary> list(PromptLibraryQueryDTO query) {
-        startPage();
-        List<GhPromptLibrary> list = promptLibraryService.listLibrary(query);
-        return getDataTable(list);
+        Page<GhPromptLibrary> page = promptLibraryService.listLibrary(query);
+        TableDataInfo<GhPromptLibrary> rspData = new TableDataInfo<>();
+        rspData.setCode(HttpStatus.SUCCESS);
+        rspData.setMsg("查询成功");
+        rspData.setRows(page.getRecords());
+        rspData.setTotal(page.getTotal());
+        return rspData;
     }
 
     /**

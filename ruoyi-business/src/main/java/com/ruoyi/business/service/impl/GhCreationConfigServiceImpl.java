@@ -1,6 +1,7 @@
 package com.ruoyi.business.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ruoyi.business.domain.GhCreationConfig;
 import com.ruoyi.business.dto.CreationConfigQueryDTO;
@@ -15,13 +16,13 @@ import java.util.List;
 /**
  * 创作配置 服务层实现
  *
- * @author xdn
+ * @author guanghe
  */
 @Service
 public class GhCreationConfigServiceImpl extends ServiceImpl<GhCreationConfigMapper, GhCreationConfig> implements IGhCreationConfigService {
 
     @Override
-    public List<GhCreationConfig> listConfig(CreationConfigQueryDTO query) {
+    public Page<GhCreationConfig> listConfig(CreationConfigQueryDTO query) {
         LambdaQueryWrapper<GhCreationConfig> wrapper = new LambdaQueryWrapper<>();
         if (query != null) {
             wrapper.eq(StringUtils.isNotEmpty(query.getConfigGroup()), GhCreationConfig::getConfigGroup, query.getConfigGroup());
@@ -29,7 +30,9 @@ public class GhCreationConfigServiceImpl extends ServiceImpl<GhCreationConfigMap
             wrapper.eq(StringUtils.isNotEmpty(query.getStatus()), GhCreationConfig::getStatus, query.getStatus());
         }
         wrapper.orderByAsc(GhCreationConfig::getConfigGroup).orderByAsc(GhCreationConfig::getSort);
-        return list(wrapper);
+        int pageNum = query != null && query.getPageNum() != null ? query.getPageNum() : 1;
+        int pageSize = query != null && query.getPageSize() != null ? query.getPageSize() : 20;
+        return page(new Page<>(pageNum, pageSize), wrapper);
     }
 
     @Override

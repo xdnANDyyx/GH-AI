@@ -1,6 +1,7 @@
 package com.ruoyi.business.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ruoyi.business.domain.GhTag;
 import com.ruoyi.business.dto.TagQueryDTO;
 
@@ -14,12 +15,12 @@ import java.util.List;
 public interface IGhTagService extends IService<GhTag> {
 
     /**
-     * 查询标签列表
+     * 查询标签列表（分页）
      *
      * @param query 查询条件
-     * @return 标签列表
+     * @return 分页标签列表
      */
-    List<GhTag> listTag(TagQueryDTO query);
+    Page<GhTag> listTag(TagQueryDTO query);
 
     /**
      * 根据标签类型查询标签列表

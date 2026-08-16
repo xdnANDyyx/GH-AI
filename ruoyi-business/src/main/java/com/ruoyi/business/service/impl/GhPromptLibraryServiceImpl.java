@@ -1,6 +1,7 @@
 package com.ruoyi.business.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ruoyi.business.domain.GhPromptLibrary;
 import com.ruoyi.business.dto.PromptLibraryQueryDTO;
@@ -21,7 +22,7 @@ import java.util.List;
 public class GhPromptLibraryServiceImpl extends ServiceImpl<GhPromptLibraryMapper, GhPromptLibrary> implements IGhPromptLibraryService {
 
     @Override
-    public List<GhPromptLibrary> listLibrary(PromptLibraryQueryDTO query) {
+    public Page<GhPromptLibrary> listLibrary(PromptLibraryQueryDTO query) {
         LambdaQueryWrapper<GhPromptLibrary> wrapper = new LambdaQueryWrapper<>();
         if (query != null) {
             wrapper.eq(StringUtils.isNotEmpty(query.getCategory()), GhPromptLibrary::getCategory, query.getCategory());
@@ -35,7 +36,9 @@ public class GhPromptLibraryServiceImpl extends ServiceImpl<GhPromptLibraryMappe
             }
         }
         wrapper.orderByAsc(GhPromptLibrary::getSort);
-        return list(wrapper);
+        int pageNum = query != null && query.getPageNum() != null ? query.getPageNum() : 1;
+        int pageSize = query != null && query.getPageSize() != null ? query.getPageSize() : 20;
+        return page(new Page<>(pageNum, pageSize), wrapper);
     }
 
     @Override

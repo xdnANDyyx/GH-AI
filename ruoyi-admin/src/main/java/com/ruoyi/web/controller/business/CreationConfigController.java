@@ -1,10 +1,12 @@
 package com.ruoyi.web.controller.business;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ruoyi.business.domain.GhCreationConfig;
 import com.ruoyi.business.dto.CreationConfigQueryDTO;
 import com.ruoyi.business.dto.CreationConfigSaveDTO;
 import com.ruoyi.business.service.IGhCreationConfigService;
 import com.ruoyi.common.annotation.Log;
+import com.ruoyi.common.constant.HttpStatus;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.core.page.TableDataInfo;
@@ -47,9 +49,13 @@ public class CreationConfigController extends BaseController {
     @PreAuthorize("@ss.hasPermi('gh:config:list') or @ss.hasRole('admin')")
     @GetMapping("/list")
     public TableDataInfo<GhCreationConfig> list(CreationConfigQueryDTO query) {
-        startPage();
-        List<GhCreationConfig> list = creationConfigService.listConfig(query);
-        return getDataTable(list);
+        Page<GhCreationConfig> page = creationConfigService.listConfig(query);
+        TableDataInfo<GhCreationConfig> rspData = new TableDataInfo<>();
+        rspData.setCode(HttpStatus.SUCCESS);
+        rspData.setMsg("查询成功");
+        rspData.setRows(page.getRecords());
+        rspData.setTotal(page.getTotal());
+        return rspData;
     }
 
     /**

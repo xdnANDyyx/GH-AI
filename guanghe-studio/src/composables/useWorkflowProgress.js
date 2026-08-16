@@ -3,14 +3,11 @@ import { ref } from 'vue'
 const STORAGE_KEY = 'gh_workflow_progress'
 
 export const WORKFLOW_STEPS = [
-  { key: 'white_bg', label: '白底图' },
+  { key: 'white_bg',   label: '白底图' },
   { key: 'background', label: '生成背景' },
-  { key: 'retouch', label: '产品精修' },
-  { key: 'ai_model', label: 'AI模特' },
-  { key: 'main_image', label: '主图/A+' },
-  { key: 'detail_img', label: '详情图' },
-  { key: 'size_mark', label: '尺寸标记' },
-  { key: 'banner', label: 'Banner' }
+  { key: 'main_image', label: '主/副图' },
+  { key: 'detail_img', label: '详情/A+' },
+  { key: 'banner',     label: 'Banner设计' }
 ]
 
 const STEP_KEY_TO_INDEX = {}

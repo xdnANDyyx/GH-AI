@@ -18,4 +18,10 @@ public class TagQueryDTO {
 
     /** 状态（0正常 1停用） */
     private String status;
+
+    /** 页码 */
+    private Integer pageNum;
+
+    /** 每页数量 */
+    private Integer pageSize;
 }

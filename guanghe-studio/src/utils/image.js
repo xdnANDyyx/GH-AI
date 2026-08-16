@@ -58,3 +58,18 @@ export function normalizeImageUrl(url) {
   cleanPath = cleanPath.replace(/^\/+/, '')
   return '/profile/' + cleanPath
 }
+
+/**
+ * 将图片 URL 转换为 File 对象
+ * 用于跨页面图片接力（右键“放入白底生成背景 / 产品精修”）时重建可上传文件
+ * @param {string} url - 图片 URL（支持 http/https/data:/同源相对路径）
+ * @param {string} filename - 文件名（不含扩展名时按 blob 类型补全）
+ * @returns {Promise<File>}
+ */
+export async function urlToFile(url, filename = 'image.png') {
+  const res = await fetch(url)
+  const blob = await res.blob()
+  const ext = (blob.type?.split('/')[1] || 'png').split(';')[0]
+  const baseName = filename.replace(/\.[^.]+$/, '')
+  return new File([blob], `${baseName}.${ext}`, { type: blob.type || 'image/png' })
+}

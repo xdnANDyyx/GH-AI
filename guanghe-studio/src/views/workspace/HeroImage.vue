@@ -3,7 +3,7 @@
     <!-- Steps bar -->
     <div class="steps-bar">
       <template v-for="(s, i) in workflowSteps" :key="i">
-        <div class="step-item" :class="getStepClass(i + 1, 5)"><div class="step-num">{{ i + 1 }}</div> {{ s.label }}</div>
+        <div class="step-item" :class="getStepClass(i + 1, 3)"><div class="step-num">{{ i + 1 }}</div> {{ s.label }}</div>
         <div v-if="i < workflowSteps.length - 1" class="step-line" :class="{ done: isStepLineDone(i + 1) }"></div>
       </template>
     </div>

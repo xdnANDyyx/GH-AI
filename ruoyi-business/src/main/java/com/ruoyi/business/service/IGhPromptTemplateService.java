@@ -1,6 +1,7 @@
 package com.ruoyi.business.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ruoyi.business.domain.GhPromptTemplate;
 import com.ruoyi.business.dto.PromptTemplateQueryDTO;
 
@@ -14,12 +15,12 @@ import java.util.List;
 public interface IGhPromptTemplateService extends IService<GhPromptTemplate> {
 
     /**
-     * 查询提示词模板列表
+     * 查询提示词模板列表（分页）
      *
      * @param query 查询条件
-     * @return 模板列表
+     * @return 分页模板列表
      */
-    List<GhPromptTemplate> listTemplate(PromptTemplateQueryDTO query);
+    Page<GhPromptTemplate> listTemplate(PromptTemplateQueryDTO query);
 
     /**
      * 查询模板详情

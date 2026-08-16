@@ -2,21 +2,12 @@
   <!----><div class="workspace-page">
 
 
-    <!-- Step progress bar (8 steps) -->
-    <div class="step-bar">
-      <div
-        v-for="(s, idx) in workflowSteps"
-        :key="idx"
-        class="step-item"
-        :class="getStepClass(idx + 1, 4)"
-      >
-        <div class="step-dot">
-          <el-icon v-if="isStepDone(s.key)" :size="12"><Check /></el-icon>
-          <span v-else>{{ idx + 1 }}</span>
-        </div>
-        <span class="step-label">{{ s.label }}</span>
-        <div class="step-line" v-if="idx < workflowSteps.length - 1"></div>
-      </div>
+    <!-- Step progress bar -->
+    <div class="steps-bar">
+      <template v-for="(s, i) in workflowSteps" :key="i">
+        <div class="step-item" :class="getStepClass(i + 1, 4)"><div class="step-num">{{ i + 1 }}</div> {{ s.label }}</div>
+        <div v-if="i < workflowSteps.length - 1" class="step-line" :class="{ done: isStepLineDone(i + 1) }"></div>
+      </template>
     </div>
 
     <!-- Three-column layout -->
@@ -471,7 +462,7 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'v
 import {
   UploadFilled, Star, Download, MagicStick, Right, Delete,
   RefreshLeft, RefreshRight, ArrowDown, ArrowLeft, ArrowRight,
-  ChatDotRound, Monitor, User, Check,
+  ChatDotRound, Monitor, User,
   PictureFilled, House, Sunny, OfficeBuilding
 } from '@element-plus/icons-vue'
 // import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
@@ -504,7 +495,7 @@ const aiInput = ref('')
 const aiMessages = ref([])
 
 const gen = useImageGeneration('render')
-const { steps: workflowSteps, getStepClass, isStepDone } = useWorkflowProgress()
+const { steps: workflowSteps, getStepClass, isStepLineDone } = useWorkflowProgress()
 
 const gender = ref('女')
 const age = ref('青年')
@@ -826,24 +817,28 @@ function scrollChat() {
   &:hover { opacity: 0.9; }
 }
 
-// ========== Step Bar ==========
-.step-bar {
+// ========== Steps Bar ==========
+.steps-bar {
   display: flex;
   align-items: center;
-  padding: 12px 20px;
+  padding: 12px 24px;
   background: #fff;
   border-bottom: 1px solid #E8EDF5;
   flex-shrink: 0;
   overflow-x: auto;
+  gap: 0;
 }
 
 .step-item {
   display: flex;
   align-items: center;
-  flex: 1;
-  min-width: 0;
+  gap: 6px;
+  font-size: 12px;
+  color: #6B7280;
+  white-space: nowrap;
+  cursor: pointer;
 
-  .step-dot {
+  .step-num {
     width: 22px;
     height: 22px;
     border-radius: 50%;
@@ -852,56 +847,44 @@ function scrollChat() {
     justify-content: center;
     font-size: 11px;
     font-weight: 600;
-    background: #F3F4F6;
-    color: #9CA3AF;
+    border: 2px solid #E8EDF5;
     flex-shrink: 0;
     transition: all 0.3s;
-  }
-
-  .step-label {
-    font-size: 12px;
-    font-weight: 400;
-    color: #9CA3AF;
-    margin-left: 4px;
-    white-space: nowrap;
-    transition: color 0.3s;
   }
 
   .step-line {
     flex: 1;
     height: 2px;
-    background: #F3F4F6;
+    background: #E8EDF5;
+    min-width: 12px;
     margin: 0 6px;
-    min-width: 8px;
-    flex-shrink: 0;
     transition: background 0.3s;
   }
 
   &.active {
-    .step-dot {
+    color: var(--gh-primary, #2563FF);
+    font-weight: 600;
+    .step-num {
       background: var(--gh-primary, #2563FF);
       color: #fff;
-      box-shadow: 0 0 0 4px rgba(37, 99, 255, 0.15);
-    }
-    .step-label {
-      color: var(--gh-primary, #2563FF);
-      font-weight: 500;
+      border-color: var(--gh-primary, #2563FF);
     }
   }
 
   &.done {
-    .step-dot {
+    color: #22C55E;
+    .step-num {
       background: #22C55E;
       color: #fff;
-    }
-    .step-label {
-      color: #6B6B6B;
+      border-color: #22C55E;
     }
     .step-line {
       background: #22C55E;
     }
   }
 }
+
+.step-line.done { background: #22C55E; }
 
 // ---- Three Column ----
 .three-col {
@@ -1704,7 +1687,7 @@ function scrollChat() {
 // ============================================================
 @media (max-width: 1024px) {
   .promo-banner { padding: 10px 16px; }
-  .step-bar { padding: 10px 16px; }
+  .steps-bar { padding: 10px 16px; gap: 4px; }
   .step-item { font-size: 11px; }
   .step-line { min-width: 8px; margin: 0 4px; }
   .three-col { flex-wrap: wrap; }
@@ -1717,7 +1700,7 @@ function scrollChat() {
 
 @media (max-width: 768px) {
   .promo-banner { display: none; }
-  .step-bar { display: none; }
+  .steps-bar { display: none; }
   .three-col { flex-direction: column; }
   .canvas-col { flex: 0 0 45vh !important; max-height: 45vh; }
   .config-col { flex: 0 0 auto !important; max-height: 200px; overflow-y: auto; }

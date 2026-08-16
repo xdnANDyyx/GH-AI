@@ -1,6 +1,7 @@
 package com.ruoyi.business.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ruoyi.business.domain.GhTag;
 import com.ruoyi.business.dto.TagQueryDTO;
@@ -21,7 +22,7 @@ import java.util.List;
 public class GhTagServiceImpl extends ServiceImpl<GhTagMapper, GhTag> implements IGhTagService {
 
     @Override
-    public List<GhTag> listTag(TagQueryDTO query) {
+    public Page<GhTag> listTag(TagQueryDTO query) {
         LambdaQueryWrapper<GhTag> wrapper = new LambdaQueryWrapper<>();
         if (query != null) {
             wrapper.like(StringUtils.isNotEmpty(query.getTagName()), GhTag::getTagName, query.getTagName());
@@ -29,7 +30,9 @@ public class GhTagServiceImpl extends ServiceImpl<GhTagMapper, GhTag> implements
             wrapper.eq(StringUtils.isNotEmpty(query.getStatus()), GhTag::getStatus, query.getStatus());
         }
         wrapper.orderByAsc(GhTag::getSort);
-        return list(wrapper);
+        int pageNum = query != null && query.getPageNum() != null ? query.getPageNum() : 1;
+        int pageSize = query != null && query.getPageSize() != null ? query.getPageSize() : 20;
+        return page(new Page<>(pageNum, pageSize), wrapper);
     }
 
     @Override

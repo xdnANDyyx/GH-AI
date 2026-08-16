@@ -1,63 +1,38 @@
 <template>
   <div class="workspace-page">
-    <!-- Step Bar -->
-    <div class="steps-bar">
-      <template v-for="(s, i) in workflowSteps" :key="i">
-        <div
-          class="step-item"
-          :class="getStepClass(i + 1, 2)"
-        >
-          <div class="step-num">{{ i + 1 }}</div>
-          <span class="step-label">{{ s.label }}</span>
-        </div>
-        <div v-if="i < workflowSteps.length - 1" class="step-line" :class="{ done: isStepLineDone(i + 1) }"></div>
-      </template>
-    </div>
-
     <!-- Three-column layout -->
     <div class="three-col">
       <!-- Canvas column -->
       <div class="canvas-col" :style="{ flex: canvasFlex }">
-        <div class="canvas-box"
-          @drop="handleDrop"
-        >
+        <!-- Steps bar（AI 流程图，显示在画布顶部，不超出 AI 配置区域） -->
+        <div class="steps-bar">
+          <template v-for="(s, i) in workflowSteps" :key="i">
+            <div
+              class="step-item"
+              :class="getStepClass(i + 1, 2)"
+            >
+              <div class="step-num">{{ i + 1 }}</div>
+              <span class="step-label">{{ s.label }}</span>
+            </div>
+            <div v-if="i < workflowSteps.length - 1" class="step-line" :class="{ done: isStepLineDone(i + 1) }"></div>
+          </template>
+        </div>
+
+        <div class="canvas-box">
           <!-- <CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" /> -->
-          <div v-if="productImages.length === 0" class="canvas-placeholder" @click="triggerUpload">
+          <div v-if="productImages.length === 0 && resultImages.length === 0" class="canvas-placeholder">
             <svg viewBox="0 0 48 48" fill="none">
               <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
               <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
               <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <h3>拖拽图片到画布，或从右侧上传</h3>
-            <p>支持 JPG / PNG / WebP 格式，最多 10 张</p>
+            <h3>AI 背景图生成后将显示在此处</h3>
+            <p>请在右侧配置生成参数并点击发送</p>
           </div>
-          <!-- 有结果图时：2×2 网格展示 -->
+          <!-- 有结果图时：2×2 网格展示（移除下载按钮） -->
           <div v-else-if="resultImages.length > 0" class="result-grid" :class="{ generating: isGenerating }">
             <div v-for="(img, idx) in resultImages" :key="'r'+idx" class="result-card">
               <img :src="img.url || img" class="result-img" />
-              <div class="result-actions">
-                <button
-                  class="result-action-btn favorite-btn"
-                  :class="{ active: favoritedResults[idx] }"
-                  @click.stop="toggleFavorite(idx, img)"
-                  :title="favoritedResults[idx] ? '取消收藏' : '收藏'"
-                >
-                  <svg viewBox="0 0 24 24" :fill="favoritedResults[idx] ? '#FF4D4F' : 'none'" stroke="currentColor" stroke-width="2">
-                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-                  </svg>
-                </button>
-                <button
-                  class="result-action-btn download-btn"
-                  @click.stop="downloadResult(img, idx)"
-                  title="下载"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="7 10 12 15 17 10"/>
-                    <line x1="12" y1="15" x2="12" y2="3"/>
-                  </svg>
-                </button>
-              </div>
             </div>
             <div v-if="isGenerating" class="generating-overlay">
               <div class="progress-ring">{{ genProgress }}%</div>
@@ -194,7 +169,7 @@
                       :key="p.value"
                       class="option-tag"
                       :class="{ active: selectedPlatform === p.value }"
-                      @click="selectedPlatform = p.value"
+                      @click="selectedPlatform = (selectedPlatform === p.value ? '' : p.value)"
                     >
                       {{ p.label }}
                     </div>
@@ -218,7 +193,7 @@
                       :key="sc.value"
                       class="option-tag"
                       :class="{ active: selectedScene === sc.value }"
-                      @click="selectedScene = sc.value"
+                      @click="selectedScene = (selectedScene === sc.value ? '' : sc.value)"
                     >
                       {{ sc.label }}
                     </div>
@@ -242,7 +217,7 @@
                       :key="l.value"
                       class="option-tag"
                       :class="{ active: selectedLight === l.value }"
-                      @click="selectedLight = l.value"
+                      @click="selectedLight = (selectedLight === l.value ? '' : l.value)"
                     >
                       {{ l.label }}
                     </div>
@@ -266,7 +241,7 @@
                       :key="st.value"
                       class="option-tag"
                       :class="{ active: selectedStyle === st.value }"
-                      @click="selectedStyle = st.value"
+                      @click="selectedStyle = (selectedStyle === st.value ? '' : st.value)"
                     >
                       {{ st.label }}
                     </div>
@@ -292,6 +267,18 @@
                       :value="s.value"
                     />
                   </el-select>
+                  <!-- 自定义尺寸 -->
+                  <div v-if="outputSize === 'custom'" class="custom-size-row">
+                    <div class="custom-size-input">
+                      <span>宽</span>
+                      <el-input-number v-model="customWidth" :min="64" :max="4096" :step="100" size="small" controls-position="right" />
+                    </div>
+                    <span class="custom-size-x">×</span>
+                    <div class="custom-size-input">
+                      <span>高</span>
+                      <el-input-number v-model="customHeight" :min="64" :max="4096" :step="100" size="small" controls-position="right" />
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -358,14 +345,29 @@
             ></textarea>
           </div>
           <div class="chat-footer">
-            <div>
+            <div class="chat-footer-left">
               <span class="char-count">{{ aiInput.length }}/2000</span>
-              <br>
-              <span class="chat-cost">本次生成预计消耗：2 积分</span>
+              <!-- <span class="chat-cost">本次生成预计消耗：2 积分</span> -->
             </div>
-            <button class="chat-send" @click="sendAiMessage" :disabled="!aiInput.trim() || isGenerating">
-              <el-icon><Promotion /></el-icon>
-            </button>
+            <div class="chat-footer-right">
+              <el-select
+                v-model="selectedModel"
+                size="small"
+                class="model-select"
+                :disabled="isGenerating"
+              >
+                <el-option
+                  v-for="m in modelOptions"
+                  :key="m.value"
+                  :label="m.label"
+                  :value="m.value"
+                />
+              </el-select>
+              <button class="chat-send" @click="sendAiMessage" :disabled="!aiInput.trim() || isGenerating">
+                <el-icon><Promotion /></el-icon>
+                {{ isGenerating ? '生成中...' : '发送' }}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -424,23 +426,73 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 右键接力菜单：将背景结果放入「产品精修」 -->
+    <div
+      v-if="handoffMenu.show"
+      class="context-menu"
+      :style="{ left: handoffMenu.x + 'px', top: handoffMenu.y + 'px' }"
+      @click.stop
+    >
+      <div class="context-menu-item" @click="sendToRetouch">
+        <el-icon><MagicStick /></el-icon>放入「产品精修」
+      </div>
+      <div class="context-menu-item context-menu-cancel" @click="hideHandoffMenu">取消</div>
+    </div>
   </div>
 </template>
 
 <script setup>
 defineOptions({ name: 'BackgroundView' })
-import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onActivated, onBeforeUnmount, nextTick, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { useWorkflowProgress } from '@/composables/useWorkflowProgress'
+import { useImageHandoffStore } from '@/store'
 // import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
 // import CanvasOverlay from '@/components/CanvasOverlay.vue'
 import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
 import { favoriteMaterial, cancelFavoriteMaterial, getPublicCreationConfigByGroup, listPromptLibraryBatch, reversePrompt } from '@/api/customer'
+import { urlToFile } from '@/utils/image'
 import { ArrowLeft, ArrowRight, ArrowDown, UploadFilled, Promotion, MagicStick, DocumentCopy } from '@element-plus/icons-vue'
 
+const router = useRouter()
 const gen = useImageGeneration('render')
 const { steps: workflowSteps, getStepClass, isStepLineDone } = useWorkflowProgress()
+const handoffStore = useImageHandoffStore()
+
+// ===== 图片接力右键菜单：将背景结果放入「产品精修」 =====
+const handoffMenu = reactive({
+  show: false,
+  x: 0,
+  y: 0,
+  imageUrl: ''
+})
+
+function openHandoffMenu(e, img) {
+  const url = typeof img === 'string' ? img : (img?.url || img)
+  if (!url) return
+  e.preventDefault()
+  e.stopPropagation()
+  handoffMenu.imageUrl = url
+  const menuW = 200
+  handoffMenu.x = e.clientX + menuW > window.innerWidth ? e.clientX - menuW : e.clientX
+  handoffMenu.y = e.clientY
+  handoffMenu.show = true
+}
+
+function hideHandoffMenu() {
+  handoffMenu.show = false
+  handoffMenu.imageUrl = ''
+}
+
+function sendToRetouch() {
+  if (!handoffMenu.imageUrl) return
+  handoffStore.setImage(handoffMenu.imageUrl, { from: 'background', to: 'retouch' })
+  hideHandoffMenu()
+  router.push('/refine')
+}
 
 // const { canvasUI, handleCanvasExport } = useCanvasInteractions({
 //   canvasSelector: '.canvas-box',
@@ -452,13 +504,13 @@ const fileInput = ref(null)
 const refFileInput = ref(null)
 
 // ===== 反推提示词 =====
+const REVERSE_DEFAULT_PROMPT = '请对原图进行逆向视觉解构，推测其生成逻辑与核心构成元素。请以结构化、专业的中文提示词格式输出，需涵盖：结构布局与质感；关键细节；技术参数与视角。 输出结果应具有高度可复用性，能直接用于引导图像生成。'
 const reverseDialogVisible = ref(false)
 const reverseImageFile = ref(null)
 const reverseImagePreview = ref('')
-const reversePromptInput = ref('')
+const reversePromptInput = ref(REVERSE_DEFAULT_PROMPT)
 const reverseResult = ref('')
 const reverseLoading = ref(false)
-const REVERSE_DEFAULT_PROMPT = '请详细描述这张图片的画面，包括主体、材质、光影、背景、构图、视角和风格，输出一段可直接用于 AI 生图的提示词。'
 const productImages = ref([])
 const referenceImages = ref([])
 const currentStep = ref(2)
@@ -490,11 +542,22 @@ const referenceFiles = ref([])
 const aiInput = ref('')
 const aiMessages = ref([])
 
-const selectedPlatform = ref('opt_platform.change_bg.taobao')
-const selectedScene = ref('opt_scene.change_bg.home')
-const selectedLight = ref('opt_light.change_bg.natural')
-const selectedStyle = ref('opt_style.change_bg.minimal')
-const outputSize = ref('800:800')
+// ===== 模型选择（占位，后续对接真实模型） =====
+const selectedModel = ref('deepseek')
+const modelOptions = [
+  { label: 'DeepSeek', value: 'deepseek' },
+  { label: '通义千问 Qwen', value: 'qwen-plus' },
+  { label: '智谱 GLM-4', value: 'glm-4' },
+  { label: '豆包 Doubao', value: 'doubao' }
+]
+
+const selectedPlatform = ref('')
+const selectedScene = ref('')
+const selectedLight = ref('')
+const selectedStyle = ref('')
+const outputSize = ref('')
+const customWidth = ref(1000)
+const customHeight = ref(1000)
 // 单次生图数量上限（从 bg_generation/max_count 配置读取，缺省 4）
 const genMaxCount = ref(4)
 
@@ -563,11 +626,20 @@ const styleOptions = ref([
 ])
 
 const sizeOptions = ref([
+  { label: '不指定尺寸', value: '' },
   { label: '1:1（800×800）', value: '800:800' },
   { label: '3:4（800×1067）', value: '800:1067' },
   { label: '4:3（1067×800）', value: '1067:800' },
   { label: '自定义', value: 'custom' }
 ])
+
+// 实际输出尺寸
+const effectiveOutputSize = computed(() => {
+  if (outputSize.value === 'custom') {
+    return `${customWidth.value}x${customHeight.value}`
+  }
+  return outputSize.value
+})
 
 const resultImages = computed(() => gen.resultImages.value)
 const isGenerating = computed(() => gen.generating.value)
@@ -664,14 +736,15 @@ async function sendAiMessage() {
   const parts = [text, tagPrompts, boostText ? `约束：${boostText}` : ''].filter(Boolean)
   const prompt = parts.join('；')
 
-  const extraParams = {
-    platform: selectedPlatform.value,
-    scene: selectedScene.value,
-    light: selectedLight.value,
-    style: selectedStyle.value,
-    outputSize: outputSize.value,
-    n: genMaxCount.value
-  }
+  const extraParams = { n: genMaxCount.value }
+  // 创作配置均为可选项：未选择的不发对应参数给 AI
+  if (selectedPlatform.value) extraParams.platform = selectedPlatform.value
+  if (selectedScene.value) extraParams.scene = selectedScene.value
+  if (selectedLight.value) extraParams.light = selectedLight.value
+  if (selectedStyle.value) extraParams.style = selectedStyle.value
+  if (effectiveOutputSize.value) extraParams.outputSize = effectiveOutputSize.value
+  // 生图模型（占位，后续对接真实模型）
+  if (selectedModel.value) extraParams.model = selectedModel.value
   if (referenceFiles.value.length) {
     extraParams.referenceImages = await gen.uploadImages(referenceFiles.value)
   }
@@ -693,7 +766,11 @@ async function sendAiMessage() {
     if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight
   } catch (e) {
     const lastMsg = aiMessages.value[aiMessages.value.length - 1]
-    lastMsg.reply = '生成失败，请稍后重试。'
+    const isTimeout = e?.code === 'ECONNABORTED'
+      || /timeout|超时|人数过多|繁忙|busy/i.test(e?.message || '')
+    lastMsg.reply = isTimeout
+      ? '当前模型使用人数过多，可选用其他模型生图或稍后再试'
+      : '生成失败，请稍后重试。'
   }
 }
 
@@ -813,6 +890,7 @@ onMounted(() => {
   gen.loadPromptInfo()
   document.addEventListener('mousemove', onMouseMove)
   document.addEventListener('mouseup', onMouseUp)
+  document.addEventListener('click', handleClickOutside)
   nextTick(() => {
     const rightCol = document.querySelector('.right-col')
     if (rightCol) {
@@ -823,7 +901,41 @@ onMounted(() => {
   })
   loadBgConfig()
   loadPromptMap()
+  consumeHandoffImage()
 })
+
+// keep-alive 复用时也消费接力图片（已切走再切回时 onMounted 不再触发）
+onActivated(() => {
+  consumeHandoffImage()
+})
+
+// 点击空白处关闭右键菜单
+function handleClickOutside(e) {
+  if (handoffMenu.show && !e.target.closest('.context-menu')) {
+    hideHandoffMenu()
+  }
+}
+
+// 消费接力图片：来自白底图右键「放入白底生成背景」
+async function consumeHandoffImage() {
+  const pending = handoffStore.consume()
+  if (!pending) return
+  const url = pending.url
+  if (!url) return
+  try {
+    const file = await urlToFile(url, 'white-bg-result')
+    productFiles.value.push(file)
+    const reader = new FileReader()
+    reader.onload = ev => {
+      productImages.value.push(ev.target.result)
+      ElMessage.success('已载入白底图，可直接生成背景')
+    }
+    reader.readAsDataURL(file)
+  } catch (e) {
+    console.warn('载入接力图片失败:', e)
+    ElMessage.error('图片载入失败，请手动上传')
+  }
+}
 
 // 预加载提示词库：platform/scene/light/style 四类，scope=change_bg
 // 一次请求拉回，建 prompt_key → prompt_text 的 Map，供 sendAiMessage 反查
@@ -902,7 +1014,8 @@ async function loadBgConfig() {
     if (sizeCfg && sizeCfg.configValue) {
       const arr = JSON.parse(sizeCfg.configValue)
       if (Array.isArray(arr) && arr.length) {
-        sizeOptions.value = arr.map(s => (typeof s === 'string' ? { label: s, value: s } : s))
+        const loaded = arr.map(s => (typeof s === 'string' ? { label: s, value: s } : s))
+        sizeOptions.value = [{ label: '不指定尺寸', value: '' }, ...loaded]
       }
     }
 
@@ -1010,6 +1123,7 @@ async function copyResult(text) {
 onBeforeUnmount(() => {
   document.removeEventListener('mousemove', onMouseMove)
   document.removeEventListener('mouseup', onMouseUp)
+  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 
@@ -1027,9 +1141,8 @@ onBeforeUnmount(() => {
 .steps-bar {
   display: flex;
   align-items: center;
-  padding: 12px 24px;
-  background: #fff;
-  border-bottom: 1px solid #E8EDF5;
+  padding: 0 0 12px;
+  background: transparent;
   flex-shrink: 0;
   overflow-x: auto;
   gap: 0;
@@ -1694,7 +1807,7 @@ onBeforeUnmount(() => {
 .chat-input-area { display: flex; gap: 6px; flex-shrink: 0; }
 .chat-input {
   flex: 1; padding: 8px 12px; border: 1px solid #E8EDF5; border-radius: 8px;
-  font-size: 12px; outline: none; resize: none; height: 50px; font-family: inherit;
+  font-size: 12px; outline: none; height: 50px; min-height: 350px; max-height: 1000px; resize: vertical; font-family: inherit;
 }
 .chat-input:focus { border-color: #2563FF; }
 
@@ -1705,9 +1818,25 @@ onBeforeUnmount(() => {
   margin-top: 6px;
   flex-shrink: 0;
 }
+.chat-footer-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.chat-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .char-count { font-size: 10px; color: #9CA3AF; }
 .chat-cost { font-size: 10px; color: #22C55E; }
+.model-select {
+  width: 128px;
+}
 .chat-send {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 8px 16px; background: #2563FF; color: #fff;
   border: none; border-radius: 8px; font-size: 12px; cursor: pointer; font-weight: 500;
   white-space: nowrap;
@@ -1717,7 +1846,7 @@ onBeforeUnmount(() => {
 
 // ========== Responsive ==========
 @media (max-width: 1024px) {
-  .steps-bar { padding: 10px 16px; gap: 4px; }
+  .steps-bar { padding: 0 0 8px; gap: 4px; }
   .step-item { font-size: 11px; }
   .step-line { min-width: 8px; margin: 0 4px; }
   .three-col { flex-wrap: wrap; }
@@ -1839,5 +1968,72 @@ onBeforeUnmount(() => {
   white-space: pre-wrap;
   max-height: 180px;
   overflow-y: auto;
+}
+
+/* 右键接力菜单 */
+.context-menu {
+  position: fixed;
+  z-index: 9999;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  padding: 4px;
+  min-width: 160px;
+  border: 1px solid #E8EDF5;
+}
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #374151;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.context-menu-item:hover {
+  background: #F3F4F6;
+  color: #2563FF;
+}
+.context-menu-item .el-icon {
+  font-size: 16px;
+  color: #6B7280;
+}
+.context-menu-item:hover .el-icon {
+  color: #2563FF;
+}
+.context-menu-cancel {
+  color: #9CA3AF;
+}
+.context-menu-cancel:hover {
+  color: #6B7280;
+}
+
+/* ---- 自定义尺寸输入框 ---- */
+.custom-size-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #E8EDF5;
+}
+.custom-size-input {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.custom-size-input span {
+  font-size: 11px;
+  color: #6B7280;
+}
+.custom-size-x {
+  color: #9CA3AF;
+  font-size: 13px;
+  margin-top: 12px;
+}
+.size-select {
+  width: 100%;
 }
 </style>

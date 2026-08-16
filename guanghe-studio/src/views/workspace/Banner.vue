@@ -2,13 +2,10 @@
   <div class="workspace-page">
     <!-- Steps bar -->
     <div class="steps-bar">
-      <div class="step-item active"><div class="step-num">1</div><span>选择模板</span></div>
-      <div class="step-line active"></div>
-      <div class="step-item"><div class="step-num">②</div><span>编辑内容</span></div>
-      <div class="step-line"></div>
-      <div class="step-item"><div class="step-num">③</div><span>样式设置</span></div>
-      <div class="step-line"></div>
-      <div class="step-item"><div class="step-num">④</div><span>生成导出</span></div>
+      <template v-for="(s, i) in workflowSteps" :key="i">
+        <div class="step-item" :class="getStepClass(i + 1, 5)"><div class="step-num">{{ i + 1 }}</div> {{ s.label }}</div>
+        <div v-if="i < workflowSteps.length - 1" class="step-line" :class="{ done: isStepLineDone(i + 1) }"></div>
+      </template>
     </div>
 
     <!-- Three-column -->
@@ -272,6 +269,7 @@
 <script>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useImageGeneration } from '@/composables/useImageGeneration'
+import { useWorkflowProgress } from '@/composables/useWorkflowProgress'
 import { aiDialogue } from '@/api/customer'
 import { ArrowDown, ArrowLeft, ArrowRight, WarningFilled, FullScreen, RefreshLeft, Delete, UploadFilled, Link, Promotion } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -284,6 +282,7 @@ export default {
   components: { ArrowDown, ArrowLeft, ArrowRight, WarningFilled, FullScreen, RefreshLeft, Delete, UploadFilled, Link, Promotion, PromptLibrarySelect },
   setup() {
     const gen = useImageGeneration('render')
+    const { steps: workflowSteps, getStepClass, isStepLineDone } = useWorkflowProgress()
     // const { canvasUI, handleCanvasExport } = useCanvasInteractions({
     //   canvasSelector: '.canvas-dropzone',
     //   defaultName: 'banner',
@@ -474,6 +473,7 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
 
     return {
       gen, fileInput, bgFileInput, logoFileInput, originalImage, originalFile, bgImage, bgFile, logoImage, logoFile, uploadedFiles, productFiles, zoom,
+      workflowSteps, getStepClass, isStepLineDone,
       canvasPreset, canvasWidth, canvasHeight, sizeLinked, sizePresets, selectCanvasPreset, onCanvasPresetChange, onCustomSize,
       sections, allExpanded, toggleAllSections, toggleSection,
       activeBannerType, bannerTypes, selectedPurposes, purposes, togglePurpose,
@@ -500,8 +500,11 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
 .step-item.active { color: #2563FF; font-weight: 600; }
 .step-num { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; border: 2px solid #E8EDF5; flex-shrink: 0; }
 .step-item.active .step-num { background: #2563FF; color: #fff; border-color: #2563FF; }
+.step-item.done { color: #22C55E; }
+.step-item.done .step-num { background: #22C55E; color: #fff; border-color: #22C55E; }
 .step-line { flex: 1; height: 2px; background: #E8EDF5; min-width: 12px; margin: 0 6px; }
 .step-line.active { background: #2563FF; }
+.step-line.done { background: #22C55E; }
 
 .prompt-boost-row { margin-bottom: 10px; }
 .prompt-boost-row .boost-label {

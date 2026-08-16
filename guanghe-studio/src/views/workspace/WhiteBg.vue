@@ -1,88 +1,32 @@
 <template>
   <div class="workspace-page">
 
-    <!-- Steps bar -->
-    <div class="steps-bar">
-      <template v-for="(s, i) in workflowSteps" :key="i">
-        <div class="step-item" :class="getStepClass(i + 1, 1)"><div class="step-num">{{ i + 1 }}</div> {{ s.label }}</div>
-        <div v-if="i < workflowSteps.length - 1" class="step-line" :class="{ done: isStepLineDone(i + 1) }"></div>
-      </template>
-    </div>
-
     <!-- Three-column layout -->
     <div class="three-col">
       <!-- ===== LEFT: Canvas (50%) ===== -->
       <div class="canvas-col" :style="{ flex: canvasFlex }">
-        <div class="canvas-box"
-          @drop.prevent="handleDrop"
-        >
+        <!-- Steps bar（AI 流程图，显示在画布顶部，不超出 AI 配置区域） -->
+        <div class="steps-bar">
+          <template v-for="(s, i) in workflowSteps" :key="i">
+            <div class="step-item" :class="getStepClass(i + 1, 1)"><div class="step-num">{{ i + 1 }}</div> {{ s.label }}</div>
+            <div v-if="i < workflowSteps.length - 1" class="step-line" :class="{ done: isStepLineDone(i + 1) }"></div>
+          </template>
+        </div>
+
+        <div class="canvas-box">
           <!-- 画布浮层：缩放 / 全屏 / 导出 / 右键菜单 -->
           <!--<CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" />-->
 
-          <!-- 未上传 + 未生成：上传区域 -->
-          <div class="upload-zone" v-if="!originalImage" @click="triggerUpload">
-            <div class="canvas-placeholder">
-              <el-icon :size="48" color="#9CA3AF"><Picture /></el-icon>
-              <h3>拖拽图片到画布，或点击选择文件</h3>
-              <p>支持 JPG / PNG / WebP 格式，单文件上限 20MB</p>
-            </div>
+          <!-- 未生成：显示空状态 -->
+          <div class="empty-state" v-if="!hasResult">
+            <el-icon :size="48" color="#9CA3AF"><Picture /></el-icon>
+            <h3>AI 白底图生成后将显示在此处</h3>
+            <p>请在右侧配置生成参数并点击发送</p>
           </div>
 
-          <!-- 已上传原图 + 未生成结果：显示原图 -->
-          <div class="upload-preview" v-else-if="originalImage && !hasResult" :style="{ transform: canvasTransform.value }">
-            <img :src="originalImage" class="preview-img" ref="canvasImage" />
-            <div class="preview-overlay">
-              <button class="preview-del-btn" @click.stop="removeFile">✕</button>
-            </div>
-            <!-- 标点显示层 -->
-            <div class="markers-layer">
-              <div 
-                v-for="marker in markers" 
-                :key="marker.id" 
-                class="marker-point"
-                :style="{ 
-                  left: marker.x + '%', 
-                  top: marker.y + '%' 
-                }"
-                @click.stop="selectMarker(marker)"
-                @contextmenu.stop="handleMarkerRightClick($event, marker)"
-                :class="{ active: selectedMarker?.id === marker.id }"
-              >
-                <div class="marker-dot"></div>
-                <div class="marker-label">{{ marker.label }}</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 已上传 + 已生成：左右对比视图 -->
-          <div class="compare-view" v-else-if="originalImage && hasResult">
-            <div class="compare-container" ref="compareContainer" :style="{ transform: canvasTransform.value }">
-              <!-- 白底图（底层，完整显示） -->
-              <img :src="resultImageUrl" class="compare-img compare-result" alt="白底图" />
-              <!-- 原图（上层，用 clip-path 裁剪） -->
-              <img :src="originalImage" class="compare-img compare-original" alt="原图" :style="{ clipPath: `inset(0 ${100 - comparePosition}% 0 0)` }" />
-              <!-- 分割线 -->
-              <div class="compare-divider" :style="{ left: comparePosition + '%' }">
-                <div class="compare-handle">
-                  <span class="compare-arrow">‹</span><span class="compare-arrow">›</span>
-                </div>
-              </div>
-              <!-- 标签 -->
-              <div class="compare-label label-original">原图</div>
-              <div class="compare-label label-result">白底图</div>
-            </div>
-            <div class="compare-bar">
-              <span>拖动分割线对比效果</span>
-            </div>
-          </div>
-
-          <!-- 上传进度条 -->
-          <div class="upload-progress-layer" v-if="uploadProgress > 0 && uploadProgress < 100">
-            <div class="upload-progress-box">
-              <el-icon :size="24" color="#2563FF"><UploadFilled /></el-icon>
-              <p class="upload-progress-text">正在上传图片... {{ uploadProgress }}%</p>
-              <el-progress :percentage="uploadProgress" :stroke-width="8" :show-text="false" />
-            </div>
+          <!-- 已生成：显示结果图 -->
+          <div class="result-view" v-else>
+            <img :src="resultImageUrl" class="result-img" alt="白底图" @contextmenu.prevent="openHandoffMenu($event, resultImageUrl)" />
           </div>
 
         </div>
@@ -91,16 +35,6 @@
           <span>提示：上传优质素材被下载即可获得积分奖励 <a class="canvas-link" href="#">去上传 →</a></span>
           <!-- <span v-if="!hasResult"><span>本次生成预计消耗：<strong>{{ consumePoints }}</strong> 积分</span></span> -->
           <span v-if="hasResult" class="result-status"><span class="result-dot"></span> 生成完成</span>
-        </div>
-
-        <!-- 生成完成后的操作按钮 -->
-        <div class="action-bar" v-if="hasResult && !isGenerating">
-          <el-button type="primary" class="action-btn" @click="downloadResult">
-            <el-icon><Download /></el-icon>下载结果
-          </el-button>
-          <el-button class="action-btn" @click="goNextStep">
-            <el-icon><Right /></el-icon>进入下一步
-          </el-button>
         </div>
       </div>
 
@@ -180,7 +114,7 @@
                       :key="s.value"
                       class="style-card"
                       :class="{ active: selectedStyle === s.value }"
-                      @click="selectedStyle = s.value"
+                      @click="selectedStyle = (selectedStyle === s.value ? '' : s.value)"
                     >
                       <div class="style-preview" :class="s.value">
                         <img :src="getImageUrl(s.image)" class="style-preview-img" alt="" />
@@ -193,8 +127,9 @@
               </div>
 
               <!-- Section: Size -->
+              <!-- 输出尺寸 -->
               <div class="config-section collapsible">
-                <div class="section-header collapsible" @click="toggleSection('size')">
+                <div class="panel-header collapsible" @click="toggleSection('size')">
                   <span class="section-label">输出尺寸</span>
                   <span class="expand-text">
                     {{ sections.size ? '收起' : '展开' }}
@@ -202,8 +137,13 @@
                   </span>
                 </div>
                 <div class="section-body" v-show="sections.size">
-                  <el-select v-model="outputSize" style="width: 100%">
-                    <el-option v-for="s in sizePresets" :key="s.value" :label="s.label" :value="s.value" />
+                  <el-select v-model="outputSize" placeholder="请选择输出尺寸" style="width: 100%">
+                    <el-option
+                      v-for="s in sizeOptions"
+                      :key="s.value"
+                      :label="s.label"
+                      :value="s.value"
+                    />
                   </el-select>
                   <!-- 自定义尺寸 -->
                   <div v-if="outputSize === 'custom'" class="custom-size-row">
@@ -271,7 +211,7 @@
               <div v-if="resultImages.length" class="result-area">
                 <div class="section-label">生成结果</div>
                 <div class="result-grid">
-                  <div v-for="(img, i) in resultImages" :key="i" class="result-item" @click="comparePosition = 50">
+                  <div v-for="(img, i) in resultImages" :key="i" class="result-item">
                     <img :src="img.url || img" />
                   </div>
                 </div>
@@ -321,10 +261,9 @@
           <el-input
             v-model="reversePromptInput"
             type="textarea"
-            :rows="3"
-            maxlength="500"
+            :rows="6"
+            maxlength="1000"
             show-word-limit
-            placeholder="可填写你想要的效果，如：电商主图、自然光、白色背景、高细节。不填则使用默认描述。"
           />
         </div>
 
@@ -347,6 +286,22 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 右键接力菜单：将白底结果放入「白底生成背景 / 产品精修」 -->
+    <div
+      v-if="handoffMenu.show"
+      class="context-menu"
+      :style="{ left: handoffMenu.x + 'px', top: handoffMenu.y + 'px' }"
+      @click.stop
+    >
+      <div class="context-menu-item" @click="sendToBackground">
+        <el-icon><PictureFilled /></el-icon>放入「白底生成背景」
+      </div>
+      <div class="context-menu-item" @click="sendToRetouch">
+        <el-icon><MagicStick /></el-icon>放入「产品精修」
+      </div>
+      <div class="context-menu-item context-menu-cancel" @click="hideHandoffMenu">取消</div>
+    </div>
   </div>
 </template>
 
@@ -362,14 +317,16 @@ import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
 // import CanvasOverlay from '@/components/CanvasOverlay.vue'
 // import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
 import { useUserStore } from '@/store'
+import { useImageHandoffStore } from '@/store'
 import { getPublicCreationConfigByGroup } from '@/api/customer'
 import { reversePrompt } from '@/api/customer'
 import { getImageUrl } from '@/utils/image'
 
-import { Plus, Delete, ArrowLeft, ArrowRight, Download, Right, UploadFilled, Coin, MagicStick, Loading, DocumentCopy } from '@element-plus/icons-vue'
+import { Plus, Delete, ArrowLeft, ArrowRight, Download, Right, UploadFilled, Coin, MagicStick, Loading, DocumentCopy, PictureFilled } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const userStore = useUserStore()
+const handoffStore = useImageHandoffStore()
 const gen = useImageGeneration('white_bg')
 const { steps: workflowSteps, getStepClass, isStepLineDone } = useWorkflowProgress()
 
@@ -377,7 +334,7 @@ const fileInput = ref(null)
 const originalImage = ref('')
 const originalFile = ref(null)
 const selectedStyle = ref('no-shadow')
-const outputSize = ref('2000x2000')
+const outputSize = ref('')
 const customWidth = ref(1000)
 const customHeight = ref(1000)
 const language = ref('zh-CN')
@@ -399,11 +356,11 @@ const aiAssistantRef = ref(null)
 const reverseDialogVisible = ref(false)
 const reverseImageFile = ref(null)
 const reverseImagePreview = ref('')
-const reversePromptInput = ref('')
 const reverseResult = ref('')
 const reverseLoading = ref(false)
 const reverseFileInput = ref(null)
-const REVERSE_DEFAULT_PROMPT = '请详细描述这张图片的画面，包括主体、材质、光影、背景、构图、视角和风格，输出一段可直接用于 AI 生图的提示词。'
+const REVERSE_DEFAULT_PROMPT = `请对原图进行逆向视觉解构，推测其生成逻辑与核心构成元素。请以结构化、专业的中文提示词格式输出，需涵盖：结构布局与质感；关键细节；技术参数与视角。 输出结果应具有高度可复用性，能直接用于引导图像生成。`
+const reversePromptInput = ref(REVERSE_DEFAULT_PROMPT)
 
 // ===== 上传进度 =====
 const uploadProgress = ref(0)
@@ -425,6 +382,44 @@ const contextMenu = reactive({
   clickX: 0, // 保存点击位置的X坐标（百分比）
   clickY: 0  // 保存点击位置的Y坐标（百分比）
 })
+
+// ===== 图片接力右键菜单：将白底结果放入「白底生成背景 / 产品精修」 =====
+const handoffMenu = reactive({
+  show: false,
+  x: 0,
+  y: 0,
+  imageUrl: ''
+})
+
+function openHandoffMenu(e, imageUrl) {
+  if (!imageUrl) return
+  e.preventDefault()
+  handoffMenu.imageUrl = imageUrl
+  // 靠近视口右侧时左移，避免菜单溢出
+  const menuW = 200
+  handoffMenu.x = e.clientX + menuW > window.innerWidth ? e.clientX - menuW : e.clientX
+  handoffMenu.y = e.clientY
+  handoffMenu.show = true
+}
+
+function hideHandoffMenu() {
+  handoffMenu.show = false
+  handoffMenu.imageUrl = ''
+}
+
+function sendToBackground() {
+  if (!handoffMenu.imageUrl) return
+  handoffStore.setImage(handoffMenu.imageUrl, { from: 'white_bg', to: 'background' })
+  hideHandoffMenu()
+  router.push('/whiteToBg')
+}
+
+function sendToRetouch() {
+  if (!handoffMenu.imageUrl) return
+  handoffStore.setImage(handoffMenu.imageUrl, { from: 'white_bg', to: 'retouch' })
+  hideHandoffMenu()
+  router.push('/refine')
+}
 
 // Config panel collapsed state
 const configCollapsed = ref(false)
@@ -478,11 +473,11 @@ const shadowStyles = ref([
   { label: '硬阴影', value: 'hard-shadow', image: '/images/chair-scene-bg.png' }
 ])
 
-const sizePresets = ref([
-  { label: '800 × 800', value: '800x800' },
-  { label: '1000 × 1000', value: '1000x1000' },
-  { label: '1500 × 1500', value: '1500x1500' },
-  { label: '2000 × 2000', value: '2000x2000' },
+const sizeOptions = ref([
+  { label: '不指定尺寸', value: '' },
+  { label: '1:1（800×800）', value: '800:800' },
+  { label: '3:4（800×1067）', value: '800:1067' },
+  { label: '4:3（1067×800）', value: '1067:800' },
   { label: '自定义', value: 'custom' }
 ])
 
@@ -620,11 +615,15 @@ async function handleGenerate() {
       boostCameraDistanceRef.value?.getSelectedItems()[0]?.promptText,
       boostCameraOccupationRef.value?.getSelectedItems()[0]?.promptText
     ].filter(Boolean).join('；')
-    const prompt = `${styleText}。输出图片尺寸为 ${effectiveOutputSize.value}，图片上的文字使用${languageTextMap[language.value] || '中文'}。${boostText ? '约束：' + boostText + '。' : ''}`
+    // 尺寸为可选项：未选择时不发尺寸给 AI
+    const sizeText = effectiveOutputSize.value ? `输出图片尺寸为 ${effectiveOutputSize.value}，` : ''
+    const prompt = `${styleText}。${sizeText}图片上的文字使用${languageTextMap[language.value] || '中文'}。${boostText ? '约束：' + boostText + '。' : ''}`
+    const extraOptions = { shadow_style: selectedStyle.value, language: language.value }
+    if (effectiveOutputSize.value) extraOptions.output_size = effectiveOutputSize.value
     await gen.fullGenerate(
       [originalFile.value],
       prompt,
-      { extraOptions: { output_size: effectiveOutputSize.value, shadow_style: selectedStyle.value, language: language.value }, consumePoints: consumePoints.value, featureName: 'white_bg', title: 'AI白底图生成' }
+      { extraOptions, consumePoints: consumePoints.value, featureName: 'white_bg', title: 'AI白底图生成' }
     )
     // 复位对比位置
     comparePosition.value = 50
@@ -888,6 +887,9 @@ function handleClickOutside(e) {
   if (contextMenu.show && !e.target.closest('.context-menu')) {
     hideContextMenu()
   }
+  if (handoffMenu.show && !e.target.closest('.context-menu')) {
+    hideHandoffMenu()
+  }
 }
 
 // ===== Column resize logic (like Retouch.vue) =====
@@ -989,14 +991,19 @@ async function loadCreationConfig() {
       } catch { /* use defaults */ }
     }
 
-    const sizeCfg = map.get('size_presets') || map.get('config')
-    if (sizeCfg?.configValue) {
-      try {
-        const items = JSON.parse(sizeCfg.configValue)
-        if (Array.isArray(items)) {
-          sizePresets.value = items.filter(s => s.value)
+    // ---- 输出尺寸 ----
+    const sizeCfg = map.size_options
+    if (sizeCfg && sizeCfg.configValue) {
+      const arr = JSON.parse(sizeCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        const loaded = arr.map(s => (typeof s === 'string' ? { label: s, value: s } : s))
+        // Ensure 'custom' option is always present
+        const hasCustom = loaded.some(s => s.value === 'custom')
+        if (!hasCustom) {
+          loaded.push({ label: '自定义', value: 'custom' })
         }
-      } catch { /* use defaults */ }
+        sizeOptions.value = [{ label: '不指定尺寸', value: '' }, ...loaded]
+      }
     }
 
     const langCfg = map.get('languages') || map.get('config')
@@ -1083,9 +1090,8 @@ watch(() => [resultImages.value.length, isGenerating.value], () => {
 .steps-bar {
   display: flex;
   align-items: center;
-  padding: 12px 24px;
-  background: #fff;
-  border-bottom: 1px solid #E8EDF5;
+  padding: 0 0 12px;
+  background: transparent;
   flex-shrink: 0;
   overflow-x: auto;
   gap: 0;
@@ -1294,7 +1300,7 @@ watch(() => [resultImages.value.length, isGenerating.value], () => {
   border-radius: 10px;
   border: 1px solid #E8EDF5;
   user-select: none;
-  cursor: none;
+  cursor: default;
   background: #fff;
   transform-origin: center center;
   transition: transform 0.1s ease;
@@ -1834,7 +1840,7 @@ watch(() => [resultImages.value.length, isGenerating.value], () => {
    Responsive
    ============================================================ */
 @media (max-width: 1024px) {
-  .steps-bar { padding: 10px 16px; gap: 4px; }
+  .steps-bar { padding: 0 0 8px; gap: 4px; }
   .step-item { font-size: 11px; }
   .step-line { min-width: 8px; margin: 0 4px; }
   .three-col { flex-wrap: wrap; }

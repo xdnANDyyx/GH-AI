@@ -30,4 +30,10 @@ public class PromptLibraryQueryDTO {
 
     /** 状态（0启用 1停用） */
     private String status;
+
+    /** 页码 */
+    private Integer pageNum;
+
+    /** 每页数量 */
+    private Integer pageSize;
 }
