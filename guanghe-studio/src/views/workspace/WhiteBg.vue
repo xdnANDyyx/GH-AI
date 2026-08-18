@@ -41,8 +41,8 @@
       <!-- Divider + Toggle: canvas ⇔ right panel -->
       <div class="col-divider-wrapper">
         <div class="col-divider" @mousedown="startColResize($event, 'right')"></div>
-        <div class="config-toggle-btn" @click="configCollapsed = !configCollapsed" :title="configCollapsed ? '展开创作配置' : '折叠创作配置'">
-          <el-icon :size="14"><ArrowLeft v-if="!configCollapsed" /><ArrowRight v-else /></el-icon>
+        <div class="config-toggle-btn" :class="{ active: !configCollapsed }" @click="configCollapsed = !configCollapsed" :title="configCollapsed ? '展开创作配置' : '折叠创作配置'">
+          <el-icon :size="14"><ArrowRight v-if="!configCollapsed" /><ArrowLeft v-else /></el-icon>
         </div>
       </div>
 
@@ -56,7 +56,7 @@
             <div class="config-inner">
               <div class="panel-header" @click="toggleAllSections">
                 <span>AI 配置</span>
-                <span class="panel-toggle-all">{{ allExpanded ? '全部折叠 ▲' : '全部展开 ▼' }}</span>
+                <span class="panel-toggle-all" :class="{ active: allExpanded }">{{ allExpanded ? '全部折叠 ▲' : '全部展开 ▼' }}</span>
               </div>
 
               <!-- 反推提示词入口 -->
@@ -1153,6 +1153,7 @@ watch(() => [resultImages.value.length, isGenerating.value], () => {
   position: relative;
   z-index: 5;
   transition: background 0.2s;
+  
 }
 .col-divider:hover,
 .col-divider:active { background: #2563FF; }
@@ -1173,9 +1174,13 @@ watch(() => [resultImages.value.length, isGenerating.value], () => {
   border: 1px solid #E8EDF5;
   border-radius: 8px 0 0 8px;
   cursor: pointer;
-  color: #6B7280;
+  color: #9CA3AF;
   box-shadow: -2px 0 8px rgba(0,0,0,0.06);
   transition: all 0.2s ease;
+}
+.col-divider-wrapper .config-toggle-btn.active {
+  color: #2563FF;
+  border-color: #2563FF;
 }
 .col-divider-wrapper .config-toggle-btn:hover {
   background: #F0F4FF;
@@ -1192,6 +1197,7 @@ watch(() => [resultImages.value.length, isGenerating.value], () => {
   position: relative;
   z-index: 5;
   transition: background 0.2s;
+  
 }
 .right-panel-divider:hover,
 .right-panel-divider:active { background: #2563FF; }
@@ -1595,12 +1601,15 @@ watch(() => [resultImages.value.length, isGenerating.value], () => {
 
 .panel-toggle-all {
   font-size: 12px;
-  color: var(--gh-primary, #2563FF);
+  color: #9CA3AF;
   font-weight: 400;
   display: flex;
   align-items: center;
   gap: 2px;
-  transition: opacity 0.2s;
+  transition: all 0.2s;
+}
+.panel-toggle-all.active {
+  color: var(--gh-primary, #2563FF);
 }
 .panel-toggle-all:hover { opacity: 0.7; }
 

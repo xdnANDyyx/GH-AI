@@ -87,7 +87,7 @@
       <div class="col-divider-wrapper">
         <div class="col-divider" @mousedown="startColResize($event, 'config')"></div>
         <div class="config-toggle-btn" @click="configCollapsed = !configCollapsed" :title="configCollapsed ? '展开创作配置' : '折叠创作配置'">
-          <el-icon :size="14"><ArrowLeft v-if="!configCollapsed" /><ArrowRight v-else /></el-icon>
+          <el-icon :size="14"><ArrowRight v-if="!configCollapsed" /><ArrowLeft v-else /></el-icon>
         </div>
       </div>
 

@@ -1,5 +1,13 @@
 <template>
   <div class="studio-layout">
+    <el-alert
+      v-if="disabledMsg"
+      :title="disabledMsg"
+      type="warning"
+      :closable="false"
+      show-icon
+      style="position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:9999;max-width:500px"
+    />
     <header class="topbar">
       <div class="topbar-left">
         <button class="hamburger" type="button" @click="mobileSidebarOpen = !mobileSidebarOpen" :aria-label="mobileSidebarOpen ? '关闭菜单' : '打开菜单'">
@@ -134,12 +142,13 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/store'
 import Logo from '@/components/Logo.vue'
 import BannerCarousel from '@/components/BannerCarousel.vue'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
+import { ElMessage } from 'element-plus'
 
 const route = useRoute()
 const router = useRouter()
@@ -191,6 +200,30 @@ const toggleToMenuPath = {
   batch_process: '/batchProcess'
 }
 
+// 禁用提示消息
+const disabledMsg = ref('')
+
+onMounted(() => {
+  loadFeatureToggles()
+  // 读取路由守卫或 watch 传来的禁用提示
+  const msg = sessionStorage.getItem('featureDisabledMsg')
+  if (msg) {
+    sessionStorage.removeItem('featureDisabledMsg')
+    disabledMsg.value = msg
+  }
+})
+
+// 开关数据加载完成后，若当前路由已被禁用则重定向
+watch(featureToggleMap, (newMap) => {
+  if (!newMap || Object.keys(newMap).length === 0) return
+  const currentPath = route.path
+  const menu = allWorkMenus.find(m => m.path === currentPath)
+  if (menu && menu.toggleKey && !_isFeatureEnabled(menu.toggleKey)) {
+    sessionStorage.setItem('featureDisabledMsg', '该功能已被管理员禁用')
+    router.replace('/whiteBg')
+  }
+})
+
 const allWorkMenus = [
   { path: '/whiteBg', title: 'AI 白底图', icon: 'House', toggleKey: 'white_bg' },
   { path: '/whiteToBg', title: '白底生成背景', icon: 'PictureFilled', toggleKey: 'white_to_bg' },
@@ -226,6 +259,12 @@ const materialMenus = [
 
 onMounted(() => {
   loadFeatureToggles()
+  // 显示路由守卫传来的禁用提示
+  const msg = sessionStorage.getItem('featureDisabledMsg')
+  if (msg) {
+    sessionStorage.removeItem('featureDisabledMsg')
+    ElMessage.warning(msg)
+  }
 })
 
 function closeAccountMenu() {

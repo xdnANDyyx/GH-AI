@@ -1,342 +1,327 @@
 <template>
   <div class="workspace-page">
-    <!-- Steps bar -->
-    <div class="steps-bar">
-      <template v-for="(s, i) in workflowSteps" :key="i">
-        <div class="step-item" :class="getStepClass(i + 1, 3)"><div class="step-num">{{ i + 1 }}</div> {{ s.label }}</div>
-        <div v-if="i < workflowSteps.length - 1" class="step-line" :class="{ done: isStepLineDone(i + 1) }"></div>
-      </template>
-    </div>
-
     <!-- Three-column layout -->
     <div class="three-col">
-      <!-- ===== LEFT: Canvas (50%) ===== -->
+      <!-- ===== LEFT: Canvas ===== -->
       <div class="canvas-col" :style="{ flex: canvasFlex }">
-
+        <!-- Steps bar（显示在画布顶部，不超出画布区域） -->
+        <div class="steps-bar">
+          <template v-for="(s, i) in workflowSteps" :key="i">
+            <div class="step-item" :class="getStepClass(i + 1, 3)">
+              <div class="step-num">{{ i + 1 }}</div>
+              <span class="step-label">{{ s.label }}</span>
+            </div>
+            <div v-if="i < workflowSteps.length - 1" class="step-line" :class="{ done: isStepLineDone(i + 1) }"></div>
+          </template>
+        </div>
 
         <!-- Canvas Area -->
-        <div class="canvas-box"
-          @drop.prevent="handleDrop"
-        >
+        <div class="canvas-box">
           <!-- <CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" /> -->
-          <div v-if="!originalImage" class="canvas-placeholder" @click="triggerUpload">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2"/>
-              <circle cx="8.5" cy="8.5" r="1.5"/>
-              <polyline points="21 15 16 10 5 21"/>
+          <div v-if="productFiles.length === 0 && resultImages.length === 0" class="canvas-placeholder">
+            <svg viewBox="0 0 48 48" fill="none">
+              <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
+              <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
+              <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <h3>拖拽图片到画布，或点击右侧上传</h3>
-            <p>支持 JPG / PNG，建议尺寸 ≥ 2000px</p>
+            <h3>AI 主图生成后将显示在此处</h3>
+            <p>请在右侧配置生成参数并点击发送</p>
           </div>
-          <div class="canvas-result" v-else-if="resultImages.length">
-            <img :src="resultImages[activeResult]?.url || resultImages[activeResult]" class="result-img" />
-            <div class="result-nav" v-if="resultImages.length > 1">
-              <button @click.stop="activeResult = Math.max(0, activeResult - 1)" :disabled="activeResult === 0">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-              </button>
-              <span>{{ activeResult + 1 }} / {{ resultImages.length }}</span>
-              <button @click.stop="activeResult = Math.min(resultImages.length - 1, activeResult + 1)" :disabled="activeResult === resultImages.length - 1">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-              </button>
+          <!-- 有结果图时：2×2 网格展示 -->
+          <div v-else-if="resultImages.length > 0" class="result-grid" :class="{ generating: isGenerating }">
+            <div v-for="(img, idx) in resultImages" :key="'r'+idx" class="result-card">
+              <img :src="img.url || img" class="result-img" />
+            </div>
+            <div v-if="isGenerating" class="generating-overlay">
+              <div class="progress-ring">{{ genProgress }}%</div>
+              <p>{{ genStatus }}</p>
             </div>
           </div>
-          <div class="upload-preview" v-else-if="originalImage">
-            <img :src="originalImage" class="preview-img" />
-            <div class="preview-overlay">
-              <button class="preview-del-btn" @click.stop="clearImage">✕</button>
+          <!-- 仅上传商品图，无结果时 -->
+          <div v-else class="canvas-result" :class="{ generating: isGenerating }">
+            <img v-for="(img, idx) in productFiles" :key="idx" :src="getObjectUrl(img)" class="uploaded-img" />
+            <div v-if="isGenerating" class="generating-overlay">
+              <div class="progress-ring">{{ genProgress }}%</div>
+              <p>{{ genStatus }}</p>
             </div>
           </div>
         </div>
 
-        <div class="canvas-bottom-bar">
-          <span>提示：建议上传高质量的产品图片，以获得更好的生成效果。</span>
-        </div>
+        <div class="canvas-bottom-bar">AI生成的内容仅供参考，请注意核对细节与版权信息。</div>
       </div>
 
-      <!-- Divider + Toggle: canvas ⇔ config -->
+      <!-- Divider + Toggle: canvas ⇔ right panel -->
       <div class="col-divider-wrapper">
-        <div class="col-divider" @mousedown="startColResize($event, 'config')"></div>
-        <div class="config-toggle-btn" @click="configCollapsed = !configCollapsed" :title="configCollapsed ? '展开创作配置' : '折叠创作配置'">
-          <el-icon :size="14"><ArrowLeft v-if="!configCollapsed" /><ArrowRight v-else /></el-icon>
+        <div class="col-divider" @mousedown="startColResize($event, 'right')"></div>
+        <div class="config-toggle-btn" :class="{ active: !configCollapsed }" @click="configCollapsed = !configCollapsed" :title="configCollapsed ? '展开创作配置' : '折叠创作配置'">
+          <el-icon :size="14"><ArrowRight v-if="!configCollapsed" /><ArrowLeft v-else /></el-icon>
         </div>
       </div>
 
-      <!-- ===== CENTER: Config Panel ===== -->
-      <div class="config-col" :class="{ collapsed: configCollapsed }" :style="{ flex: configFlex }">
-        <el-scrollbar v-show="!configCollapsed">
-          <div class="config-inner">
-            <!-- 创作配置 标题 (带全部展开/折叠) -->
-            <div class="panel-header" @click="toggleAllSections">
-              <span>创作配置</span>
-              <span class="panel-toggle-all">{{ allExpanded ? '全部折叠 ▲' : '全部展开 ▼' }}</span>
-            </div>
+      <!-- ===== RIGHT: Config Panel + AI ===== -->
+      <div class="right-col" :style="{ flex: rightFlex }">
+        <!-- Right panel divider: config ⇔ AI -->
+        <div class="right-panel-divider" @mousedown="startRightPanelResize($event, 'config')"></div>
 
-            <!-- Section: 上传图片 -->
-            <div class="config-section collapsible">
-              <div class="section-header collapsible" @click="toggleSection('upload')">
-                <span class="section-label">
-                  上传图片
-                  <span style="font-size:11px;color:#EF4444;font-weight:400;">（必选）</span>
-                </span>
-                <span class="expand-text">
-                  {{ sections.upload ? '收起' : '展开' }}
-                  <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.upload }"><ArrowDown /></el-icon>
-                </span>
+        <!-- Config Panel -->
+        <div class="config-col" :class="{ collapsed: configCollapsed }" :style="{ flex: configFlex }">
+          <el-scrollbar v-show="!configCollapsed">
+            <div class="config-inner">
+              <!-- 创作配置 总折叠 -->
+              <div class="panel-header" @click="toggleAllSections">
+                <span class="panel-title">创作配置</span>
+                <span class="panel-toggle-all" :class="{ active: allExpanded }">{{ allExpanded ? '全部折叠 ▲' : '全部展开 ▼' }}</span>
               </div>
-              <div class="section-body" v-show="sections.upload">
-                <div class="panel-upload-zone" @click.stop="triggerUpload" @dragover.prevent @drop.prevent="handleDrop">
-                  <el-icon :size="28" color="#2563FF"><UploadFilled /></el-icon>
-                  <p class="panel-upload-text">上传商品图</p>
-                  <p class="panel-upload-hint">支持 JPG / PNG，最多 10 张</p>
+
+              <!-- 反推提示词入口 -->
+              <div class="reverse-prompt-entry">
+                <el-button type="primary" plain class="reverse-prompt-btn" @click="openReversePromptDialog">
+                  <el-icon><MagicStick /></el-icon>
+                  <span>反推提示词</span>
+                </el-button>
+                <p class="entry-helper">上传参考图，AI 帮你描述想要的画面效果</p>
+              </div>
+
+              <!-- Section: 上传图片 -->
+              <div class="config-section collapsible">
+                <div class="section-header collapsible" @click="toggleSection('upload')">
+                  <span class="section-label">上传图片（最多10张）</span>
+                  <span class="expand-text">
+                    {{ sections.upload ? '收起' : '展开' }}
+                    <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.upload }"><ArrowDown /></el-icon>
+                  </span>
                 </div>
-                <div v-if="uploadedFiles.length" class="uploaded-images-list">
-                  <div v-for="(f, i) in uploadedFiles" :key="i" class="uploaded-thumb-wrap">
-                    <div class="uploaded-thumb">
-                      <img :src="f" v-if="typeof f === 'string'" />
-                      <span v-else class="thumb-placeholder">图片</span>
+                <div class="section-body" v-show="sections.upload">
+                  <div class="panel-upload-zone" @click.stop="triggerUpload" @dragover.prevent @drop.prevent="handleDrop">
+                    <el-icon :size="28" color="#2563FF"><UploadFilled /></el-icon>
+                    <p class="panel-upload-text">点击或拖拽图片到此处上传</p>
+                    <p class="panel-upload-hint">支持 JPG / PNG，最多 10 张</p>
+                  </div>
+                  <div v-if="productFiles.length" class="uploaded-images-list">
+                    <div v-for="(f, i) in productFiles" :key="i" class="uploaded-thumb-wrap">
+                      <div class="uploaded-thumb">
+                        <img :src="getObjectUrl(f)" />
+                      </div>
+                      <div class="uploaded-remove" @click.stop="removeProductFile(i)">✕</div>
                     </div>
-                    <div class="uploaded-remove" @click.stop="removeProductFile(i)">✕</div>
+                    <div
+                      v-if="productFiles.length < 10"
+                      class="uploaded-thumb-wrap add"
+                      @click.stop="triggerUpload"
+                    >
+                      <div class="uploaded-thumb add-thumb">+</div>
+                    </div>
                   </div>
-                  <div
-                    v-if="uploadedFiles.length < 10"
-                    class="uploaded-thumb-wrap add"
-                    @click.stop="triggerUpload"
-                  >
-                    <div class="uploaded-thumb add-thumb">+</div>
+                </div>
+              </div>
+
+              <!-- Section: 参考图（可选） -->
+              <div class="config-section collapsible">
+                <div class="section-header collapsible" @click="toggleSection('ref')">
+                  <span class="section-label">参考图（可选）</span>
+                  <span class="expand-text">
+                    {{ sections.ref ? '收起' : '展开' }}
+                    <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.ref }"><ArrowDown /></el-icon>
+                  </span>
+                </div>
+                <div v-show="sections.ref" class="section-body">
+                  <div class="panel-upload-zone small" @click.stop="triggerRefUpload" @dragover.prevent @drop.prevent="handleRefDrop">
+                    <el-icon :size="24" color="#9CA3AF"><PictureFilled /></el-icon>
+                    <p class="panel-upload-hint">{{ refImage ? '已选择参考图' : '点击上传参考图' }}</p>
+                  </div>
+                  <div v-if="refImage" class="ref-preview-row">
+                    <img :src="refImage" class="ref-thumb" />
+                    <button class="ref-remove" @click.stop="refImage = ''">×</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section: 平台与语言 -->
+              <div class="config-section collapsible">
+                <div class="section-header collapsible" @click="toggleSection('platform')">
+                  <span class="section-label">目标平台</span>
+                  <span class="expand-text">
+                    {{ sections.platform ? '收起' : '展开' }}
+                    <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.platform }"><ArrowDown /></el-icon>
+                  </span>
+                </div>
+                <div v-show="sections.platform" class="section-body">
+                  <span class="config-label">目标平台</span>
+                  <div class="option-tags">
+                    <div
+                      v-for="p in platforms"
+                      :key="p.value"
+                      class="option-tag"
+                      :class="{ active: activePlatform === p.value }"
+                      @click="activePlatform = (activePlatform === p.value ? '' : p.value)"
+                    >{{ p.label }}</div>
+                  </div>
+                  <span class="config-label" style="margin-top:12px;">语言</span>
+                  <select class="form-select full" v-model="language">
+                    <option v-for="l in languages" :key="l.value" :value="l.value">{{ l.label }}</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Section: 画布尺寸 -->
+              <div class="config-section collapsible">
+                <div class="section-header collapsible" @click="toggleSection('size')">
+                  <span class="section-label">画布尺寸</span>
+                  <span class="expand-text">
+                    {{ sections.size ? '收起' : '展开' }}
+                    <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.size }"><ArrowDown /></el-icon>
+                  </span>
+                </div>
+                <div v-show="sections.size" class="section-body">
+                  <el-select v-model="outputSize" placeholder="请选择输出尺寸" class="size-select">
+                    <el-option
+                      v-for="s in sizeOptions"
+                      :key="s.value"
+                      :label="s.label"
+                      :value="s.value"
+                    />
+                  </el-select>
+                  <!-- 自定义尺寸 -->
+                  <div v-if="outputSize === 'custom'" class="custom-size-row">
+                    <div class="custom-size-input">
+                      <span>宽</span>
+                      <el-input-number v-model="customWidth" :min="64" :max="4096" :step="100" size="small" controls-position="right" />
+                    </div>
+                    <span class="custom-size-x">×</span>
+                    <div class="custom-size-input">
+                      <span>高</span>
+                      <el-input-number v-model="customHeight" :min="64" :max="4096" :step="100" size="small" controls-position="right" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section: 主图用途 -->
+              <div class="config-section collapsible">
+                <div class="section-header collapsible" @click="toggleSection('purpose')">
+                  <span class="section-label">主图用途</span>
+                  <span class="expand-text">
+                    {{ sections.purpose ? '收起' : '展开' }}
+                    <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.purpose }"><ArrowDown /></el-icon>
+                  </span>
+                </div>
+                <div v-show="sections.purpose" class="section-body">
+                  <div class="option-tags">
+                    <div
+                      v-for="p in purposes"
+                      :key="p.value"
+                      class="option-tag"
+                      :class="{ active: activePurpose === p.value }"
+                      @click="activePurpose = (activePurpose === p.value ? '' : p.value)"
+                    >{{ p.label }}</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section: 核心卖点 -->
+              <div class="config-section collapsible">
+                <div class="section-header collapsible" @click="toggleSection('sellingPoints')">
+                  <span class="section-label">核心卖点</span>
+                  <span class="expand-text">
+                    {{ sections.sellingPoints ? '收起' : '展开' }}
+                    <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.sellingPoints }"><ArrowDown /></el-icon>
+                  </span>
+                </div>
+                <div v-show="sections.sellingPoints" class="section-body">
+                  <div class="option-tags">
+                    <div
+                      v-for="sp in sellingPoints"
+                      :key="sp.value"
+                      class="option-tag"
+                      :class="{ active: activeSellingPoints.includes(sp.value) }"
+                      @click="toggleSellingPoint(sp.value)"
+                    >{{ sp.label }}</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section: 生成设置 -->
+              <div class="config-section collapsible">
+                <div class="section-header collapsible" @click="toggleSection('output')">
+                  <span class="section-label">生成数量</span>
+                  <span class="expand-text">
+                    {{ sections.output ? '收起' : '展开' }}
+                    <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.output }"><ArrowDown /></el-icon>
+                  </span>
+                </div>
+                <div v-show="sections.output" class="section-body">
+                  <span class="config-label">生成数量</span>
+                  <div class="option-tags">
+                    <div
+                      v-for="n in generateCountOptions"
+                      :key="n"
+                      class="option-tag"
+                      :class="{ active: generateCount === n }"
+                      @click="generateCount = (generateCount === n ? '' : n)"
+                    >{{ n }}张</div>
                   </div>
                 </div>
               </div>
             </div>
-
-            <!-- Section: 参考图 -->
-            <div class="config-section collapsible">
-              <div class="section-header collapsible" @click="toggleSection('ref')">
-                <span class="section-label">
-                  参考图
-                  <span style="font-size:11px;color:#6B7280;font-weight:400;">（可选）</span>
-                </span>
-                <span class="expand-text">
-                  {{ sections.ref ? '收起' : '展开' }}
-                  <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.ref }"><ArrowDown /></el-icon>
-                </span>
-              </div>
-              <div class="section-body" v-show="sections.ref">
-                <div class="panel-upload-zone small" @click.stop="triggerRefUpload" @dragover.prevent @drop.prevent="handleRefDrop">
-                  <el-icon :size="24" color="#9CA3AF"><PictureFilled /></el-icon>
-                  <p class="panel-upload-hint">{{ refImage ? '已选择参考图' : '点击上传参考图' }}</p>
-                </div>
-                <div v-if="refImage" class="ref-preview-row">
-                  <img :src="refImage" class="ref-thumb" />
-                  <button class="ref-remove" @click.stop="refImage = ''">×</button>
-                </div>
-                <p class="upload-note">参考图用于提供风格、构图或场景参考（非必需）</p>
-              </div>
-            </div>
-
-            <!-- Section: 平台与语言 -->
-            <div class="config-section collapsible">
-              <div class="section-header collapsible" @click="toggleSection('platform')">
-                <span class="section-label">平台与语言</span>
-                <span class="expand-text">
-                  {{ sections.platform ? '收起' : '展开' }}
-                  <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.platform }"><ArrowDown /></el-icon>
-                </span>
-              </div>
-              <div class="section-body" v-show="sections.platform">
-                <span class="config-label">目标平台</span>
-                <div class="platform-grid">
-                  <div
-                    v-for="p in platforms"
-                    :key="p"
-                    class="platform-btn"
-                    :class="{ active: activePlatform === p }"
-                    @click="activePlatform = p"
-                  >{{ p }}</div>
-                </div>
-                <span class="config-label" style="margin-top:12px;">语言</span>
-                <select class="form-select full" v-model="language">
-                  <option v-for="l in languages" :key="l.value" :value="l.value">{{ l.label }}</option>
-                </select>
-              </div>
-            </div>
-
-            <!-- Section: 画布尺寸 -->
-            <div class="config-section collapsible">
-              <div class="section-header collapsible" @click="toggleSection('size')">
-                <span class="section-label">画布尺寸</span>
-                <span class="expand-text">
-                  {{ sections.size ? '收起' : '展开' }}
-                  <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.size }"><ArrowDown /></el-icon>
-                </span>
-              </div>
-              <div class="section-body" v-show="sections.size">
-                <span class="config-label">选择尺寸</span>
-                <select class="form-select full" v-model="selectedSize">
-                  <option v-for="s in sizeOptions" :key="s.value" :value="s.value">{{ s.label }} ({{ s.value }})</option>
-                </select>
-                <p class="select-hint">© 亚马逊主图建议：2000px × 2000px 以上效果更佳</p>
-              </div>
-            </div>
-
-            <!-- Section: 主图用途 -->
-            <div class="config-section collapsible">
-              <div class="section-header collapsible" @click="toggleSection('purpose')">
-                <span class="section-label">
-                  主图用途
-                  <span class="section-sub">（选择本次主图的主要目的）</span>
-                </span>
-                <span class="expand-text">
-                  {{ sections.purpose ? '收起' : '展开' }}
-                  <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.purpose }"><ArrowDown /></el-icon>
-                </span>
-              </div>
-              <div class="section-body" v-show="sections.purpose">
-                <div class="purpose-grid">
-                  <div
-                    v-for="p in purposes"
-                    :key="p"
-                    class="purpose-btn"
-                    :class="{ active: activePurpose === p }"
-                    @click="activePurpose = p"
-                  >{{ p }}</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Section: 核心卖点 -->
-            <div class="config-section collapsible">
-              <div class="section-header collapsible" @click="toggleSection('sellingPoints')">
-                <span class="section-label">
-                  核心卖点
-                  <span class="section-sub">（选择1~3个卖点）</span>
-                </span>
-                <span class="expand-text">
-                  {{ sections.sellingPoints ? '收起' : '展开' }}
-                  <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.sellingPoints }"><ArrowDown /></el-icon>
-                </span>
-              </div>
-              <div class="section-body" v-show="sections.sellingPoints">
-                <div class="sp-header">
-                  <span class="config-label" style="margin-bottom:0;">常用卖点</span>
-                  <span class="add-link">+ 自定义卖点</span>
-                </div>
-                <div class="sp-grid">
-                  <div
-                    v-for="sp in sellingPoints"
-                    :key="sp"
-                    class="sp-tag"
-                    :class="{ active: activeSellingPoints.includes(sp) }"
-                    @click="toggleSellingPoint(sp)"
-                  >{{ sp }}</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Section: 生成设置 -->
-            <div class="config-section collapsible">
-              <div class="section-header collapsible" @click="toggleSection('output')">
-                <span class="section-label">生成设置</span>
-                <span class="expand-text">
-                  {{ sections.output ? '收起' : '展开' }}
-                  <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.output }"><ArrowDown /></el-icon>
-                </span>
-              </div>
-              <div class="section-body" v-show="sections.output">
-                <span class="config-label">生成数量</span>
-                <div class="gen-row">
-                  <button
-                    v-for="n in [1,2,3,4,5]"
-                    :key="n"
-                    class="gen-btn"
-                    :class="{ active: generateCount === n }"
-                    @click="generateCount = n"
-                  >{{ n }}张</button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Section: 提示词增强 -->
-            <div class="config-section collapsible">
-              <div class="section-header collapsible" @click="toggleSection('promptBoost')">
-                <span class="section-label">提示词增强</span>
-                <span class="expand-text">
-                  {{ sections.promptBoost ? '收起' : '展开' }}
-                  <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.promptBoost }"><ArrowDown /></el-icon>
-                </span>
-              </div>
-              <div class="section-body" v-show="sections.promptBoost">
-                <div class="prompt-boost-row">
-                  <label class="boost-label">产品类别</label>
-                  <PromptLibrarySelect ref="boostProductRef" category="product" v-model="boostProduct" placeholder="选择产品类别" />
-                </div>
-                <div class="prompt-boost-row">
-                  <label class="boost-label">材质</label>
-                  <PromptLibrarySelect ref="boostMaterialRef" category="material" v-model="boostMaterial" placeholder="选择材质" />
-                </div>
-                <div class="prompt-boost-row">
-                  <label class="boost-label">镜头距离</label>
-                  <PromptLibrarySelect ref="boostCameraRef" category="camera" key-prefix="camera.distance." v-model="boostCamera" placeholder="选择镜头距离" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </el-scrollbar>
-      </div>
-
-      <!-- Divider handle: config ⇔ AI -->
-      <div class="col-divider" @mousedown="startColResize($event, 'ai')"></div>
-
-      <!-- ===== RIGHT: AI Panel ===== -->
-      <div class="ai-col" :style="{ flex: aiFlex }" ref="aiPanel">
-        <div class="ai-resize-handle" @mousedown="startAiResize"></div>
-        <div class="ai-header">
-          <h3>AI 助手</h3>
-          <button class="ai-clear-btn" @click="clearChat">清空对话</button>
+          </el-scrollbar>
         </div>
 
-        <!-- Suggestions -->
-        <div class="ai-suggestions">
-          <span class="ai-sug-tag" @click="useSuggestion('如何提升主图点击率？')">如何提升主图点击率？</span>
-          <span class="ai-sug-tag" @click="useSuggestion('亚马逊主图规范是什么？')">亚马逊主图规范是什么？</span>
-          <span class="ai-sug-tag" @click="useSuggestion('推荐更适合的卖点')">推荐更适合的卖点</span>
-        </div>
+        <!-- Divider inside right panel: config ⇔ AI -->
+        <div class="right-panel-divider" @mousedown="startRightPanelResize($event, 'ai')"></div>
 
-        <!-- Chat messages -->
-        <div class="ai-chat" ref="chatContainer">
-          <div class="chat-msg bot">
-            <div class="chat-avatar">AI</div>
-            <div class="chat-bubble">您好！我是光合AI助手，有什么可以帮您？</div>
+        <!-- AI Assistant column -->
+        <div class="ai-col" :style="{ flex: aiFlex }" ref="aiPanel">
+          <div class="ai-header">
+            <h3>AI 助手</h3>
+            <a href="#" @click.prevent="clearChat">清空对话</a>
           </div>
-          <div v-for="(msg, i) in chatMessages" :key="i" class="chat-msg" :class="msg.role">
-            <div v-if="msg.role === 'bot'" class="chat-avatar">AI</div>
-            <div class="chat-bubble">{{ msg.text }}</div>
+          <div class="ai-chat" ref="chatContainer">
+            <div class="chat-msg bot">
+              <div class="chat-avatar">AI</div>
+              <div class="chat-bubble">您好！我是光合AI助手，有什么可以帮您？</div>
+            </div>
+            <div v-for="(msg, i) in chatMessages" :key="i" class="chat-msg" :class="msg.role">
+              <div v-if="msg.role === 'bot'" class="chat-avatar">AI</div>
+              <div class="chat-bubble">{{ msg.text }}</div>
+            </div>
+            <div v-if="generating" class="chat-msg bot">
+              <div class="chat-avatar">AI</div>
+              <div class="chat-bubble">正在为您生成中...</div>
+            </div>
           </div>
-          <div v-if="generating" class="chat-msg bot">
-            <div class="chat-avatar">AI</div>
-            <div class="chat-bubble">正在为您生成中...</div>
+          <div class="chat-input-area">
+            <textarea
+              class="chat-input"
+              v-model="chatPrompt"
+              placeholder="请输入您的需求，描述越详细，效果越好..."
+              @keydown.enter.exact.prevent="sendMessage"
+              maxlength="2000"
+            ></textarea>
           </div>
-        </div>
-
-        <!-- Chat input -->
-        <div class="chat-input-area">
-          <textarea
-            class="chat-input"
-            v-model="chatPrompt"
-            placeholder="请输入您的需求，描述越详细，效果越好..."
-            @keydown.enter.exact.prevent="sendMessage"
-            maxlength="2000"
-          ></textarea>
-        </div>
-        <div class="chat-footer">
-          <div>
-            <span class="chat-counter">{{ chatPrompt.length }}/2000</span>
-            <br />
-            <!-- <span class="chat-cost">本次操作将消耗 2 积分</span> -->
+          <div class="chat-footer">
+            <div class="chat-footer-left">
+              <span class="char-count">{{ chatPrompt.length }}/2000</span>
+            </div>
+            <div class="chat-footer-right">
+              <el-select
+                v-model="selectedModel"
+                size="small"
+                class="model-select"
+                :disabled="generating"
+              >
+                <el-option
+                  v-for="m in modelOptions"
+                  :key="m.value"
+                  :label="m.label"
+                  :value="m.value"
+                />
+              </el-select>
+              <button class="chat-send" @click="sendMessage" :disabled="!chatPrompt.trim() || generating">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                发送
+              </button>
+            </div>
           </div>
-          <button class="chat-send" @click="sendMessage" :disabled="!chatPrompt.trim() || generating">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-            -2积分
-          </button>
         </div>
       </div>
     </div>
@@ -344,23 +329,75 @@
     <!-- Hidden file inputs -->
     <input type="file" ref="fileInput" accept="image/*" multiple hidden @change="handleFileSelect" />
     <input type="file" ref="refFileInput" accept="image/*" hidden @change="handleRefFileSelect" />
+
+    <!-- 反推提示词模态框 -->
+    <el-dialog
+      v-model="reverseDialogVisible"
+      title="反推提示词"
+      width="560px"
+      :close-on-click-modal="false"
+      append-to-body
+      class="reverse-prompt-dialog"
+    >
+      <div class="reverse-prompt-body">
+        <div class="rp-upload-zone" @click="triggerReverseUpload" @dragover.prevent @drop.prevent="handleReverseDrop">
+          <img v-if="reverseImagePreview" :src="reverseImagePreview" class="rp-preview-img" alt="" />
+          <template v-else>
+            <el-icon :size="36" color="#9CA3AF"><UploadFilled /></el-icon>
+            <p class="rp-upload-text">点击或拖拽图片到此处</p>
+            <p class="rp-upload-hint">支持 JPG/PNG/WebP，最多 20MB</p>
+          </template>
+          <button v-if="reverseImagePreview" class="rp-clear-btn" @click.stop="clearReverseImage">✕</button>
+        </div>
+
+        <div class="rp-prompt-row">
+          <label class="rp-label">补充提示词</label>
+          <el-input
+            v-model="reversePromptInput"
+            type="textarea"
+            :rows="3"
+            maxlength="500"
+            show-word-limit
+            placeholder="可填写你想要的效果，如：电商主图、自然光、白色背景、高细节。不填则使用默认描述。"
+          />
+        </div>
+
+        <div v-if="reverseResult" class="rp-result-area">
+          <div class="rp-result-header">
+            <span class="rp-label">AI 推理结果</span>
+            <el-button link type="primary" size="small" @click="copyResult(reverseResult)">
+              <el-icon><DocumentCopy /></el-icon> 复制
+            </el-button>
+          </div>
+          <div class="rp-result-box">{{ reverseResult }}</div>
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="reverseDialogVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="reverseLoading" :disabled="!reverseImageFile" @click="submitReversePrompt">
+          {{ reverseLoading ? '推理中…' : '发送推理' }}
+        </el-button>
+      </template>
+    </el-dialog>
+
   </div>
 </template>
 
 <script>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { ArrowDown, ArrowLeft, ArrowRight, UploadFilled, PictureFilled } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowLeft, ArrowRight, UploadFilled, PictureFilled, MagicStick, DocumentCopy } from '@element-plus/icons-vue'
 // import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
 // import CanvasOverlay from '@/components/CanvasOverlay.vue'
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { useWorkflowProgress } from '@/composables/useWorkflowProgress'
 import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
-import { aiDialogue } from '@/api/customer'
+import { aiDialogue, getPublicCreationConfigByGroup, listPromptLibraryBatch, reversePrompt } from '@/api/customer'
 import { ElMessage } from 'element-plus'
 
 export default {
   name: 'HeroImageView',
-  components: { ArrowDown, ArrowLeft, ArrowRight, UploadFilled, PictureFilled, PromptLibrarySelect },
+  components: { ArrowDown, ArrowLeft, ArrowRight, UploadFilled, PictureFilled, MagicStick, DocumentCopy, PromptLibrarySelect },
   setup() {
     // ---- Canvas Interactions ----
     // const { canvasUI, handleCanvasExport } = useCanvasInteractions({
@@ -371,39 +408,47 @@ export default {
     const { steps: workflowSteps, getStepClass, isStepLineDone } = useWorkflowProgress()
 
     // ---- State ----
-    const originalImage = ref(null)
     const configCollapsed = ref(false)
     const refImage = ref(null)
     const productFiles = ref([])
-    const uploadedFiles = ref([])
     const generating = ref(false)
     const zoom = ref(100)
-    const resultImages = ref([])
-    const activeResult = ref(0)
 
-    // Config sections (all expanded by default)
+    // Config sections
     const sections = reactive({
       upload: true,
-      ref: true,
-      platform: true,
-      size: true,
-      purpose: true,
-      sellingPoints: true,
-      output: true,
-      promptBoost: false,
+      ref: false,
+      platform: false,
+      size: false,
+      purpose: false,
+      sellingPoints: false,
+      output: false,
     })
 
-    const boostProduct = ref('')
-    const boostMaterial = ref('')
-    const boostCamera = ref('')
-    const boostProductRef = ref(null)
-    const boostMaterialRef = ref(null)
-    const boostCameraRef = ref(null)
+    // Generation state from composable
+    const resultImages = computed(() => gen.resultImages.value)
+    const isGenerating = computed(() => gen.generating.value)
+    const genProgress = computed(() => gen.progress.value)
+    const genStatus = computed(() => gen.statusText.value)
 
-    // Platform & Language
-    const platforms = ['亚马逊', 'Shopee', 'Lazada', '速卖通', '淘宝', '京东', '独立站', '其他']
-    const activePlatform = ref('亚马逊')
-    const languages = [
+    // All expanded state
+    const allExpanded = computed(() => {
+      return sections.upload && sections.ref && sections.platform && sections.size && sections.purpose && sections.sellingPoints && sections.output
+    })
+
+    // 反推提示词
+    const REVERSE_DEFAULT_PROMPT = '请对原图进行逆向视觉解构，推测其生成逻辑与核心构成元素。请以结构化、专业的中文提示词格式输出，需涵盖：结构布局与质感；关键细节；技术参数与视角。输出结果应具有高度可复用性，能直接用于引导图像生成。'
+    const reverseDialogVisible = ref(false)
+    const reverseImageFile = ref(null)
+    const reverseImagePreview = ref('')
+    const reversePromptInput = ref(REVERSE_DEFAULT_PROMPT)
+    const reverseResult = ref('')
+    const reverseLoading = ref(false)
+
+    // Platform & Language - 从后台创作配置读取，此处为默认值
+    const platforms = ref(['亚马逊', 'Shopee', 'Lazada', '速卖通', '淘宝', '京东', '独立站', '其他'])
+    const activePlatform = ref('')
+    const languages = ref([
       { label: '英语（美国）', value: 'en-US' },
       { label: '英语（英国）', value: 'en-GB' },
       { label: '中文（简体）', value: 'zh-CN' },
@@ -411,57 +456,83 @@ export default {
       { label: '德语', value: 'de-DE' },
       { label: '法语', value: 'fr-FR' },
       { label: '西班牙语', value: 'es-ES' },
-    ]
+    ])
     const language = ref('en-US')
 
-    // Size options
-    const sizeOptions = [
-      { label: '1:1', value: '1:1' },
-      { label: '3:4', value: '3:4' },
-      { label: '4:3', value: '4:3' },
-      { label: '16:9', value: '16:9' },
-      { label: '9:16', value: '9:16' },
-      { label: '2:3', value: '2:3' },
-    ]
-    const selectedSize = ref('1:1')
+    // Size options - 从后台创作配置读取，此处为默认值
+    const outputSize = ref('')
+    const customWidth = ref(1000)
+    const customHeight = ref(1000)
+    const sizeOptions = ref([
+      { label: '不指定尺寸', value: '' },
+      { label: '1:1（800×800）', value: '800:800' },
+      { label: '3:4（800×1067）', value: '800:1067' },
+      { label: '4:3（1067×800）', value: '1067:800' },
+      { label: '自定义', value: 'custom' }
+    ])
+    // 实际输出尺寸
+    const effectiveOutputSize = computed(() => {
+      if (outputSize.value === 'custom') {
+        return `${customWidth.value}x${customHeight.value}`
+      }
+      return outputSize.value
+    })
 
-    // Purpose
-    const purposes = ['新品上市', '提升转化', '季节/节日', '促销活动', '品牌宣传', '其他用途']
-    const activePurpose = ref('新品上市')
+    // Purpose - 从后台创作配置读取，此处为默认值
+    const purposes = ref(['新品上市', '提升转化', '季节/节日', '促销活动', '品牌宣传', '其他用途'])
+    const activePurpose = ref('')
 
-    // Selling points
-    const sellingPoints = [
+    // Selling points - 从后台创作配置读取，此处为默认值
+    const sellingPoints = ref([
       '高品质材料', '耐用性强', '舒适体验', '易于安装',
       '多功能', '大容量收纳', '环保健康', '节省空间',
       '防水防污', '安全可靠', '轻便便携', '设计感强',
-    ]
-    const activeSellingPoints = ref(['高品质材料', '耐用性强', '舒适体验'])
+    ])
+    const activeSellingPoints = ref([])
 
-    function toggleSellingPoint(sp) {
-      const idx = activeSellingPoints.value.indexOf(sp)
+    // 提示词映射：option value → promptText（用于传给 AI）
+    const promptMap = ref({})
+
+    function toggleSellingPoint(value) {
+      const idx = activeSellingPoints.value.indexOf(value)
       if (idx > -1) {
         activeSellingPoints.value.splice(idx, 1)
       } else if (activeSellingPoints.value.length < 3) {
-        activeSellingPoints.value.push(sp)
+        activeSellingPoints.value.push(value)
       }
     }
 
-    // Generate count
-    const generateCount = ref(3)
+    // Generate count - 从后台创作配置读取上限，默认为5
+    const maxGenerateCount = ref(5)
+    const generateCountOptions = computed(() => {
+      const max = maxGenerateCount.value
+      const arr = []
+      for (let i = 1; i <= max; i++) arr.push(i)
+      return arr
+    })
+    const generateCount = ref('')
 
     // Prompt
     const chatPrompt = ref('')
     const chatMessages = ref([])
 
-    // ---- Computed ----
-    const allExpanded = computed(() => {
-      return Object.values(sections).every(v => v)
-    })
+    // AI model selection
+    const selectedModel = ref('deepseek')
+    const modelOptions = [
+      { label: 'DeepSeek', value: 'deepseek' },
+      { label: '通义千问 Qwen', value: 'qwen-plus' },
+      { label: '智谱 GLM-4', value: 'glm-4' },
+      { label: '豆包 Doubao', value: 'doubao' }
+    ]
 
     // ---- Layout resize ----
     const _configWidthPx = ref(280)
     const _aiWidthPx = ref(360)
     const canvasFlex = computed(() => '1 1 0%')
+    const rightFlex = computed(() => {
+      const configW = configCollapsed.value ? 40 : _configWidthPx.value
+      return `0 0 ${configW + _aiWidthPx.value + 12}px`
+    })
     const configFlex = computed(() => {
       if (configCollapsed.value) return '0 0 40px'
       return `0 0 ${_configWidthPx.value}px`
@@ -484,7 +555,7 @@ export default {
       const threeCol = document.querySelector('.three-col')
       if (!threeCol) return
       const rect = threeCol.getBoundingClientRect()
-      if (resizeTarget === 'config') {
+      if (resizeTarget === 'right' || resizeTarget === 'config') {
         const rightWidth = rect.right - e.clientX - 24
         const totalCurrent = _configWidthPx.value + _aiWidthPx.value + 12
         if (totalCurrent > 0 && rightWidth > 200) {
@@ -493,7 +564,11 @@ export default {
           _aiWidthPx.value = Math.max(200, Math.min(800, Math.round(_aiWidthPx.value * ratio)))
         }
       } else if (resizeTarget === 'ai') {
-        const aiWidth = rect.right - e.clientX - 6
+        const rightCol = document.querySelector('.right-col')
+        if (!rightCol) return
+        const rightRect = rightCol.getBoundingClientRect()
+        const rightX = e.clientX - rightRect.left
+        const aiWidth = rightRect.width - rightX - 6
         _aiWidthPx.value = Math.max(200, Math.min(800, Math.round(aiWidth)))
       }
     }
@@ -505,6 +580,14 @@ export default {
         document.body.style.cursor = ''
         document.body.style.userSelect = ''
       }
+    }
+
+    function startRightPanelResize(e, target) {
+      isResizing = true
+      resizeTarget = target
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
+      e.preventDefault()
     }
 
     // AI panel independent resize
@@ -539,7 +622,85 @@ export default {
       }
     }
 
+    // ===== 从后台创作配置读取主图设计配置 =====
+    async function loadCreationConfig() {
+      try {
+        const res = await getPublicCreationConfigByGroup('main_image')
+        const list = res.data || res.rows || []
+        const map = {}
+        list.forEach(c => { map[c.configKey] = c })
+
+        // ---- 目标平台 ----
+        const platformCfg = map.platform_options
+        if (platformCfg && platformCfg.configValue) {
+          const arr = JSON.parse(platformCfg.configValue)
+          if (Array.isArray(arr) && arr.length) {
+            platforms.value = arr.map(s => (typeof s === 'string' ? { label: s, value: s } : s))
+          }
+        }
+
+        // ---- 画布尺寸 ----
+        const sizeCfg = map.size_options || map.size_presets
+        if (sizeCfg && sizeCfg.configValue) {
+          const arr = JSON.parse(sizeCfg.configValue)
+          if (Array.isArray(arr) && arr.length) {
+            const loaded = arr.map(s => (typeof s === 'string' ? { label: s, value: s } : s))
+            const hasCustom = loaded.some(s => s.value === 'custom')
+            if (!hasCustom) {
+              loaded.push({ label: '自定义', value: 'custom' })
+            }
+            sizeOptions.value = [{ label: '不指定尺寸', value: '' }, ...loaded]
+          }
+        }
+
+        // ---- 主图用途 ----
+        const purposeCfg = map.purposes
+        if (purposeCfg && purposeCfg.configValue) {
+          const arr = JSON.parse(purposeCfg.configValue)
+          if (Array.isArray(arr) && arr.length) {
+            purposes.value = arr.map(s => (typeof s === 'string' ? { label: s, value: s } : s))
+          }
+        }
+
+        // ---- 核心卖点 ----
+        const sellingCfg = map.selling_points
+        if (sellingCfg && sellingCfg.configValue) {
+          const arr = JSON.parse(sellingCfg.configValue)
+          if (Array.isArray(arr) && arr.length) {
+            sellingPoints.value = arr.map(s => (typeof s === 'string' ? { label: s, value: s } : s))
+          }
+        }
+
+        // ---- 生成数量上限 ----
+        const maxCountCfg = map.max_generate_count
+        if (maxCountCfg && maxCountCfg.configValue) {
+          const n = Number(JSON.parse(maxCountCfg.configValue))
+          if (n > 0) maxGenerateCount.value = n
+        }
+
+        // 加载提示词映射：value → promptText
+        await loadPromptMap()
+      } catch { /* use defaults */ }
+    }
+
+    async function loadPromptMap() {
+      try {
+        const res = await listPromptLibraryBatch('opt_platform,opt_purpose,opt_selling', 'main_image')
+        const items = res.data || res || []
+        const map = {}
+        items.forEach(item => {
+          if (item.value && item.promptText) {
+            map[item.value] = item.promptText
+          }
+        })
+        promptMap.value = map
+      } catch {
+        promptMap.value = {}
+      }
+    }
+
     onMounted(() => {
+      loadCreationConfig()
       document.addEventListener('mousemove', onMouseMove)
       document.addEventListener('mouseup', onMouseUp)
       document.addEventListener('mousemove', onAiMouseMove)
@@ -584,26 +745,18 @@ export default {
     }
     function addFiles(files) {
       for (const f of files) {
-        const url = URL.createObjectURL(f)
-        uploadedFiles.value.push(url)
         productFiles.value.push(f)
-        if (!originalImage.value) originalImage.value = url
       }
     }
     function clearImage() {
-      originalImage.value = null
-      resultImages.value = []
-      activeResult.value = 0
       productFiles.value = []
-      uploadedFiles.value = []
+      resultImages.value = []
     }
     function removeProductFile(index) {
-      const removed = uploadedFiles.value[index]
-      uploadedFiles.value.splice(index, 1)
       productFiles.value.splice(index, 1)
-      if (originalImage.value === removed) {
-        originalImage.value = uploadedFiles.value[0] || null
-      }
+    }
+    function getObjectUrl(file) {
+      return file instanceof File ? URL.createObjectURL(file) : file
     }
 
     function undo() { /* placeholder */ }
@@ -642,10 +795,15 @@ export default {
         if (productFiles.value.length && !resultImages.value.length) {
           if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
           try {
-            const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText, boostCameraRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
-            const fullPrompt = boostText ? `${text}。约束：${boostText}。` : text
-            await gen.fullGenerate(productFiles.value, fullPrompt, { consumePoints: 2, featureName: 'main_image', title: '主图设计', n: 1 })
-            if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
+            const extra = { consumePoints: 2, featureName: 'main_image', title: '主图设计', model: selectedModel.value }
+            if (activePlatform.value) {
+              // 使用提示词库中该平台对应的 promptText 传给 AI，而非 raw value
+              const promptText = promptMap.value[activePlatform.value]
+              if (promptText) extra.platformPrompt = promptText
+            }
+            if (effectiveOutputSize.value) extra.outputSize = effectiveOutputSize.value
+            if (generateCount.value) extra.n = Number(generateCount.value)
+            await gen.fullGenerate(productFiles.value, text, extra)
           } catch (e) { console.error('主图生成失败:', e) }
         }
       } catch (e) {
@@ -662,36 +820,131 @@ export default {
       if (el) el.scrollTop = el.scrollHeight
     }
 
+    // ===== 反推提示词 =====
+    function openReversePromptDialog() {
+      reverseDialogVisible.value = true
+    }
+
+    function triggerReverseUpload() {
+      if (reverseImagePreview.value) return
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp'
+      input.onchange = (e) => {
+        const file = e.target.files?.[0]
+        if (file) handleReverseFile(file)
+        e.target.value = ''
+      }
+      input.click()
+    }
+
+    function handleReverseDrop(e) {
+      const file = e.dataTransfer?.files?.[0]
+      if (file) handleReverseFile(file)
+    }
+
+    const REVERSE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+    const REVERSE_MAX_SIZE = 20 * 1024 * 1024
+
+    function handleReverseFile(file) {
+      if (!REVERSE_ALLOWED_TYPES.includes(file.type)) {
+        ElMessage.error('仅支持 JPG / PNG / WebP 格式的图片')
+        return
+      }
+      if (file.size > REVERSE_MAX_SIZE) {
+        ElMessage.error('图片大小不能超过 20MB')
+        return
+      }
+      reverseImageFile.value = file
+      reverseResult.value = ''
+      const reader = new FileReader()
+      reader.onload = (ev) => { reverseImagePreview.value = ev.target.result }
+      reader.readAsDataURL(file)
+    }
+
+    function clearReverseImage() {
+      reverseImageFile.value = null
+      reverseImagePreview.value = ''
+      reverseResult.value = ''
+    }
+
+    async function submitReversePrompt() {
+      if (!reverseImageFile.value) {
+        ElMessage.warning('请先上传一张图片')
+        return
+      }
+      reverseLoading.value = true
+      reverseResult.value = ''
+      try {
+        const imageDataUri = reverseImagePreview.value
+        const prompt = reversePromptInput.value?.trim()
+          ? reversePromptInput.value.trim()
+          : REVERSE_DEFAULT_PROMPT
+        const res = await reversePrompt({ image: imageDataUri, prompt })
+        const data = res?.data || res
+        const result = typeof data === 'string' ? data : (data?.prompt || data?.result || '')
+        reverseResult.value = result || 'AI 未返回文本结果'
+        ElMessage.success('推理完成')
+      } catch (e) {
+        console.error('反推提示词失败:', e)
+        ElMessage.error(e?.message || '反推提示词失败，请重试')
+      } finally {
+        reverseLoading.value = false
+      }
+    }
+
+    async function copyResult(text) {
+      if (!text) return
+      try {
+        await navigator.clipboard.writeText(text)
+        ElMessage.success('已复制到剪贴板')
+      } catch {
+        const ta = document.createElement('textarea')
+        ta.value = text
+        document.body.appendChild(ta)
+        ta.select()
+        try { document.execCommand('copy'); ElMessage.success('已复制到剪贴板') }
+        catch { ElMessage.error('复制失败，请手动选择文本复制') }
+        document.body.removeChild(ta)
+      }
+    }
+
     return {
-      originalImage, refImage, productFiles, uploadedFiles,
-      generating, zoom, resultImages, activeResult,
+      refImage, productFiles,
+      generating, zoom, resultImages,
       sections,
       platforms, activePlatform, languages, language,
-      sizeOptions, selectedSize,
+      sizeOptions, outputSize, customWidth, customHeight, effectiveOutputSize,
       purposes, activePurpose,
       sellingPoints, activeSellingPoints, toggleSellingPoint,
-      generateCount,
-      chatPrompt, chatMessages,
+      generateCount, generateCountOptions,
+      chatPrompt, chatMessages, selectedModel, modelOptions,
       allExpanded,
-      canvasFlex, configFlex, aiFlex,
+      isGenerating, genProgress, genStatus,
+      canvasFlex, configFlex, aiFlex, rightFlex,
       configCollapsed,
       aiPanel,
       fileInput, refFileInput,
       workflowSteps, getStepClass, isStepLineDone,
-      boostProduct, boostMaterial, boostCamera, boostProductRef, boostMaterialRef, boostCameraRef,
       triggerUpload, triggerRefUpload, handleFileSelect, handleRefFileSelect,
-      handleDrop, handleRefDrop, clearImage, removeProductFile,
+      handleRefDrop, removeProductFile,
       undo, redo, clearCanvas, fitToScreen, toggleFullscreen,
+      getObjectUrl,
       toggleAllSections, toggleSection,
       useSuggestion, sendMessage, clearChat,
-      startColResize, startAiResize,
+      startColResize, startRightPanelResize, startAiResize,
+      // 反推提示词
+      reverseDialogVisible, reverseImageFile, reverseImagePreview, reversePromptInput,
+      reverseResult, reverseLoading,
+      openReversePromptDialog, triggerReverseUpload, handleReverseDrop,
+      clearReverseImage, submitReversePrompt, copyResult,
       // canvasUI, handleCanvasExport,
     }
   }
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 /* ============================================================
    Layout
    ============================================================ */
@@ -702,13 +955,12 @@ export default {
   overflow: hidden;
 }
 
-/* ---- Steps Bar ---- */
+/* ---- Steps Bar (inside canvas area, transparent) ---- */
 .steps-bar {
   display: flex;
   align-items: center;
-  padding: 12px 24px;
-  background: #fff;
-  border-bottom: 1px solid #E8EDF5;
+  padding: 0 0 12px;
+  background: transparent;
   flex-shrink: 0;
   overflow-x: auto;
   gap: 0;
@@ -720,9 +972,10 @@ export default {
   font-size: 12px;
   color: #6B7280;
   white-space: nowrap;
-  cursor: pointer;
+
+  &.active { color: #2563FF; font-weight: 600; }
+  &.done { color: #22C55E; }
 }
-.step-item.active { color: #2563FF; font-weight: 600; }
 .step-num {
   width: 22px; height: 22px;
   border-radius: 50%;
@@ -734,17 +987,17 @@ export default {
 .step-item.active .step-num {
   background: #2563FF; color: #fff; border-color: #2563FF;
 }
-.step-item.done { color: #22C55E; }
 .step-item.done .step-num {
   background: #22C55E; color: #fff; border-color: #22C55E;
 }
+.step-label {
+  font-size: 12px;
+  white-space: nowrap;
+}
 .step-line {
-  flex: 1; height: 2px; background: #E8EDF5; min-width: 12px; margin: 0 6px;
+  flex: 1; height: 2px; background: #E8EDF5; min-width: 8px; margin: 0 6px;
 }
 .step-line.done { background: #22C55E; }
-
-.prompt-boost-row { margin-bottom: 10px; }
-.prompt-boost-row .boost-label { display: block; font-size: 12px; color: #6B7280; margin-bottom: 4px; }
 
 /* ---- Three Column ---- */
 .three-col {
@@ -760,48 +1013,60 @@ export default {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  z-index: 6;
+  width: 24px;
 }
-.col-divider-wrapper .col-divider {
+
+/* ---- Column Divider ---- */
+.col-divider {
   width: 6px;
+  height: 100%;
   background: transparent;
   cursor: col-resize;
   flex-shrink: 0;
   position: relative;
   z-index: 5;
   transition: background 0.2s;
-  height: 100%;
 }
-.col-divider-wrapper .col-divider:hover,
-.col-divider-wrapper .col-divider:active { background: #2563FF; }
-.config-toggle-btn {
+.col-divider:hover,
+.col-divider:active { background: #2563FF; }
+
+/* ---- Column Toggle Button (between canvas and config) ---- */
+.col-divider-wrapper .config-toggle-btn {
   position: absolute;
+  right: 0;
   top: 50%;
-  right: -12px;
   transform: translateY(-50%);
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: #fff;
-  border: 1px solid #D1D5DB;
+  z-index: 10;
+  width: 20px;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: #fff;
+  border: 1px solid #E8EDF5;
+  border-radius: 8px 0 0 8px;
   cursor: pointer;
-  z-index: 10;
-  box-shadow: 0 1px 3px rgba(0,0,0,.08);
-  color: #6B7280;
-  transition: all .2s;
+  color: #9CA3AF;
+  box-shadow: -2px 0 8px rgba(0,0,0,0.06);
+  transition: all 0.2s ease;
 }
-.config-toggle-btn:hover { border-color: var(--gh-primary, #2563FF); color: var(--gh-primary, #2563FF); }
+.col-divider-wrapper .config-toggle-btn.active {
+  color: #2563FF;
+  border-color: #2563FF;
+}
+.col-divider-wrapper .config-toggle-btn:hover {
+  background: #F0F4FF;
+  color: #2563FF;
+  border-color: #2563FF;
+}
 
 /* ============================================================
    Config Column collapsed
    ============================================================ */
 .config-col.collapsed {
-  flex: 0 0 0 !important;
-  min-width: 0 !important;
-  width: 0 !important;
+  flex: 0 0 40px !important;
+  min-width: 40px;
+  width: 40px;
   overflow: hidden;
 }
 
@@ -813,45 +1078,9 @@ export default {
   flex-direction: column;
   padding: 16px;
   overflow: hidden;
-  background: #F7F9FC;
+  background: var(--gh-bg-page, #F7F9FC);
   min-width: 0;
 }
-
-.canvas-toolbar {
-  display: flex;
-  align-items: center;
-  padding: 8px 12px;
-  margin-bottom: 12px;
-  background: #fff;
-  border-radius: 12px;
-  border: 1px solid #E8EDF5;
-  flex-shrink: 0;
-  gap: 8px;
-}
-.toolbar-left, .toolbar-center, .toolbar-right {
-  display: flex; align-items: center; gap: 4px;
-}
-.toolbar-center { flex: 1; justify-content: center; }
-.tb-btn {
-  border: 1px solid #E8EDF5; background: #fff; padding: 5px 10px;
-  border-radius: 6px; font-size: 12px; color: #1F2937; cursor: pointer;
-  display: flex; align-items: center; gap: 4px;
-}
-.tb-btn:hover { background: #F0F4FF; border-color: #2563FF; }
-.tb-text-btn {
-  border: none; background: none; padding: 5px 8px; font-size: 12px;
-  color: #6B7280; cursor: pointer; display: flex; align-items: center; gap: 3px;
-  border-radius: 4px;
-}
-.tb-text-btn:hover { color: #2563FF; background: #F0F4FF; }
-.tb-icon-btn {
-  width: 24px; height: 24px; border: 1px solid #E8EDF5; border-radius: 6px;
-  background: #fff; cursor: pointer; display: flex; align-items: center;
-  justify-content: center; font-size: 12px; color: #6B7280; padding: 0;
-}
-.tb-icon-btn:hover { border-color: #2563FF; color: #2563FF; }
-.tb-sep { width: 1px; height: 16px; background: #E8EDF5; }
-.zoom-val { font-size: 12px; color: #1F2937; padding: 0 6px; min-width: 35px; text-align: center; }
 
 .canvas-box {
   flex: 1;
@@ -861,66 +1090,132 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
   min-height: 0;
-  cursor: pointer;
+  overflow: hidden;
 }
 
 .canvas-placeholder {
   text-align: center;
   color: #9CA3AF;
   padding: 20px;
+  cursor: default;
+
+  svg {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 12px;
+    opacity: .4;
+  }
+
+  h3 {
+    font-size: 14px;
+    color: #6B7280;
+    margin-bottom: 6px;
+    font-weight: 500;
+  }
+
+  p {
+    font-size: 12px;
+    color: #9CA3AF;
+  }
 }
-.canvas-placeholder svg { width: 48px; height: 48px; margin-bottom: 12px; opacity: 0.4; }
-.canvas-placeholder h3 { font-size: 14px; color: #6B7280; margin-bottom: 6px; font-weight: 500; }
-.canvas-placeholder p { font-size: 12px; color: #9CA3AF; }
 
 .canvas-result {
-  width: 100%; height: 100%;
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 16px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
   position: relative;
-}
-.result-img {
-  max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px;
-}
-.result-nav {
-  position: absolute; bottom: 10px;
-  display: flex; align-items: center; gap: 8px;
-  background: rgba(0,0,0,0.5); color: #fff; padding: 4px 10px;
-  border-radius: 20px; font-size: 12px;
-}
-.result-nav button {
-  background: none; border: none; color: #fff; cursor: pointer;
-  padding: 2px; display: flex; align-items: center; justify-content: center;
-  opacity: 0.7; transition: opacity 0.2s;
-}
-.result-nav button:hover:not(:disabled) { opacity: 1; }
-.result-nav button:disabled { opacity: 0.3; cursor: default; }
 
-.upload-preview {
+  .uploaded-img, .result-img {
+    max-width: 200px;
+    max-height: 200px;
+    border-radius: 8px;
+    object-fit: contain;
+  }
+
+  &.generating {
+    opacity: .7;
+  }
+}
+
+// ========== Result Grid (2×2) ==========
+.result-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 12px;
+  padding: 16px;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
   position: relative;
-  max-width: 80%;
-  max-height: 80%;
+
+  &.generating {
+    opacity: .7;
+  }
 }
-.preview-img {
-  max-width: 100%;
-  max-height: 300px;
-  object-fit: contain;
-  border-radius: 8px;
+
+.result-card {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #F3F4F6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+
+  .result-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
 }
-.preview-overlay { position: absolute; top: 8px; right: 8px; }
-.preview-del-btn {
-  width: 28px; height: 28px; border-radius: 50%;
-  background: rgba(0,0,0,0.5); color: #fff; border: none;
-  cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center;
+
+.generating-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,.85);
+
+  .progress-ring {
+    font-size: 24px;
+    font-weight: 700;
+    color: #2563FF;
+    margin-bottom: 8px;
+  }
+
+  p {
+    font-size: 13px;
+    color: #6B7280;
+  }
 }
-.preview-del-btn:hover { background: #EF4444; }
 
 .canvas-bottom-bar {
   padding: 6px 0;
   font-size: 11px;
   color: #9CA3AF;
   flex-shrink: 0;
+  text-align: center;
+}
+
+/* ============================================================
+   Right Column (Config + AI)
+   ============================================================ */
+.right-col {
+  display: flex;
+  background: #fff;
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* ============================================================
@@ -932,34 +1227,43 @@ export default {
   overflow: hidden;
   background: #fff;
   min-width: 260px;
+  position: relative;
+  transition: flex 0.3s;
 }
 
 .config-inner {
   padding: 0 0 16px;
-  overflow-y: auto;
 }
 
 .panel-header {
-  font-size: 15px;
-  font-weight: 600;
-  color: #1F2937;
-  margin-bottom: 12px;
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
   cursor: pointer;
   user-select: none;
   padding: 14px 16px 0;
+
+  &:hover .panel-toggle-all { opacity: 0.7; }
+}
+
+.panel-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1F2937;
 }
 
 .panel-toggle-all {
   font-size: 12px;
-  color: var(--gh-primary, #2563FF);
+  color: #9CA3AF;
   font-weight: 400;
   display: flex;
   align-items: center;
   gap: 2px;
-  transition: opacity 0.2s;
+  transition: all 0.2s;
+}
+.panel-toggle-all.active {
+  color: #2563FF;
 }
 .panel-toggle-all:hover { opacity: 0.7; }
 
@@ -968,32 +1272,32 @@ export default {
   border-bottom: 1px solid #F3F4F6;
 }
 
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  user-select: none;
+.section-header.collapsible {
   padding: 10px 16px;
   transition: opacity 0.2s;
 }
 .section-header:hover { opacity: 0.75; }
-.section-label { font-size: 13px; font-weight: 600; color: #1F2937; }
-.section-sub { font-size: 11px; color: #6B7280; font-weight: 400; }
+.section-label { font-size: 13px; font-weight: 500; color: #1F2937; }
 .expand-text {
-  font-size: 11px; color: #2563FF; display: flex; align-items: center; gap: 2px;
+  font-size: 11px;
+  color: #9CA3AF;
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 .expand-arrow { transition: transform 0.25s; }
 .expand-arrow.expanded { transform: rotate(180deg); }
 
-.section-body { padding: 0 16px 10px; }
+.section-body { padding: 4px 16px 10px; }
 
 .config-label {
   display: block;
-  font-size: 12px; color: #6B7280; margin-bottom: 4px;
+  font-size: 12px;
+  color: #6B7280;
+  margin-bottom: 4px;
 }
 
-/* Panel upload zone */
+/* Upload zone */
 .panel-upload-zone {
   border: 2px dashed #E8EDF5;
   border-radius: 10px;
@@ -1051,71 +1355,101 @@ export default {
   align-items: center; justify-content: center;
 }
 
-/* Platform grid */
-.platform-grid {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
-  margin-top: 4px;
+/* ========== Option Tags (toggleable, click to select/deselect) ========== */
+.option-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 0;
 }
-.platform-btn {
-  display: flex; align-items: center; justify-content: center;
-  padding: 7px 6px; border: 1px solid #E8EDF5; border-radius: 8px;
-  font-size: 12px; color: #4B5563; cursor: pointer; background: #fff;
-  text-align: center; transition: all 0.15s;
+
+.option-tag {
+  padding: 4px 10px;
+  border: 1px solid #E8EDF5;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #6B7280;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+
+  &:hover {
+    border-color: #2563FF;
+    color: #2563FF;
+    background: #FAFBFF;
+  }
+
+  &.active {
+    background: #2563FF;
+    border-color: #2563FF;
+    color: #fff;
+  }
 }
-.platform-btn:hover { border-color: #2563FF; }
-.platform-btn.active { border-color: #2563FF; background: #EEF2FF; color: #2563FF; font-weight: 600; }
 
 /* Form select */
 .form-select {
   width: 100%;
-  padding: 7px 10px; border: 1px solid #E8EDF5; border-radius: 8px;
-  font-size: 13px; outline: none; background: #fff; color: #1F2937;
-  cursor: pointer; margin-top: 2px;
+  padding: 7px 10px;
+  border: 1px solid #E8EDF5;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+  background: #fff;
+  color: #1F2937;
+  cursor: pointer;
+  margin-top: 2px;
 }
 .form-select:focus { border-color: #2563FF; }
+.form-select.full { width: 100%; }
+
+.size-select {
+  width: 100%;
+
+  :deep(.el-input__wrapper) {
+    border-radius: 8px;
+  }
+}
+
+.custom-size-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #E8EDF5;
+}
+.custom-size-input {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.custom-size-input span {
+  font-size: 11px;
+  color: #6B7280;
+}
+.custom-size-x {
+  color: #9CA3AF;
+  font-size: 13px;
+  margin-top: 12px;
+}
 
 .select-hint { font-size: 11px; color: #9CA3AF; margin-top: 6px; }
 
-/* Purpose grid */
-.purpose-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+/* ============================================================
+   Right Panel Divider
+   ============================================================ */
+.right-panel-divider {
+  width: 6px;
+  background: transparent;
+  cursor: col-resize;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 5;
+  transition: background 0.2s;
 }
-.purpose-btn {
-  border: 1.5px solid #E8EDF5; border-radius: 8px;
-  padding: 10px 6px; text-align: center; font-size: 12px;
-  color: #1F2937; cursor: pointer; background: #fff;
-  transition: all 0.15s; display: flex; flex-direction: column; align-items: center; gap: 2px;
-}
-.purpose-btn:hover { border-color: #2563FF; }
-.purpose-btn.active { border-color: #2563FF; background: #EFF4FF; color: #2563FF; font-weight: 600; }
-
-/* Selling points */
-.sp-header {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 6px;
-}
-.add-link { font-size: 12px; color: #2563FF; cursor: pointer; font-weight: 400; }
-.sp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-.sp-tag {
-  border: 1px solid #E8EDF5; border-radius: 6px;
-  padding: 6px 4px; text-align: center; font-size: 12px;
-  color: #1F2937; cursor: pointer; background: #fff;
-  transition: all 0.15s;
-}
-.sp-tag:hover { border-color: #2563FF; color: #2563FF; }
-.sp-tag.active {
-  border-color: #2563FF; background: #EFF4FF; color: #2563FF; font-weight: 500;
-}
-
-/* Generate settings */
-.gen-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
-.gen-btn {
-  border: 1px solid #E8EDF5; border-radius: 6px;
-  padding: 5px 12px; font-size: 12px; color: #1F2937;
-  cursor: pointer; background: #fff; transition: all 0.15s;
-}
-.gen-btn:hover { border-color: #2563FF; }
-.gen-btn.active { border-color: #2563FF; background: #EFF4FF; color: #2563FF; font-weight: 600; }
+.right-panel-divider:hover,
+.right-panel-divider:active { background: #2563FF; }
 
 /* ============================================================
    AI Column
@@ -1127,121 +1461,215 @@ export default {
   padding: 16px;
   overflow: hidden;
   min-width: 240px;
-  position: relative;
 }
-
-.ai-resize-handle {
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 6px;
-  cursor: col-resize;
-  z-index: 5;
-  background: transparent;
-  transition: background 0.2s;
-}
-.ai-resize-handle:hover { background: #2563FF; }
 
 .ai-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid #F3F4F6;
+  flex-shrink: 0;
 }
-.ai-header h3 { font-size: 14px; font-weight: 600; color: #1F2937; margin: 0; }
-.ai-clear-btn {
-  font-size: 12px; color: #2563FF; background: none; border: none;
-  cursor: pointer; padding: 2px 6px; border-radius: 4px;
-}
-.ai-clear-btn:hover { background: #F0F4FF; }
-
-.ai-suggestions {
-  display: flex; flex-wrap: wrap; gap: 6px;
-  padding: 8px 0 12px;
-}
-.ai-sug-tag {
-  background: #EFF4FF; color: #2563FF; font-size: 11px;
-  padding: 4px 10px; border-radius: 12px; cursor: pointer;
-  white-space: nowrap; transition: background 0.15s;
-}
-.ai-sug-tag:hover { background: #DCE6FF; }
+.ai-header h3 { font-size: 14px; font-weight: 600; margin: 0; }
+.ai-header a { font-size: 11px; color: #2563FF; text-decoration: none; &:hover { text-decoration: underline; } }
 
 .ai-chat {
-  flex: 1;
+  background: #F7F9FC;
+  border-radius: 10px;
+  padding: 12px;
   overflow-y: auto;
-  padding: 4px 0;
-  min-height: 100px;
+  flex: 1;
+  margin-bottom: 8px;
+  min-height: 200px;
 }
 .chat-msg {
-  display: flex; gap: 8px; margin-bottom: 10px;
+  margin-bottom: 10px;
+  display: flex;
+  gap: 6px;
 }
+.chat-msg.bot { flex-direction: row; }
 .chat-msg.user { flex-direction: row-reverse; }
-.chat-msg.user .chat-bubble { background: #2563FF; color: #fff; }
 .chat-avatar {
-  width: 26px; height: 26px; border-radius: 50%;
-  background: #2563FF; color: #fff; display: flex; align-items: center;
-  justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: #2563FF; display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 10px; flex-shrink: 0;
 }
 .chat-bubble {
-  background: #F7F9FC; border-radius: 10px; padding: 8px 12px;
-  font-size: 13px; color: #1F2937; line-height: 1.5; max-width: 85%;
-  word-break: break-word;
+  padding: 8px 12px; border-radius: 10px;
+  font-size: 12px; line-height: 1.5; max-width: 85%;
 }
+.chat-msg.bot .chat-bubble { background: #fff; color: #1F2937; }
+.chat-msg.user .chat-bubble { background: #EEF2FF; color: #2563FF; }
 
-.chat-input-area { margin-top: auto; }
+.chat-input-area { display: flex; gap: 6px; flex-shrink: 0; }
 .chat-input {
-  width: 100%;
-  min-height: 56px;
-  border: 1px solid #E8EDF5;
-  border-radius: 8px;
-  padding: 8px 10px;
-  font-size: 13px;
-  color: #1F2937;
-  resize: none;
-  font-family: inherit;
-  outline: none;
-  background: #FAFBFC;
+  flex: 1; padding: 8px 12px; border: 1px solid #E8EDF5; border-radius: 8px;
+  font-size: 12px; outline: none; height: 50px; min-height: 350px; max-height: 1000px; resize: vertical; font-family: inherit;
 }
 .chat-input:focus { border-color: #2563FF; }
-.chat-input::placeholder { color: #9CA3AF; }
 
 .chat-footer {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-top: 6px;
+  flex-shrink: 0;
 }
-.chat-counter { font-size: 11px; color: #9CA3AF; }
-.chat-cost { font-size: 11px; color: #9CA3AF; }
+.chat-footer-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.chat-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.char-count { font-size: 10px; color: #9CA3AF; }
+.chat-cost { font-size: 10px; color: #22C55E; }
+.model-select {
+  width: 128px;
+}
 .chat-send {
-  display: flex; align-items: center; gap: 4px;
-  background: #2563FF; color: #fff; border: none;
-  padding: 6px 14px; border-radius: 6px; font-size: 13px;
-  cursor: pointer; font-weight: 500;
-  transition: opacity 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px; background: #2563FF; color: #fff;
+  border: none; border-radius: 8px; font-size: 12px; cursor: pointer; font-weight: 500;
+  white-space: nowrap;
 }
-.chat-send:hover:not(:disabled) { opacity: 0.9; }
-.chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
+.chat-send:hover { opacity: 0.9; }
+.chat-send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ============================================================
+   反推提示词入口按钮
+   ============================================================ */
+.reverse-prompt-entry {
+  margin: 0 0 12px 0;
+}
+.reverse-prompt-btn {
+  width: 100%;
+  justify-content: center;
+}
+.entry-helper {
+  font-size: 12px;
+  color: #9CA3AF;
+  margin: 6px 0 0 0;
+  text-align: center;
+}
+
+/* ============================================================
+   反推提示词模态框
+   ============================================================ */
+.reverse-prompt-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.rp-upload-zone {
+  position: relative;
+  border: 1px dashed #D1D5DB;
+  border-radius: 8px;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  background: #FAFBFC;
+  transition: border-color 0.2s;
+}
+.rp-upload-zone:hover {
+  border-color: #2563FF;
+}
+.rp-upload-text {
+  font-size: 14px;
+  color: #4B5563;
+  margin: 8px 0 0 0;
+}
+.rp-upload-hint {
+  font-size: 12px;
+  color: #9CA3AF;
+  margin: 4px 0 0 0;
+}
+.rp-preview-img {
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  display: block;
+}
+.rp-clear-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rp-clear-btn:hover {
+  background: #EF4444;
+}
+.rp-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1F2937;
+  display: block;
+}
+.rp-prompt-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rp-result-area {
+  border-top: 1px solid #E5E7EB;
+  padding-top: 12px;
+}
+.rp-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.rp-result-box {
+  background: #F3F4F6;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #1F2937;
+  white-space: pre-wrap;
+  max-height: 180px;
+  overflow-y: auto;
+}
 
 /* ============================================================
    Responsive
    ============================================================ */
 @media (max-width: 1024px) {
-  .three-col {
-    flex-wrap: wrap;
-  }
-  .canvas-col { flex: 0 0 100% !important; height: 40%; }
-  .config-col { flex: 0 0 50% !important; height: 30%; }
-  .ai-col { flex: 0 0 50% !important; height: 30%; }
+  .steps-bar { padding: 0 0 8px; gap: 4px; }
+  .step-item { font-size: 11px; }
+  .step-line { min-width: 8px; margin: 0 4px; }
+  .three-col { flex-wrap: wrap; }
+  .canvas-col { flex: 0 0 100% !important; max-height: 50vh; }
+  .right-col { flex: 0 0 100% !important; max-height: 50vh; }
   .col-divider { display: none; }
 }
 
 @media (max-width: 768px) {
   .steps-bar { display: none; }
   .three-col { flex-direction: column; }
-  .canvas-col { flex: 1 !important; height: auto; min-height: 300px; }
-  .config-col { flex: none !important; height: auto; max-height: 40vh; }
-  .ai-col { flex: none !important; height: auto; max-height: 40vh; min-width: 0; }
-  .col-divider { display: none; }
-  .ai-resize-handle { display: none; }
+  .canvas-col { flex: 0 0 45vh !important; max-height: 45vh; }
+  .right-col { flex: 1 1 auto !important; min-height: 250px; }
+  .right-panel-divider { display: none; }
+  .config-col { max-height: 200px; overflow-y: auto; }
 }
 </style>

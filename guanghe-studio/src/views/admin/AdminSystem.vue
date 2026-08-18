@@ -124,7 +124,7 @@
               <el-option label="停用" value="1" />
             </el-select>
             <el-button @click="fetchCreationConfigs">查询</el-button>
-            <el-button v-if="creationFilters.configGroup !== 'white_bg' && creationFilters.configGroup !== 'bg_generation'" type="primary" @click="openCreationDialog()">新增配置</el-button>
+            <el-button v-if="creationFilters.configGroup !== 'white_bg' && creationFilters.configGroup !== 'bg_generation' && creationFilters.configGroup !== 'main_image'" type="primary" @click="openCreationDialog()">新增配置</el-button>
           </div>
         </div>
 
@@ -144,7 +144,9 @@
             <template #default="{ row }">{{ getGroupLabel(row.configGroup) }}</template>
           </el-table-column>
           <el-table-column prop="configName" label="配置名称" min-width="180" />
-          <el-table-column prop="configValue" label="配置值" min-width="280" show-overflow-tooltip />
+          <el-table-column prop="configValue" label="配置值" min-width="280" show-overflow-tooltip>
+            <template #default="{ row }">{{ formatConfigValue(row.configValue) }}</template>
+          </el-table-column>
           <el-table-column prop="sort" label="排序" width="90" />
           <el-table-column prop="status" label="状态" width="110">
             <template #default="{ row }">
@@ -659,7 +661,7 @@ const legacyCategoryMap = {
 // 提示词配置过滤用（全量分类，管理员可见所有分类）
 const libraryFilterCategoryOptions = unifiedCategoryOptions
 
-// 创作配置绑定用（从统一列表中只取 opt_ 开头的 UI 选项库分类；AI白底图仅显示阴影+尺寸；白底图生成背景仅显示平台/场景/光线/风格/尺寸）
+// 创作配置绑定用（从统一列表中只取 opt_ 开头的 UI 选项库分类；AI白底图仅显示阴影+尺寸；白底图生成背景仅显示平台/场景/光线/风格/尺寸；主图设计仅显示平台/尺寸/用途/卖点）
 const promptPickerCategoryOptions = computed(() => {
   const optList = unifiedCategoryOptions.filter(o => o.value.startsWith('opt_'))
   if (creationForm.configGroup === 'white_bg') {
@@ -667,6 +669,9 @@ const promptPickerCategoryOptions = computed(() => {
   }
   if (creationForm.configGroup === 'bg_generation') {
     return optList.filter(o => ['opt_platform', 'opt_scene', 'opt_light', 'opt_style', 'opt_size'].includes(o.value))
+  }
+  if (creationForm.configGroup === 'main_image') {
+    return optList.filter(o => ['opt_platform', 'opt_size', 'opt_purpose', 'opt_selling'].includes(o.value))
   }
   return optList
 })
@@ -691,6 +696,37 @@ function getGroupLabel(value) {
 
 function getGroupCount(group) {
   return creationConfigList.value.filter(c => c.configGroup === group).length
+}
+
+// 格式化创作配置值：JSON 数组提取 label/value 展示，纯文本/数字原样展示
+function formatConfigValue(raw) {
+  if (!raw || typeof raw !== 'string') return raw || ''
+  const text = raw.trim()
+  if (!text) return ''
+  // 尝试解析 JSON 数组
+  if (text.startsWith('[')) {
+    try {
+      const arr = JSON.parse(text)
+      if (Array.isArray(arr) && arr.length > 0) {
+        if (typeof arr[0] === 'string') {
+          return arr.join('、')
+        }
+        if (arr[0] && typeof arr[0] === 'object') {
+          return arr.map(item => item.label || item.value || '').filter(Boolean).join('、')
+        }
+      }
+    } catch { /* not JSON */ }
+  }
+  // 尝试解析 JSON 对象
+  if (text.startsWith('{')) {
+    try {
+      const obj = JSON.parse(text)
+      if (typeof obj === 'object' && obj !== null) {
+        return Object.entries(obj).map(([k, v]) => `${k}: ${v}`).join('；')
+      }
+    } catch { /* not JSON */ }
+  }
+  return text
 }
 
 const tagTypeOptions = [
@@ -812,10 +848,7 @@ function inferPromptScope(configGroup) {
 
 async function loadPromptPicker() {
   const cat = promptPickerCategory.value
-  if (!cat) {
-    promptPickerItems.value = []
-    return
-  }
+  const scope = promptPickerScope.value || undefined
   const key = `${cat}|${promptPickerScope.value || ''}`
   if (key === promptPickerLoadedKey.value && promptPickerItems.value.length) return
   promptPickerLoading.value = true
@@ -823,8 +856,8 @@ async function loadPromptPicker() {
     const res = await listAdminPromptLibrary({
       pageNum: 1,
       pageSize: 500,
-      category: cat,
-      scope: promptPickerScope.value || undefined,
+      category: cat || undefined,
+      scope: scope,
       status: '0'
     })
     promptPickerItems.value = res.rows || []
@@ -864,7 +897,11 @@ function onConfigKeyInput() {
 }
 
 function onConfigGroupInput() {
-  if (promptPickerUserOverride.value) return
+  // 切换工作台时必须重置分类和用户覆盖标记，否则：
+  // 1) promptPickerUserOverride=true 会阻止后续任何处理
+  // 2) promptPickerCategory 保持旧值，导致用旧分类+新 scope 查询返回空
+  promptPickerCategory.value = ''
+  promptPickerUserOverride.value = false
   const inferred = inferPromptScope(creationForm.configGroup)
   if (inferred !== promptPickerScope.value) {
     promptPickerScope.value = inferred

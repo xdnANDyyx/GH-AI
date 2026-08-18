@@ -161,9 +161,11 @@ router.beforeEach((to) => {
   // 功能开关拦截：非管理员访问已关闭的工作台功能时重定向
   if (!userStore.isAdmin && to.path) {
     const { isPathEnabled, loadFeatureToggles } = useFeatureToggles()
-    // 确保开关数据已加载（不阻塞首次导航，loaded后同步检查）
+    // 异步预加载开关数据（不阻塞导航）
     loadFeatureToggles()
+    // 同步检查：数据已加载时直接拦截
     if (!isPathEnabled(to.path)) {
+      sessionStorage.setItem('featureDisabledMsg', '该功能已被管理员禁用')
       return '/whiteBg'
     }
   }

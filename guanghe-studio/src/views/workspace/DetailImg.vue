@@ -1,51 +1,52 @@
 <template>
   <div class="detail-page">
-    <!-- Steps bar -->
-    <div class="steps-bar">
-      <template v-for="(s, i) in workflowSteps" :key="i">
-        <div class="step-item" :class="getStepClass(i + 1, 4)">
-          <div class="step-num">{{ i + 1 }}</div>
-          <span>{{ s.label }}</span>
-        </div>
-        <div v-if="i < workflowSteps.length - 1" class="step-line" :class="{ done: isStepLineDone(i + 1) }"></div>
-      </template>
-    </div>
-
     <!-- Three-column layout -->
     <div class="three-col">
       <!-- ===== Canvas Area ===== -->
       <div class="canvas-col" :style="{ flex: canvasFlex }">
+        <!-- Steps bar（显示在画布顶部，不超出画布区域） -->
+        <div class="steps-bar">
+          <template v-for="(s, i) in workflowSteps" :key="i">
+            <div class="step-item" :class="getStepClass(i + 1, 4)">
+              <div class="step-num">{{ i + 1 }}</div>
+              <span>{{ s.label }}</span>
+            </div>
+            <div v-if="i < workflowSteps.length - 1" class="step-line" :class="{ done: isStepLineDone(i + 1) }"></div>
+          </template>
+        </div>
 
-
-        <!-- Canvas Dropzone -->
-        <div
-          class="canvas-dropzone"
-          @drop.prevent="handleDrop"
-        >
-          <!-- <CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" /> -->
-          <div v-if="!originalImage && !resultImages.length" class="dropzone-placeholder" @click="triggerUpload">
-            <svg class="dropzone-icon" viewBox="0 0 56 56" fill="none">
-              <rect x="4" y="10" width="48" height="36" rx="4" stroke="#D1D5DB" stroke-width="2"/>
-              <circle cx="18" cy="22" r="5" stroke="#D1D5DB" stroke-width="2"/>
-              <path d="M52 40L40 28L24 44" stroke="#D1D5DB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M32 34L26 28L4 44" stroke="#D1D5DB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              <circle cx="40" cy="18" r="4" fill="#2563FF" opacity="0.15" stroke="#2563FF" stroke-width="1.5"/>
-              <path d="M38 18h4M40 16v4" stroke="#2563FF" stroke-width="1.5" stroke-linecap="round"/>
+        <!-- Canvas Display (no upload) -->
+        <div class="canvas-box">
+          <div v-if="productFiles.length === 0 && resultImages.length === 0" class="canvas-placeholder">
+            <svg viewBox="0 0 48 48" fill="none">
+              <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
+              <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
+              <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <div class="dropzone-title">拖拽图片到画布，或从右侧上传素材</div>
-            <div class="dropzone-desc">生成高转化的详情图 / A+ 页面</div>
-            <div class="dropzone-desc highlight">支持多页设计，突出卖点，提升转化率</div>
+            <h3>AI 详情图生成后将显示在此处</h3>
+            <p>请在右侧配置生成参数并点击发送</p>
           </div>
-          <div v-else class="canvas-image-display">
-            <img v-if="resultImages.length" :src="resultImages[0].url || resultImages[0]" class="result-img" :style="{ transform: `scale(${zoom / 100})` }" />
-            <img v-else :src="originalImage" class="preview-img" :style="{ transform: `scale(${zoom / 100})` }" />
+          <!-- 有结果图时：展示结果 -->
+          <div v-else-if="resultImages.length > 0" class="result-grid" :class="{ generating: isGenerating }">
+            <div v-for="(img, idx) in resultImages" :key="'r'+idx" class="result-card">
+              <img :src="img.url || img" class="result-img" />
+            </div>
+            <div v-if="isGenerating" class="generating-overlay">
+              <div class="progress-ring">{{ genProgress }}%</div>
+              <p>{{ genStatus }}</p>
+            </div>
           </div>
-          <div class="canvas-zoom-controls" v-if="originalImage || resultImages.length">
-            <button class="zoom-btn" @click="zoomOut">−</button>
-            <span class="zoom-value">{{ zoom }}%</span>
-            <button class="zoom-btn" @click="zoomIn">+</button>
+          <!-- 仅上传产品图，无结果时 -->
+          <div v-else class="canvas-result" :class="{ generating: isGenerating }">
+            <img v-for="(f, idx) in productFiles" :key="idx" :src="getObjectUrl(f)" class="uploaded-img" />
+            <div v-if="isGenerating" class="generating-overlay">
+              <div class="progress-ring">{{ genProgress }}%</div>
+              <p>{{ genStatus }}</p>
+            </div>
           </div>
         </div>
+
+        <div class="canvas-bottom-bar">AI生成的内容仅供参考，请注意核对细节与版权信息。</div>
 
         <!-- Page Management -->
         <div class="page-mgmt">
@@ -88,7 +89,7 @@
       <div class="col-divider-wrapper">
         <div class="col-divider" @mousedown="startColResize($event, 'right')"></div>
         <div class="config-toggle-btn" @click="configCollapsed = !configCollapsed" :title="configCollapsed ? '展开创作配置' : '折叠创作配置'">
-          <el-icon :size="14"><ArrowLeft v-if="!configCollapsed" /><ArrowRight v-else /></el-icon>
+          <el-icon :size="14"><ArrowRight v-if="!configCollapsed" /><ArrowLeft v-else /></el-icon>
         </div>
       </div>
 
@@ -105,6 +106,15 @@
               <div class="panel-header" @click="toggleAllSections">
                 <span class="panel-title">创作配置</span>
                 <span class="panel-toggle-all">{{ allExpanded ? '全部折叠 ▲' : '全部展开 ▼' }}</span>
+              </div>
+
+              <!-- 反推提示词入口 -->
+              <div class="reverse-prompt-entry">
+                <el-button type="primary" plain class="reverse-prompt-btn" @click="openReversePromptDialog">
+                  <el-icon><MagicStick /></el-icon>
+                  <span>反推提示词</span>
+                </el-button>
+                <p class="entry-helper">上传参考图，AI 帮你描述想要的画面效果</p>
               </div>
 
               <!-- Section: 页面尺寸 -->
@@ -139,14 +149,14 @@
                 </div>
                 <div class="section-body" v-show="sections.platform">
                   <span class="config-label">目标平台</span>
-                  <div class="platform-grid">
+                  <div class="option-tags">
                     <div
                       v-for="p in platforms"
                       :key="p"
-                      class="platform-btn"
+                      class="option-tag"
                       :class="{ active: selectedPlatform === p }"
-                      @click="selectedPlatform = p"
-                    >{{ selectedPlatform === p ? '●' : '○' }} {{ p }}</div>
+                      @click="selectedPlatform = (selectedPlatform === p ? '' : p)"
+                    >{{ p }}</div>
                   </div>
                   <span class="config-label">语言</span>
                   <select class="form-select block" v-model="language">
@@ -191,11 +201,15 @@
                   </span>
                 </div>
                 <div class="section-body" v-show="sections.canvasSize">
-                  <el-select v-model="activeSize" style="width: 100%" @change="onSizeChange">
-                    <el-option v-for="s in sizes" :key="s.ratio" :label="s.dim" :value="s.ratio" />
+                  <el-select v-model="outputSize" placeholder="请选择输出尺寸" style="width: 100%">
+                    <el-option label="不指定" value="" />
+                    <el-option label="1:1  (1080×1080)" value="1:1" />
+                    <el-option label="3:4  (1080×1440)" value="3:4" />
+                    <el-option label="4:3  (1440×1080)" value="4:3" />
+                    <el-option label="自定义" value="custom" />
                   </el-select>
                   <!-- 自定义尺寸 -->
-                  <div v-if="activeSize === 'custom'" class="custom-size-row">
+                  <div v-if="outputSize === 'custom'" class="custom-size-row">
                     <div class="custom-size-input">
                       <span>宽</span>
                       <el-input-number v-model="customWidth" :min="100" :max="9999" :step="10" size="small" controls-position="right" />
@@ -268,29 +282,8 @@
                       </div>
                       <div class="toggle-switch" :class="{ off: !item.enabled }" @click="item.enabled = !item.enabled">
                         <div class="toggle-knob"></div>
-              </div>
-
-              <!-- Section: 提示词增强 -->
-              <div class="config-section collapsible">
-                <div class="section-header collapsible" @click="toggleSection('promptBoost')">
-                  <span class="section-label">提示词增强</span>
-                  <span class="expand-text">
-                    {{ sections.promptBoost ? '收起' : '展开' }}
-                    <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.promptBoost }"><ArrowDown /></el-icon>
-                  </span>
-                </div>
-                <div class="section-body" v-show="sections.promptBoost">
-                  <div class="prompt-boost-row">
-                    <label class="boost-label">产品类别</label>
-                    <PromptLibrarySelect ref="boostProductRef" category="product" v-model="boostProduct" placeholder="选择产品类别" />
-                  </div>
-                  <div class="prompt-boost-row">
-                    <label class="boost-label">材质</label>
-                    <PromptLibrarySelect ref="boostMaterialRef" category="material" v-model="boostMaterial" placeholder="选择材质" />
-                  </div>
-                </div>
-              </div>
-            </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -305,16 +298,15 @@
                   </span>
                 </div>
                 <div class="section-body" v-show="sections.genCount">
-                  <div class="count-row">
+                  <span class="config-label">生成数量</span>
+                  <div class="option-tags">
                     <div
-                      v-for="c in [1,2,3,4,5]"
-                      :key="c"
-                      class="count-btn"
-                      :class="{ active: genCount === c && !customCount }"
-                      @click="genCount = c; customCount = false"
-                    >{{ c }}张</div>
-                    <div class="count-btn" :class="{ active: customCount }" @click="customCount = true">自定义</div>
-                    <input v-if="customCount" class="count-input" v-model.number="genCount">
+                      v-for="n in [1,2,3,4,5]"
+                      :key="n"
+                      class="option-tag"
+                      :class="{ active: genCount === n }"
+                      @click="genCount = (genCount === n ? '' : n)"
+                    >{{ n }}张</div>
                   </div>
                 </div>
               </div>
@@ -350,15 +342,19 @@
                 @keydown.enter.exact.prevent="sendMessage"
                 maxlength="2000"
               ></textarea>
-              <div class="ai-input-footer">
-                <span class="ai-char-count">{{ chatInput.length }}/2000</span>
-                <button class="ai-send-btn" @click="sendMessage">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="22" y1="2" x2="11" y2="13"/>
-                    <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                  </svg>
-                  发送（-2积分）
-                </button>
+              <div class="chat-footer">
+                <div class="chat-footer-left">
+                  <span class="char-count">{{ chatInput.length }}/2000</span>
+                </div>
+                <div class="chat-footer-right">
+                  <el-select v-model="selectedModel" size="small" class="model-select" :disabled="isGenerating">
+                    <el-option v-for="m in modelOptions" :key="m.value" :label="m.label" :value="m.value" />
+                  </el-select>
+                  <button class="chat-send" @click="sendMessage" :disabled="!chatInput.trim() || isGenerating">
+                    <el-icon><Promotion /></el-icon>
+                    {{ isGenerating ? '生成中...' : '发送' }}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -370,16 +366,67 @@
     <input type="file" ref="fileInputRef" hidden accept="image/*" multiple @change="onFileChange" />
     <input type="file" ref="refInputRef" hidden accept="image/*" multiple @change="onRefFileChange" />
     <input type="file" ref="logoInputRef" hidden accept="image/*" @change="onLogoFileChange" />
+
+    <!-- 反推提示词模态框 -->
+    <el-dialog
+      v-model="reverseDialogVisible"
+      title="反推提示词"
+      width="560px"
+      :close-on-click-modal="false"
+      append-to-body
+      class="reverse-prompt-dialog"
+    >
+      <div class="reverse-prompt-body">
+        <div class="rp-upload-zone" @click="triggerReverseUpload" @dragover.prevent @drop.prevent="handleReverseDrop">
+          <img v-if="reverseImagePreview" :src="reverseImagePreview" class="rp-preview-img" alt="" />
+          <template v-else>
+            <el-icon :size="36" color="#9CA3AF"><UploadFilled /></el-icon>
+            <p class="rp-upload-text">点击或拖拽图片到此处</p>
+            <p class="rp-upload-hint">支持 JPG/PNG/WebP，最多 20MB</p>
+          </template>
+          <button v-if="reverseImagePreview" class="rp-clear-btn" @click.stop="clearReverseImage">✕</button>
+        </div>
+
+        <div class="rp-prompt-row">
+          <label class="rp-label">补充提示词</label>
+          <el-input
+            v-model="reversePromptInput"
+            type="textarea"
+            :rows="3"
+            maxlength="500"
+            show-word-limit
+            placeholder="可填写你想要的效果，如：电商主图、自然光、白色背景、高细节。不填则使用默认描述。"
+          />
+        </div>
+
+        <div v-if="reverseResult" class="rp-result-area">
+          <div class="rp-result-header">
+            <span class="rp-label">AI 推理结果</span>
+            <el-button link type="primary" size="small" @click="copyResult(reverseResult)">
+              <el-icon><DocumentCopy /></el-icon> 复制
+            </el-button>
+          </div>
+          <div class="rp-result-box">{{ reverseResult }}</div>
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="reverseDialogVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="reverseLoading" :disabled="!reverseImageFile" @click="submitReversePrompt">
+          {{ reverseLoading ? '推理中…' : '发送推理' }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 defineOptions({ name: 'DetailImgView' })
 import { ref, reactive, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
-import { ArrowDown, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowLeft, ArrowRight, UploadFilled, DocumentCopy, Promotion } from '@element-plus/icons-vue'
 // import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
 // import CanvasOverlay from '@/components/CanvasOverlay.vue'
-import { aiDialogue } from '@/api/customer'
+import { aiDialogue, reversePrompt } from '@/api/customer'
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { useWorkflowProgress } from '@/composables/useWorkflowProgress'
 import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
@@ -395,7 +442,11 @@ const { steps: workflowSteps, getStepClass, isStepLineDone } = useWorkflowProgre
 const productFiles = ref([])
 const originalImage = ref('')
 const resultImages = ref([])
-const generating = ref(false)
+
+// Generation state from composable
+const isGenerating = computed(() => gen.generating.value)
+const genProgress = computed(() => gen.progress.value)
+const genStatus = computed(() => gen.statusText.value)
 
 // ===== Canvas & Zoom =====
 const zoom = ref(100)
@@ -572,7 +623,6 @@ const sections = reactive({
   refUpload: true,
   contentStructure: true,
   genCount: true,
-  promptBoost: false,
 })
 
 const boostProduct = ref('')
@@ -606,24 +656,13 @@ function togglePoint(p) {
 }
 
 // Size
-const sizes = [
-  { ratio: '1:1', dim: '1080×1080', w: 1080, h: 1080 },
-  { ratio: '3:4', dim: '1080×1440', w: 1080, h: 1440 },
-  { ratio: '1:2', dim: '1080×2160', w: 1080, h: 2160 },
-  { ratio: '9:16', dim: '1080×1920', w: 1080, h: 1920 },
-  { ratio: 'custom', dim: '自定义', w: 0, h: 0 },
-]
-const activeSize = ref('1:2')
+const outputSize = ref('')
 const customWidth = ref(1080)
 const customHeight = ref(2160)
-
-function onSizeChange(val) {
-  const s = sizes.find(p => p.ratio === val)
-  if (s && s.ratio !== 'custom') {
-    customWidth.value = s.w
-    customHeight.value = s.h
-  }
-}
+const effectiveOutputSize = computed(() => {
+  if (outputSize.value === 'custom') return `${customWidth.value}x${customHeight.value}`
+  return outputSize.value
+})
 
 // Content Structure
 const contentStructure = reactive([
@@ -658,8 +697,16 @@ const contentStructure = reactive([
 ])
 
 // Generate Count
-const genCount = ref(3)
-const customCount = ref(false)
+const genCount = ref('')
+
+// AI Model
+const selectedModel = ref('deepseek')
+const modelOptions = [
+  { label: 'DeepSeek', value: 'deepseek' },
+  { label: '通义千问 Qwen', value: 'qwen-plus' },
+  { label: '智谱 GLM-4', value: 'glm-4' },
+  { label: '豆包 Doubao', value: 'doubao' }
+]
 
 // ===== AI Chat =====
 const chatRef = ref(null)
@@ -671,29 +718,30 @@ const quickTags = ['如何优化我的详情页？', '如何突出产品卖点�
 
 async function sendMessage() {
   if (!chatInput.value.trim()) return
-  if (generating.value) return
+  if (isGenerating.value) return
   const text = chatInput.value.trim()
   chatMessages.value.push({ role: 'user', content: text })
   chatInput.value = ''
-  generating.value = true
   nextTick(() => { if (chatRef.value) chatRef.value.scrollTop = chatRef.value.scrollHeight })
   try {
     const historyMessages = chatMessages.value.slice(0, -1).map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.content }))
-    const res = await aiDialogue({ messages: historyMessages, content: text, model: 'deepseek' })
+    const res = await aiDialogue({ messages: historyMessages, content: text, model: selectedModel.value })
     chatMessages.value.push({ role: 'ai', content: res?.data?.reply || '已收到您的需求，请稍候。' })
     if (productFiles.value.length && !resultImages.value.length) {
       if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
       try {
         const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
         const fullPrompt = boostText ? `${text}。约束：${boostText}。` : text
-        await gen.fullGenerate(productFiles.value, fullPrompt, { consumePoints: 2, featureName: 'detail_img', title: '详情页生成', n: 1 })
+        const extra = { consumePoints: 2, featureName: 'detail_img', title: '详情页生成', model: selectedModel.value }
+        if (effectiveOutputSize.value) extra.outputSize = effectiveOutputSize.value
+        if (genCount.value) extra.n = Number(genCount.value)
+        await gen.fullGenerate(productFiles.value, fullPrompt, extra)
         if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
       } catch (e) { console.error('详情图生成失败:', e) }
     }
   } catch (e) {
     chatMessages.value.push({ role: 'ai', content: '抱歉，AI服务暂时不可用，请稍后再试。' })
   } finally {
-    generating.value = false
   }
   nextTick(() => { if (chatRef.value) chatRef.value.scrollTop = chatRef.value.scrollHeight })
 }
@@ -706,6 +754,107 @@ function sendQuick(tag) {
 
 function clearChat() {
   chatMessages.value = [{ role: 'ai', content: '您好！我是光合AI助手，有什么可以帮您？' }]
+}
+
+function getObjectUrl(file) {
+  return URL.createObjectURL(file)
+}
+
+// ===== 反推提示词 =====
+const REVERSE_DEFAULT_PROMPT = '请对原图进行逆向视觉解构，推测其生成逻辑与核心构成元素。请以结构化、专业的中文提示词格式输出，需涵盖：结构布局与质感；关键细节；技术参数与视角。输出结果应具有高度可复用性，能直接用于引导图像生成。'
+const reverseDialogVisible = ref(false)
+const reverseImageFile = ref(null)
+const reverseImagePreview = ref('')
+const reversePromptInput = ref(REVERSE_DEFAULT_PROMPT)
+const reverseResult = ref('')
+const reverseLoading = ref(false)
+
+const REVERSE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const REVERSE_MAX_SIZE = 20 * 1024 * 1024
+
+function openReversePromptDialog() {
+  reverseDialogVisible.value = true
+}
+
+function triggerReverseUpload() {
+  if (reverseImagePreview.value) return
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp'
+  input.onchange = (e) => {
+    const file = e.target.files?.[0]
+    if (file) handleReverseFile(file)
+    e.target.value = ''
+  }
+  input.click()
+}
+
+function handleReverseDrop(e) {
+  const file = e.dataTransfer?.files?.[0]
+  if (file) handleReverseFile(file)
+}
+
+function handleReverseFile(file) {
+  if (!REVERSE_ALLOWED_TYPES.includes(file.type)) {
+    ElMessage.error('仅支持 JPG / PNG / WebP 格式的图片')
+    return
+  }
+  if (file.size > REVERSE_MAX_SIZE) {
+    ElMessage.error('图片大小不能超过 20MB')
+    return
+  }
+  reverseImageFile.value = file
+  reverseResult.value = ''
+  const reader = new FileReader()
+  reader.onload = (ev) => { reverseImagePreview.value = ev.target.result }
+  reader.readAsDataURL(file)
+}
+
+function clearReverseImage() {
+  reverseImageFile.value = null
+  reverseImagePreview.value = ''
+  reverseResult.value = ''
+}
+
+async function submitReversePrompt() {
+  if (!reverseImageFile.value) {
+    ElMessage.warning('请先上传一张图片')
+    return
+  }
+  reverseLoading.value = true
+  reverseResult.value = ''
+  try {
+    const imageDataUri = reverseImagePreview.value
+    const prompt = reversePromptInput.value?.trim()
+      ? reversePromptInput.value.trim()
+      : REVERSE_DEFAULT_PROMPT
+    const res = await reversePrompt({ image: imageDataUri, prompt })
+    const data = res?.data || res
+    const result = typeof data === 'string' ? data : (data?.prompt || data?.result || '')
+    reverseResult.value = result || 'AI 未返回文本结果'
+    ElMessage.success('推理完成')
+  } catch (e) {
+    console.error('反推提示词失败:', e)
+    ElMessage.error(e?.message || '反推提示词失败，请重试')
+  } finally {
+    reverseLoading.value = false
+  }
+}
+
+async function copyResult(text) {
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    ElMessage.success('已复制到剪贴板')
+  } catch {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    document.body.appendChild(ta)
+    ta.select()
+    try { document.execCommand('copy'); ElMessage.success('已复制到剪贴板') }
+    catch { ElMessage.error('复制失败，请手动选择文本复制') }
+    document.body.removeChild(ta)
+  }
 }
 
 onMounted(() => {
@@ -868,121 +1017,125 @@ onBeforeUnmount(() => {
   min-width: 300px;
 }
 
-/* Canvas Toolbar */
-.canvas-toolbar {
+.canvas-box {
+  flex: 1;
+  min-height: 300px;
   background: #fff;
   border-radius: 12px;
   border: 1px solid #E8EDF5;
-  padding: 8px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-  flex-shrink: 0;
-}
-.toolbar-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.toolbar-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: none;
-  border: none;
-  font-size: 13px;
-  color: #4B5563;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
-}
-.toolbar-btn:hover { background: #F3F4F6; }
-.toolbar-divider {
-  width: 1px;
-  height: 20px;
-  background: #E8EDF5;
-  margin: 0 4px;
-}
-.zoom-controls { display: flex; align-items: center; gap: 4px; }
-.zoom-btn {
-  width: 28px;
-  height: 28px;
-  border: 1px solid #E8EDF5;
-  border-radius: 6px;
-  background: #fff;
+  overflow: hidden;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  font-size: 14px;
-  color: #4B5563;
-}
-.zoom-value {
-  font-size: 13px;
-  color: #1F2937;
-  min-width: 40px;
-  text-align: center;
 }
 
-.canvas-zoom-controls {
-  position: absolute;
-  bottom: 12px;
-  right: 12px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: rgba(255, 255, 255, 0.9);
-  border-radius: 8px;
-  padding: 4px 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  z-index: 10;
-}
-.canvas-zoom-controls .zoom-btn {
-  width: 28px;
-  height: 28px;
-  border: 1px solid #E8EDF5;
-  border-radius: 6px;
-  background: #fff;
-  cursor: pointer;
-  font-size: 14px;
-  color: #4B5563;
-}
-.canvas-zoom-controls .zoom-btn:hover {
-  border-color: #2563FF;
-  color: #2563FF;
-}
-.canvas-zoom-controls .zoom-value {
-  font-size: 12px;
-  color: #1F2937;
-  min-width: 40px;
-  text-align: center;
-}
-
-/* Canvas Dropzone */
-.canvas-dropzone {
-  flex: 1;
-  min-height: 200px;
-  background: #fff;
-  border: 2px dashed #E8EDF5;
-  border-radius: 12px;
+.canvas-placeholder {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  margin-bottom: 12px;
-  cursor: pointer;
-  transition: border-color 0.2s;
+  gap: 8px;
+  color: #9CA3AF;
+  padding: 24px;
+  text-align: center;
+}
+.canvas-placeholder .placeholder-icon {
+  width: 48px;
+  height: 48px;
+  color: #D1D5DB;
+}
+.canvas-placeholder .placeholder-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #6B7280;
+}
+.canvas-placeholder .placeholder-desc {
+  font-size: 12px;
+  color: #9CA3AF;
+}
+
+/* Canvas result (uploaded images) */
+.canvas-result {
+  flex: 1;
+  min-height: 200px;
+  padding: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-content: flex-start;
+  justify-content: center;
   position: relative;
 }
-.canvas-dropzone:hover { border-color: #2563FF; }
-.dropzone-icon { width: 48px; height: 48px; color: #D1D5DB; }
-.dropzone-title { font-size: 14px; font-weight: 600; color: #1F2937; }
-.dropzone-desc { font-size: 13px; color: #6B7280; }
-.dropzone-desc.highlight { color: #2563FF; font-weight: 500; }
+.uploaded-img {
+  max-width: 100%;
+  max-height: 400px;
+  border-radius: 8px;
+  object-fit: contain;
+}
 
-/* Page Management */
+/* 2x2 result grid */
+.result-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+  min-height: 300px;
+  padding: 8px;
+}
+.result-card {
+  border-radius: 8px;
+  overflow: hidden;
+  background: #F7F9FC;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.result-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* Generating overlay */
+.generating-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  z-index: 5;
+  border-radius: inherit;
+}
+.progress-ring {
+  width: 64px;
+  height: 64px;
+}
+.progress-ring-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2563FF;
+}
+.generating-hint {
+  font-size: 12px;
+  color: #6B7280;
+}
+
+.canvas-bottom-bar {
+  padding: 8px 4px;
+  font-size: 11px;
+  color: #9CA3AF;
+  text-align: center;
+  flex-shrink: 0;
+}
+
 .page-mgmt {
   background: #fff;
   border-radius: 12px;
@@ -1691,5 +1844,214 @@ onBeforeUnmount(() => {
   .right-col { flex: 1 1 auto !important; min-height: 250px; }
   .right-panel-divider { display: none; }
   .config-col { max-height: 200px; overflow-y: auto; }
+}
+
+/* ===== Option Tags (toggleable config options) ===== */
+.option-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.option-tag {
+  padding: 6px 14px;
+  border: 1px solid #E8EDF5;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 12px;
+  color: #6B7280;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+}
+.option-tag:hover {
+  border-color: #2563FF;
+  color: #2563FF;
+}
+.option-tag.active {
+  border-color: #2563FF;
+  background: #EEF2FF;
+  color: #2563FF;
+}
+
+/* ===== Reverse Prompt Entry ===== */
+.reverse-prompt-entry {
+  margin-bottom: 10px;
+}
+.reverse-prompt-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: 1px dashed #E8EDF5;
+  border-radius: 8px;
+  background: #FAFBFC;
+  color: #2563FF;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.reverse-prompt-btn:hover {
+  border-color: #2563FF;
+  background: #EEF2FF;
+}
+.entry-helper {
+  font-size: 11px;
+  color: #9CA3AF;
+  margin-top: 4px;
+}
+
+/* ===== Output Size Row ===== */
+.output-size-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.output-size-row .size-input {
+  width: 80px;
+  padding: 6px 10px;
+  border: 1px solid #E8EDF5;
+  border-radius: 6px;
+  font-size: 12px;
+  text-align: center;
+}
+
+/* ===== AI Chat Footer ===== */
+.chat-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+  padding-top: 6px;
+}
+.chat-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.char-count {
+  font-size: 11px;
+  color: #9CA3AF;
+}
+.chat-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.model-select {
+  width: 140px;
+}
+.chat-send {
+  padding: 8px 14px;
+  background: #2563FF;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.chat-send:hover {
+  background: #1D4ED8;
+}
+.chat-send:disabled {
+  background: #94A3B8;
+  cursor: not-allowed;
+}
+
+/* ===== 反推提示词模态框 ===== */
+.reverse-prompt-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.rp-upload-zone {
+  position: relative;
+  border: 1px dashed #D1D5DB;
+  border-radius: 8px;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  background: #FAFBFC;
+  transition: border-color 0.2s;
+}
+.rp-upload-zone:hover {
+  border-color: #2563FF;
+}
+.rp-upload-text {
+  font-size: 14px;
+  color: #4B5563;
+  margin: 8px 0 0 0;
+}
+.rp-upload-hint {
+  font-size: 12px;
+  color: #9CA3AF;
+  margin: 4px 0 0 0;
+}
+.rp-preview-img {
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  display: block;
+}
+.rp-clear-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rp-clear-btn:hover {
+  background: #EF4444;
+}
+.rp-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1F2937;
+  display: block;
+}
+.rp-prompt-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rp-result-area {
+  border-top: 1px solid #E5E7EB;
+  padding-top: 12px;
+}
+.rp-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.rp-result-box {
+  background: #F3F4F6;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #1F2937;
+  white-space: pre-wrap;
+  max-height: 180px;
+  overflow-y: auto;
 }
 </style>

@@ -2,7 +2,6 @@ import { ref } from 'vue'
 import { getFeatureToggleList, getPublicAllToggles } from '@/api/operation'
 
 const featureToggleMap = ref({})
-let loaded = false
 let loadingPromise = null
 
 const pathToToggleKey = {
@@ -19,11 +18,9 @@ const pathToToggleKey = {
 
 export function useFeatureToggles() {
   async function loadFeatureToggles() {
-    if (loaded) return featureToggleMap.value
     if (loadingPromise) return loadingPromise
     loadingPromise = (async () => {
       try {
-        // 先尝试用list接口（管理员可用），失败则用公开接口获取全部开关（含关闭的）
         let list = []
         try {
           const res = await getFeatureToggleList()
@@ -31,7 +28,6 @@ export function useFeatureToggles() {
             list = res.rows || res.data || []
           }
         } catch {
-          // 非管理员，使用公开接口获取全部开关
           const res = await getPublicAllToggles()
           if (res.code === 200) {
             list = res.data || []
@@ -43,9 +39,9 @@ export function useFeatureToggles() {
           map[key] = item.enabled || '1'
         })
         featureToggleMap.value = map
-        loaded = true
       } catch {
-        // 加载失败，默认全部可见
+        // 加载失败，fail-secure：标记全部为已禁用
+        featureToggleMap.value = {}
       } finally {
         loadingPromise = null
       }

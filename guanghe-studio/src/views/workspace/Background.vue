@@ -66,8 +66,8 @@
       <!-- Divider + Toggle: canvas ⇔ right panel -->
       <div class="col-divider-wrapper">
         <div class="col-divider" @mousedown="startColResize($event, 'right')"></div>
-        <div class="config-toggle-btn" @click="configCollapsed = !configCollapsed" :title="configCollapsed ? '展开创作配置' : '折叠创作配置'">
-          <el-icon :size="14"><ArrowLeft v-if="!configCollapsed" /><ArrowRight v-else /></el-icon>
+        <div class="config-toggle-btn" :class="{ active: !configCollapsed }" @click="configCollapsed = !configCollapsed" :title="configCollapsed ? '展开创作配置' : '折叠创作配置'">
+          <el-icon :size="14"><ArrowRight v-if="!configCollapsed" /><ArrowLeft v-else /></el-icon>
         </div>
       </div>
 
@@ -83,7 +83,7 @@
               <!-- 创作配置 总折叠 -->
               <div class="panel-header" @click="toggleAllSections">
                 <span class="panel-title">创作配置</span>
-                <span class="panel-toggle-all">{{ allExpanded ? '全部折叠 ▲' : '全部展开 ▼' }}</span>
+                <span class="panel-toggle-all" :class="{ active: allExpanded }">{{ allExpanded ? '全部折叠 ▲' : '全部展开 ▼' }}</span>
               </div>
 
               <!-- 反推提示词入口 -->
@@ -1248,9 +1248,13 @@ onBeforeUnmount(() => {
   border: 1px solid #E8EDF5;
   border-radius: 8px 0 0 8px;
   cursor: pointer;
-  color: #6B7280;
+  color: #9CA3AF;
   box-shadow: -2px 0 8px rgba(0,0,0,0.06);
   transition: all 0.2s ease;
+}
+.col-divider-wrapper .config-toggle-btn.active {
+  color: #2563FF;
+  border-color: #2563FF;
 }
 .col-divider-wrapper .config-toggle-btn:hover {
   background: #F0F4FF;
@@ -1544,12 +1548,15 @@ onBeforeUnmount(() => {
 
 .panel-toggle-all {
   font-size: 12px;
-  color: #2563FF;
+  color: #9CA3AF;
   font-weight: 400;
   display: flex;
   align-items: center;
   gap: 2px;
-  transition: opacity 0.2s;
+  transition: all 0.2s;
+}
+.panel-toggle-all.active {
+  color: #2563FF;
 }
 .panel-toggle-all:hover { opacity: 0.7; }
 
