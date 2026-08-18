@@ -347,20 +347,19 @@
                 <div class="output-row">
                   <span class="output-label">输出尺寸</span>
                   <el-select v-model="outputSize" style="width: 140px" size="small">
-                    <el-option label="2000 x 2000" value="2000" />
-                    <el-option label="1500 x 1500" value="1500" />
-                    <el-option label="1000 x 1000" value="1000" />
+                    <el-option v-for="s in outputSizeOptions" :key="s.value" :label="s.label" :value="s.value" />
                   </el-select>
                 </div>
                 <div class="output-row">
                   <span class="output-label">生成数量</span>
                   <div class="count-group compact">
                     <div
-                      v-for="n in 5"
+                      v-for="n in maxGenerateCount"
                       :key="n"
                       class="count-btn"
                       :class="{ active: !useCustomCount && presetCount === n }"
                       @click="selectPresetCount(n)"
+                      v-show="n <= 5"
                     >{{ n }}</div>
                     <div
                       class="count-btn custom-btn"
@@ -371,7 +370,7 @@
                 </div>
                 <div class="output-row custom-count-row" v-if="useCustomCount">
                   <span class="output-label">自定义数量</span>
-                  <el-input-number v-model="customCount" :min="1" :max="20" size="small" controls-position="right" style="width: 120px" />
+                  <el-input-number v-model="customCount" :min="1" :max="maxGenerateCount" size="small" controls-position="right" style="width: 120px" />
                 </div>
               </div>
             </div>
@@ -496,8 +495,7 @@ import { useImageGeneration } from '@/composables/useImageGeneration'
 import { useWorkflowProgress } from '@/composables/useWorkflowProgress'
 import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
 import AiAssistant from '@/components/AiAssistant.vue'
-import { getPublicPublishedAiModels } from '@/api/customer'
-import { reversePrompt } from '@/api/customer'
+import { getPublicPublishedAiModels, reversePrompt, getPublicCreationConfigByGroup, listPromptLibraryBatch } from '@/api/customer'
 import { ElMessage } from 'element-plus'
 
 // const { canvasUI, handleCanvasExport } = useCanvasInteractions({
@@ -629,6 +627,39 @@ const clothing = ref('商务')
 const sceneStyle = ref('pure-bg')
 const outputSize = ref('2000')
 
+// ===== 配置选项（从后台加载） =====
+const genderOptions = ref([
+  { label: '男', value: '男' },
+  { label: '女', value: '女' },
+  { label: '不限', value: '不限' },
+])
+const ageRanges = ref(['青年(18-25)', '轻熟(26-35)', '成熟(36-45)', '中年(46+)'])
+const hairstyles = ref(['短发', '长发', '卷发', '直发', '马尾', '丸子头'])
+const ethnicities = ref([
+  { label: '亚洲', value: 'asian', color: '#F5DEB3' },
+  { label: '欧美', value: 'western', color: '#FFDAB9' },
+  { label: '非洲', value: 'african', color: '#8B6914' },
+  { label: '中东', value: 'middleeast', color: '#D2B48C' },
+  { label: '拉丁', value: 'latin', color: '#DEB887' }
+])
+const poses = ref(['站立', '坐姿', '行走', '半身', '全身', '回眸', '侧面', '正面'])
+const clothingOptions = ref(['商务', '休闲', '运动', '正装', '街拍'])
+const sceneOptions = ref([
+  { label: '室内白底', value: 'indoor-white', gradient: 'linear-gradient(135deg, #ffffff, #e9ecef)', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M3 12h18" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2"/></svg>' },
+  { label: '室内场景', value: 'indoor', gradient: 'linear-gradient(135deg, #e0e7ff, #c7d2fe)', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M4 20V8l8-5 8 5v12" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><rect x="9" y="12" width="6" height="8" stroke="currentColor" stroke-width="1.5"/></svg>' },
+  { label: '户外自然', value: 'outdoor-nature', gradient: 'linear-gradient(135deg, #d1fae5, #a7f3d0)', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M12 3l5 8H7l5-8z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 11v9" stroke="currentColor" stroke-width="1.5"/><path d="M9 20h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>' },
+  { label: '街头', value: 'street', gradient: 'linear-gradient(135deg, #fef3c7, #fde68a)', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M5 21V7l5-3v17" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 21V11l6 3v7" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 21h18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>' },
+  { label: '商场', value: 'mall', gradient: 'linear-gradient(135deg, #fce7f3, #fbcfe8)', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><rect x="4" y="8" width="16" height="13" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M9 8V5a3 3 0 016 0v3" stroke="currentColor" stroke-width="1.5"/><path d="M4 13h16" stroke="currentColor" stroke-width="1.5"/></svg>' },
+  { label: '纯色背景', value: 'pure-bg', gradient: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.5"/></svg>' }
+])
+const outputSizeOptions = ref([
+  { label: '2000 x 2000', value: '2000' },
+  { label: '1500 x 1500', value: '1500' },
+  { label: '1000 x 1000', value: '1000' },
+])
+const maxGenerateCount = ref(20)
+const promptMap = ref({})
+
 // ===== 提示词增强（从 gh_prompt_library 拉取） =====
 const boostProduct = ref('')
 const boostMaterial = ref('')
@@ -688,31 +719,6 @@ function selectModel(model) {
   if (model.clothing) clothing.value = model.clothing
   if (model.scene) sceneStyle.value = model.scene
 }
-
-
-
-const ageRanges = ['青年(18-25)', '轻熟(26-35)', '成熟(36-45)', '中年(46+)']
-const hairstyles = ['短发', '长发', '卷发', '直发', '马尾', '丸子头']
-
-const ethnicities = [
-  { label: '亚洲', value: 'asian', color: '#F5DEB3' },
-  { label: '欧美', value: 'western', color: '#FFDAB9' },
-  { label: '非洲', value: 'african', color: '#8B6914' },
-  { label: '中东', value: 'middleeast', color: '#D2B48C' },
-  { label: '拉丁', value: 'latin', color: '#DEB887' }
-]
-
-const poses = ['站立', '坐姿', '行走', '半身', '全身', '回眸', '侧面', '正面']
-const clothingOptions = ['商务', '休闲', '运动', '正装', '街拍']
-
-const sceneOptions = [
-  { label: '室内白底', value: 'indoor-white', gradient: 'linear-gradient(135deg, #ffffff, #e9ecef)', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M3 12h18" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2"/></svg>' },
-  { label: '室内场景', value: 'indoor', gradient: 'linear-gradient(135deg, #e0e7ff, #c7d2fe)', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M4 20V8l8-5 8 5v12" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><rect x="9" y="12" width="6" height="8" stroke="currentColor" stroke-width="1.5"/></svg>' },
-  { label: '户外自然', value: 'outdoor-nature', gradient: 'linear-gradient(135deg, #d1fae5, #a7f3d0)', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M12 3l5 8H7l5-8z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 11v9" stroke="currentColor" stroke-width="1.5"/><path d="M9 20h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>' },
-  { label: '街头', value: 'street', gradient: 'linear-gradient(135deg, #fef3c7, #fde68a)', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M5 21V7l5-3v17" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 21V11l6 3v7" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 21h18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>' },
-  { label: '商场', value: 'mall', gradient: 'linear-gradient(135deg, #fce7f3, #fbcfe8)', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><rect x="4" y="8" width="16" height="13" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M9 8V5a3 3 0 016 0v3" stroke="currentColor" stroke-width="1.5"/><path d="M4 13h16" stroke="currentColor" stroke-width="1.5"/></svg>' },
-  { label: '纯色背景', value: 'pure-bg', gradient: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.5"/></svg>' }
-]
 
 // ---- Computed ----
 const allExpanded = computed(() => {
@@ -775,6 +781,7 @@ onMounted(() => {
   document.addEventListener('mousemove', onMouseMove)
   document.addEventListener('mouseup', onMouseUp)
   loadModelList()
+  loadCreationConfig()
   nextTick(() => {
     const rightCol = document.querySelector('.right-col')
     if (rightCol) {
@@ -854,6 +861,131 @@ async function handleGenerate() {
 function clearCanvas() {
   productImage.value = ''
   generated.value = false
+}
+
+// ===== 从后台创作配置读取AI模特配置 =====
+async function loadCreationConfig() {
+  try {
+    const res = await getPublicCreationConfigByGroup('ai_model')
+    const list = res.data || res.rows || []
+    const map = {}
+    list.forEach(c => { map[c.configKey] = c })
+
+    // ---- 性别选项 ----
+    const genderCfg = map.gender_options
+    if (genderCfg && genderCfg.configValue) {
+      const arr = JSON.parse(genderCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        genderOptions.value = arr.map(s => ({ label: s.label || s.value, value: s.label || s.value }))
+      }
+    }
+
+    // ---- 年龄选项 ----
+    const ageCfg = map.age_ranges
+    if (ageCfg && ageCfg.configValue) {
+      const arr = JSON.parse(ageCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        ageRanges.value = arr.map(s => typeof s === 'string' ? s : (s.label || s.value))
+      }
+    }
+
+    // ---- 发型选项 ----
+    const hairCfg = map.hairstyles
+    if (hairCfg && hairCfg.configValue) {
+      const arr = JSON.parse(hairCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        hairstyles.value = arr.map(s => typeof s === 'string' ? s : (s.label || s.value))
+      }
+    }
+
+    // ---- 人种选项 ----
+    const ethnicityCfg = map.ethnicities
+    if (ethnicityCfg && ethnicityCfg.configValue) {
+      const arr = JSON.parse(ethnicityCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        const colorMap = { asian: '#F5DEB3', caucasian: '#FFDAB9', western: '#FFDAB9', african: '#8B6914', latino: '#DEB887', middle_east: '#D2B48C', middleeast: '#D2B48C' }
+        ethnicities.value = arr.map(s => ({
+          label: s.label || s.value,
+          value: s.value,
+          color: s.color || colorMap[s.value] || '#F5DEB3'
+        }))
+      }
+    }
+
+    // ---- 姿势选项 ----
+    const poseCfg = map.poses
+    if (poseCfg && poseCfg.configValue) {
+      const arr = JSON.parse(poseCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        poses.value = arr.map(s => typeof s === 'string' ? s : (s.label || s.value))
+      }
+    }
+
+    // ---- 服装选项 ----
+    const clothingCfg = map.clothing_options
+    if (clothingCfg && clothingCfg.configValue) {
+      const arr = JSON.parse(clothingCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        clothingOptions.value = arr.map(s => typeof s === 'string' ? s : (s.label || s.value))
+      }
+    }
+
+    // ---- 场景选项 ----
+    const sceneCfg = map.scene_options
+    if (sceneCfg && sceneCfg.configValue) {
+      const arr = JSON.parse(sceneCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        // 保留原有 gradient/svgIcon，只更新 label/value
+        const existingMap = {}
+        sceneOptions.value.forEach(s => { existingMap[s.value] = s })
+        sceneOptions.value = arr.map(s => {
+          const val = s.value || s.label
+          return existingMap[val] || {
+            label: s.label || val,
+            value: val,
+            gradient: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
+            svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5"/></svg>'
+          }
+        })
+      }
+    }
+
+    // ---- 输出尺寸 ----
+    const sizeCfg = map.output_sizes
+    if (sizeCfg && sizeCfg.configValue) {
+      const arr = JSON.parse(sizeCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        outputSizeOptions.value = arr.map(s => ({ label: s.label || s.value, value: (s.value || '').replace(/x.*/, '') }))
+      }
+    }
+
+    // ---- 生成数量上限 ----
+    const maxCountCfg = map.max_generate_count
+    if (maxCountCfg && maxCountCfg.configValue) {
+      const n = Number(JSON.parse(maxCountCfg.configValue))
+      if (n > 0) maxGenerateCount.value = n
+    }
+
+    // 加载提示词映射
+    await loadPromptMap()
+  } catch { /* use defaults */ }
+}
+
+// 加载提示词库映射
+async function loadPromptMap() {
+  try {
+    const res = await listPromptLibraryBatch('opt_age,opt_hairstyle,opt_ethnicity,opt_pose,opt_clothing,opt_scene', 'ai_model')
+    const items = res.data || res || []
+    const map = {}
+    items.forEach(item => {
+      if (item.promptKey && item.promptText) {
+        map[item.promptKey] = item.promptText
+      }
+    })
+    promptMap.value = map
+  } catch {
+    promptMap.value = {}
+  }
 }
 </script>
 

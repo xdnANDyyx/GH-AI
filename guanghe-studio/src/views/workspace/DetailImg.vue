@@ -292,15 +292,9 @@
                   </span>
                 </div>
                 <div class="section-body" v-show="sections.genCount">
-                  <span class="config-label">生成数量</span>
-                  <div class="option-tags">
-                    <div
-                      v-for="n in maxGenerateCount"
-                      :key="n"
-                      class="option-tag"
-                      :class="{ active: genCount === n }"
-                      @click="genCount = (genCount === n ? '' : n)"
-                    >{{ n }}张</div>
+                  <div class="gen-count-row">
+                    <span class="config-label">生成数量</span>
+                    <el-input-number v-model="genCount" :min="1" :max="maxGenerateCount" size="small" controls-position="right" style="width: 120px" />
                   </div>
                 </div>
               </div>
@@ -700,7 +694,7 @@ const contentStructure = reactive([
 ])
 
 // Generate Count
-const genCount = ref('')
+const genCount = ref(1)
 // 生成数量上限（从后台加载）
 const maxGenerateCount = ref(5)
 // 提示词映射：value → promptText（从提示词库加载）
@@ -742,6 +736,7 @@ async function sendMessage() {
         const extra = { consumePoints: 2, featureName: 'detail_img', title: '详情页生成', model: selectedModel.value }
         if (effectiveOutputSize.value) extra.outputSize = effectiveOutputSize.value
         if (genCount.value) extra.n = Number(genCount.value)
+    else extra.n = 1
         await gen.fullGenerate(productFiles.value, fullPrompt, extra)
         if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
       } catch (e) { console.error('详情图生成失败:', e) }

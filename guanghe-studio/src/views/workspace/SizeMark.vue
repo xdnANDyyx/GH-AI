@@ -391,7 +391,7 @@ import { useWorkflowProgress } from '@/composables/useWorkflowProgress'
 import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
 import AiAssistant from '@/components/AiAssistant.vue'
 import { ElMessage } from 'element-plus'
-import { reversePrompt } from '@/api/customer'
+import { reversePrompt, getPublicCreationConfigByGroup, listPromptLibraryBatch } from '@/api/customer'
 
 export default {
   name: 'SizeMarkView',
@@ -423,12 +423,21 @@ export default {
     const lineColor = ref('#1F2937')
 
     // Output ratio
-    const ratioOptions = [
+    const ratioOptions = ref([
       { label: '1:1', value: '1:1' },
       { label: '4:5', value: '4:5' },
       { label: '16:9', value: '16:9' },
       { label: '自定义', value: 'custom' }
-    ]
+    ])
+    // 模板列表（从后台加载）
+    const templateOptions = ref([
+      { label: '标准尺寸图', value: 'standard' },
+      { label: '多尺寸对比', value: 'compare' },
+      { label: '场景尺寸图', value: 'scene' },
+      { label: '更多模板', value: 'more' },
+    ])
+    // 提示词映射
+    const promptMap = ref({})
     const selectedRatio = ref('4:5')
     const customRatioWidth = ref(4)
     const customRatioHeight = ref(5)
@@ -438,7 +447,7 @@ export default {
 
     // Language
     const language = ref('zh-CN')
-    const languages = [
+    const languages = ref([
       { label: '中文（简体）', value: 'zh-CN' },
       { label: '英语（美国）', value: 'en-US' },
       { label: '英语（英国）', value: 'en-GB' },
@@ -447,7 +456,7 @@ export default {
       { label: '德语', value: 'de-DE' },
       { label: '法语', value: 'fr-FR' },
       { label: '西班牙语', value: 'es-ES' },
-    ]
+    ])
 
     // Product views for canvas display
     const productViews = computed(() => {
@@ -572,6 +581,7 @@ export default {
       document.addEventListener('mouseup', onMouseUp)
       document.addEventListener('mousemove', onAiMouseMove)
       document.addEventListener('mouseup', onAiMouseUp)
+      loadCreationConfig()
     })
 
     onBeforeUnmount(() => {
@@ -580,6 +590,75 @@ export default {
       document.removeEventListener('mousemove', onAiMouseMove)
       document.removeEventListener('mouseup', onAiMouseUp)
     })
+
+    // ===== 从后台创作配置读取尺寸标记配置 =====
+    async function loadCreationConfig() {
+      try {
+        const res = await getPublicCreationConfigByGroup('size_mark')
+        const list = res.data || res.rows || []
+        const map = {}
+        list.forEach(c => { map[c.configKey] = c })
+
+        // ---- 线条样式 ----
+        const lineCfg = map.line_styles
+        if (lineCfg && lineCfg.configValue) {
+          // line_styles 是选项列表，这里不做模板替换（模板是硬编码 SVG），仅保留配置
+        }
+
+        // ---- 输出比例 ----
+        const ratioCfg = map.ratio_options
+        if (ratioCfg && ratioCfg.configValue) {
+          const arr = JSON.parse(ratioCfg.configValue)
+          if (Array.isArray(arr) && arr.length) {
+            ratioOptions.value = arr.map(s => ({ label: s.label || s.value, value: s.value }))
+          }
+        }
+
+        // ---- 模板选择 ----
+        const tplCfg = map.templates
+        if (tplCfg && tplCfg.configValue) {
+          const arr = JSON.parse(tplCfg.configValue)
+          if (Array.isArray(arr) && arr.length) {
+            templateOptions.value = arr.map(s => ({ label: s.label || s.value, value: s.value }))
+          }
+        }
+
+        // ---- 语言列表（从通用配置加载） ----
+        try {
+          const commonRes = await getPublicCreationConfigByGroup('common')
+          const commonList = commonRes.data || commonRes.rows || []
+          const commonMap = {}
+          commonList.forEach(c => { commonMap[c.configKey] = c })
+          const langCfg = commonMap.languages
+          if (langCfg && langCfg.configValue) {
+            const items = JSON.parse(langCfg.configValue)
+            if (Array.isArray(items) && items.length) {
+              languages.value = items.filter(l => l.value)
+            }
+          }
+        } catch { /* use defaults */ }
+
+        // 加载提示词映射
+        await loadPromptMap()
+      } catch { /* use defaults */ }
+    }
+
+    // 加载提示词库映射
+    async function loadPromptMap() {
+      try {
+        const res = await listPromptLibraryBatch('opt_ratio,opt_language', 'size_mark')
+        const items = res.data || res || []
+        const map = {}
+        items.forEach(item => {
+          if (item.promptKey && item.promptText) {
+            map[item.promptKey] = item.promptText
+          }
+        })
+        promptMap.value = map
+      } catch {
+        promptMap.value = {}
+      }
+    }
 
     // ---- Methods ----
     const fileInput = ref(null)
@@ -772,6 +851,7 @@ export default {
       lineStyle, lineColor,
       ratioOptions, selectedRatio,
       customRatioWidth, customRatioHeight,
+      templateOptions,
       selectedTemplate,
       language, languages,
       productViews,

@@ -247,15 +247,9 @@
                   </span>
                 </div>
                 <div v-show="sections.output" class="section-body">
-                  <span class="config-label">生成数量</span>
-                  <div class="option-tags">
-                    <div
-                      v-for="n in generateCountOptions"
-                      :key="n"
-                      class="option-tag"
-                      :class="{ active: generateCount === n }"
-                      @click="generateCount = (generateCount === n ? '' : n)"
-                    >{{ n }}张</div>
+                  <div class="gen-count-row">
+                    <span class="config-label">生成数量</span>
+                    <el-input-number v-model="generateCount" :min="1" :max="maxGenerateCount" size="small" controls-position="right" style="width: 120px" />
                   </div>
                 </div>
               </div>
@@ -507,7 +501,7 @@ export default {
       for (let i = 1; i <= max; i++) arr.push(i)
       return arr
     })
-    const generateCount = ref('')
+    const generateCount = ref(1)
 
     // Prompt
     const chatPrompt = ref('')
@@ -914,7 +908,7 @@ export default {
       sizeOptions, outputSize, customWidth, customHeight, effectiveOutputSize,
       purposes, activePurpose,
       sellingPoints, activeSellingPoints, toggleSellingPoint,
-      generateCount, generateCountOptions,
+      generateCount, maxGenerateCount,
       chatPrompt, chatMessages, selectedModel, modelOptions,
       allExpanded,
       isGenerating, genProgress, genStatus,

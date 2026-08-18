@@ -598,7 +598,7 @@ const promptFilters = reactive({ module: '', status: '' })
 const tagFilters = reactive({ tagName: '', tagType: '', status: '' })
 
 // 以下工作台的配置由提示词库自动同步，不需要手动新增
-const autoSyncGroups = ['white_bg', 'bg_generation', 'main_image', 'detail_img']
+const autoSyncGroups = ['white_bg', 'bg_generation', 'main_image', 'detail_img', 'retouch', 'ai_model', 'size_mark', 'banner']
 const canAddCreationConfig = computed(() => !autoSyncGroups.includes(creationFilters.configGroup))
 
 const promptSubTab = ref('template')

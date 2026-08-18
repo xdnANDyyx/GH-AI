@@ -140,17 +140,13 @@
                   <div class="output-row">
                     <span class="output-label">画质</span>
                     <select v-model="outputQuality" class="form-select">
-                      <option value="standard">标准</option>
-                      <option value="high">高清</option>
-                      <option value="ultra">超清</option>
+                      <option v-for="q in qualityOptions" :key="q.value" :value="q.value">{{ q.label }}</option>
                     </select>
                   </div>
                   <div class="output-row">
                     <span class="output-label">输出格式</span>
                     <select v-model="outputFormat" class="form-select">
-                      <option value="png">PNG</option>
-                      <option value="jpg">JPG</option>
-                      <option value="webp">WebP</option>
+                      <option v-for="f in formatOptions" :key="f.value" :value="f.value">{{ f.label }}</option>
                     </select>
                   </div>
                   <div class="output-row">
@@ -278,7 +274,7 @@
 import { UploadFilled, ArrowDown, ArrowLeft, ArrowRight, MagicStick, DocumentCopy } from '@element-plus/icons-vue'
 import { ref, reactive, computed, onMounted, onActivated, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import { getPublicCreationConfigByGroup, reversePrompt } from '@/api/customer'
+import { getPublicCreationConfigByGroup, reversePrompt, listPromptLibraryBatch } from '@/api/customer'
 // import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
 // import CanvasOverlay from '@/components/CanvasOverlay.vue'
 import { useImageGeneration } from '@/composables/useImageGeneration'
@@ -328,7 +324,10 @@ export default {
       { key: 'sharpen', name: '锐化增强', desc: '提升清晰度', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M12 2l10 10-10 10L2 12 12 2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.2" fill="currentColor" opacity="0.1"/></svg>' },
       { key: 'denoise', name: '降噪处理', desc: '减少噪点', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/><path d="M8 8l8 8M16 8l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>' },
     ]
+    // 精修工具列表（从后台加载）
     const retouchTools = ref([...allRetouchTools])
+    // 提示词映射：tool key → promptText
+    const promptMap = ref({})
 
     // Config sections
     const sections = reactive({
@@ -337,14 +336,27 @@ export default {
       output: true,
       promptBoost: false,
     })
+    // 输出设置（从后台加载）
     const outputQuality = ref('high')
     const outputFormat = ref('png')
+    const qualityOptions = ref([
+      { label: '标准', value: 'standard' },
+      { label: '高清', value: 'high' },
+      { label: '超清', value: 'ultra' },
+    ])
+    const formatOptions = ref([
+      { label: 'PNG', value: 'png' },
+      { label: 'JPG', value: 'jpg' },
+      { label: 'WebP', value: 'webp' },
+    ])
+    const defaultIntensity = ref(50)
+    const maxGenerateCount = ref(5)
     const boostProduct = ref('')
     const boostMaterial = ref('')
     const boostProductRef = ref(null)
     const boostMaterialRef = ref(null)
 
-    const sizeOptions = [
+    const sizeOptions = ref([
       { label: '1:1', value: '1:1', w: 20, h: 20 },
       { label: '4:3', value: '4:3', w: 24, h: 18 },
       { label: '3:4', value: '3:4', w: 18, h: 24 },
@@ -353,7 +365,7 @@ export default {
       { label: '3:2', value: '3:2', w: 24, h: 16 },
       { label: '2:3', value: '2:3', w: 16, h: 24 },
       { label: '自定义', value: 'custom', w: 18, h: 18 },
-    ]
+    ])
     const selectedSize = ref('1:1')
 
     // Prompt
@@ -513,7 +525,7 @@ export default {
       document.addEventListener('mousemove', onAiMouseMove)
       document.addEventListener('mouseup', onAiMouseUp)
       document.addEventListener('click', handleClickOutside)
-      loadRetouchConfig()
+      loadCreationConfig()
       consumeHandoffImage()
     })
 
@@ -521,18 +533,77 @@ export default {
       consumeHandoffImage()
     })
 
-    async function loadRetouchConfig() {
+    // ===== 从后台创作配置读取产品精修配置 =====
+    async function loadCreationConfig() {
       try {
         const res = await getPublicCreationConfigByGroup('retouch')
         const list = res.data || res.rows || []
-        const cfg = list.find(c => c.configKey === 'config')
-        if (cfg && cfg.configValue) {
-          const c = JSON.parse(cfg.configValue)
-          if (c.tools && Array.isArray(c.tools)) {
-            retouchTools.value = allRetouchTools.filter(t => c.tools.includes(t.key))
+        const map = {}
+        list.forEach(c => { map[c.configKey] = c })
+
+        // ---- 精修工具 ----
+        const toolsCfg = map.tools
+        if (toolsCfg && toolsCfg.configValue) {
+          const arr = JSON.parse(toolsCfg.configValue)
+          if (Array.isArray(arr) && arr.length) {
+            // 从后台工具列表过滤出已有的工具（保留 SVG 图标）
+            const keySet = new Set(arr.map(t => typeof t === 'string' ? t : t.value))
+            retouchTools.value = allRetouchTools.filter(t => keySet.has(t.key))
           }
         }
+
+        // ---- 画质选项 ----
+        const qualityCfg = map.quality_options
+        if (qualityCfg && qualityCfg.configValue) {
+          const arr = JSON.parse(qualityCfg.configValue)
+          if (Array.isArray(arr) && arr.length) {
+            qualityOptions.value = arr.map(s => ({ label: s.label || s.value, value: s.value }))
+          }
+        }
+
+        // ---- 输出格式 ----
+        const formatCfg = map.format_options
+        if (formatCfg && formatCfg.configValue) {
+          const arr = JSON.parse(formatCfg.configValue)
+          if (Array.isArray(arr) && arr.length) {
+            formatOptions.value = arr.map(s => ({ label: s.label || s.value, value: (s.value || '').toLowerCase() }))
+          }
+        }
+
+        // ---- 默认精修强度 ----
+        const intensityCfg = map.default_intensity
+        if (intensityCfg && intensityCfg.configValue) {
+          const n = Number(JSON.parse(intensityCfg.configValue))
+          if (n > 0) defaultIntensity.value = n
+        }
+
+        // ---- 生成数量上限 ----
+        const maxCountCfg = map.max_generate_count
+        if (maxCountCfg && maxCountCfg.configValue) {
+          const n = Number(JSON.parse(maxCountCfg.configValue))
+          if (n > 0) maxGenerateCount.value = n
+        }
+
+        // 加载提示词映射
+        await loadPromptMap()
       } catch { /* use defaults */ }
+    }
+
+    // 加载提示词库映射：将工具/尺寸的 value 映射到对应的提示词内容
+    async function loadPromptMap() {
+      try {
+        const res = await listPromptLibraryBatch('opt_tool,opt_size', 'retouch')
+        const items = res.data || res || []
+        const map = {}
+        items.forEach(item => {
+          if (item.promptKey && item.promptText) {
+            map[item.promptKey] = item.promptText
+          }
+        })
+        promptMap.value = map
+      } catch {
+        promptMap.value = {}
+      }
     }
 
     onBeforeUnmount(() => {
@@ -730,7 +801,9 @@ export default {
       sections,
       sizeOptions, selectedSize,
       promptTags, showPromptInput, newPromptTag,
-      outputQuality, outputFormat, toggleOutputSection,
+      outputQuality, outputFormat, qualityOptions, formatOptions,
+      defaultIntensity, maxGenerateCount, promptMap,
+      toggleOutputSection,
       allExpanded,
       canvasFlex, configFlex, aiFlex,
       aiPanel,

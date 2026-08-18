@@ -192,10 +192,9 @@
                 <span class="expand-text">{{ sections.count ? '收起' : '展开' }}<el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.count }"><ArrowDown /></el-icon></span>
               </div>
               <div class="section-body" v-show="sections.count">
-                <div class="count-row">
-                  <span v-for="n in [1,2,3,4,5]" :key="n" class="count-btn" :class="{ active: generateCount === n }" @click="generateCount = n">{{ n }}张</span>
-                  <span class="count-btn" :class="{ active: generateCount > 5 }" @click="generateCount = customCount || 6">自定义</span>
-                  <input class="count-input" type="number" v-model.number="customCount" @change="generateCount = customCount" min="1" max="10">
+                <div class="gen-count-row">
+                  <span class="config-label">生成数量</span>
+                  <el-input-number v-model="generateCount" :min="1" :max="maxGenerateCount" size="small" controls-position="right" style="width: 120px" />
                 </div>
               </div>
             </div>
@@ -327,7 +326,7 @@ import { ArrowDown, ArrowLeft, ArrowRight, WarningFilled, FullScreen, RefreshLef
 import { ElMessage } from 'element-plus'
 import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
 import AiAssistant from '@/components/AiAssistant.vue'
-import { reversePrompt } from '@/api/customer'
+import { reversePrompt, getPublicCreationConfigByGroup, listPromptLibraryBatch } from '@/api/customer'
 // import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
 // import CanvasOverlay from '@/components/CanvasOverlay.vue'
 
@@ -348,12 +347,12 @@ export default {
 
     // Canvas size
     const canvasPreset = ref('1200x300'); const canvasWidth = ref(1200); const canvasHeight = ref(300); const sizeLinked = ref(true)
-    const sizePresets = [
+    const sizePresets = ref([
       { label: '1200×300（横幅）', value: '1200x300', w: 1200, h: 300 },
       { label: '1920×600（通栏）', value: '1920x600', w: 1920, h: 600 },
       { label: '1920×1080（大屏）', value: '1920x1080', w: 1920, h: 1080 },
       { label: '自定义', value: 'custom', w: 0, h: 0 },
-    ]
+    ])
 
     // Sections
     const sections = reactive({ canvasSize: true, upload: true, bannerType: true, purpose: true, keyInfo: true, count: true, language: true, promptBoost: false })
@@ -361,23 +360,28 @@ export default {
 
     // Banner type
     const activeBannerType = ref('promo')
-    const bannerTypes = [
+    const bannerTypes = ref([
       { key: 'promo', name: '促销活动', desc: '打折促销、限时优惠' },
       { key: 'new', name: '新品上市', desc: '新品发布、产品推荐' },
       { key: 'brand', name: '品牌宣传', desc: '品牌故事、品牌形象' },
       { key: 'season', name: '节日季节', desc: '节日活动、季节主题' },
       { key: 'notice', name: '信息通知', desc: '公告通知、店铺信息' },
       { key: 'decorate', name: '店铺装修', desc: '店铺头图、页面装饰' },
-    ]
+    ])
 
     // Purposes
     const selectedPurposes = ref(['sales'])
-    const purposes = [
+    const purposes = ref([
       { key: 'sales', label: '提升销量/促销转化' }, { key: 'newProduct', label: '新品推广' },
       { key: 'branding', label: '品牌宣传/提升认知' }, { key: 'traffic', label: '活动宣传/引流' },
       { key: 'clearance', label: '清仓/库存处理' }, { key: 'festival', label: '节日营销' },
       { key: 'shopImage', label: '店铺形象展示' }, { key: 'other', label: '其他' },
-    ]
+    ])
+
+    // 提示词映射
+    const promptMap = ref({})
+    // 生成数量上限
+    const maxGenerateCount = ref(10)
 
     // Key info
     const mainTitle = ref(''); const subTitle = ref(''); const btnText = ref('')
@@ -385,7 +389,7 @@ export default {
 
     // Language
     const language = ref('zh-CN')
-    const languages = [
+    const languages = ref([
       { label: '中文（简体）', value: 'zh-CN' },
       { label: '英语（美国）', value: 'en-US' },
       { label: '英语（英国）', value: 'en-GB' },
@@ -394,7 +398,7 @@ export default {
       { label: '德语', value: 'de-DE' },
       { label: '法语', value: 'fr-FR' },
       { label: '西班牙语', value: 'es-ES' },
-    ]
+    ])
 
     // Prompt boost
     const boostProduct = ref(''); const boostMaterial = ref('')
@@ -559,12 +563,92 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
     onMounted(async () => {
       document.addEventListener('mousemove', onMouseMove); document.addEventListener('mouseup', onMouseUp)
       document.addEventListener('mousemove', onAiMouseMove); document.addEventListener('mouseup', onAiMouseUp)
+      loadCreationConfig()
       await Promise.allSettled([gen.loadPromptInfo(), gen.loadPixelConfigs(), gen.loadDeductTypes()])
     })
     onBeforeUnmount(() => {
       document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp)
       document.removeEventListener('mousemove', onAiMouseMove); document.removeEventListener('mouseup', onAiMouseUp)
     })
+
+    // ===== 从后台创作配置读取Banner设计配置 =====
+    async function loadCreationConfig() {
+      try {
+        const res = await getPublicCreationConfigByGroup('banner')
+        const list = res.data || res.rows || []
+        const map = {}
+        list.forEach(c => { map[c.configKey] = c })
+
+        // ---- 画布尺寸预设 ----
+        const sizeCfg = map.size_presets
+        if (sizeCfg && sizeCfg.configValue) {
+          const arr = JSON.parse(sizeCfg.configValue)
+          if (Array.isArray(arr) && arr.length) {
+            sizePresets.value = arr.map(s => ({ label: s.label || s.value, value: s.value, w: s.w || 0, h: s.h || 0 }))
+          }
+        }
+
+        // ---- Banner 类型 ----
+        const typeCfg = map.banner_types
+        if (typeCfg && typeCfg.configValue) {
+          const arr = JSON.parse(typeCfg.configValue)
+          if (Array.isArray(arr) && arr.length) {
+            bannerTypes.value = arr.map(s => ({ key: s.key || s.value, name: s.name || s.label, desc: s.desc || '' }))
+          }
+        }
+
+        // ---- 核心目的 ----
+        const purposeCfg = map.purposes
+        if (purposeCfg && purposeCfg.configValue) {
+          const arr = JSON.parse(purposeCfg.configValue)
+          if (Array.isArray(arr) && arr.length) {
+            purposes.value = arr.map(s => ({ key: s.key || s.value, label: s.label || s.value }))
+          }
+        }
+
+        // ---- 生成数量上限 ----
+        const maxCountCfg = map.max_generate_count
+        if (maxCountCfg && maxCountCfg.configValue) {
+          const n = Number(JSON.parse(maxCountCfg.configValue))
+          if (n > 0) maxGenerateCount.value = n
+        }
+
+        // ---- 语言列表（从通用配置加载） ----
+        try {
+          const commonRes = await getPublicCreationConfigByGroup('common')
+          const commonList = commonRes.data || commonRes.rows || []
+          const commonMap = {}
+          commonList.forEach(c => { commonMap[c.configKey] = c })
+          const langCfg = commonMap.languages
+          if (langCfg && langCfg.configValue) {
+            const items = JSON.parse(langCfg.configValue)
+            if (Array.isArray(items) && items.length) {
+              languages.value = items.filter(l => l.value)
+            }
+          }
+        } catch { /* use defaults */ }
+
+        // 加载提示词映射
+        await loadPromptMap()
+      } catch { /* use defaults */ }
+    }
+
+    // 加载提示词库映射
+    async function loadPromptMap() {
+      try {
+        const res = await listPromptLibraryBatch('opt_banner_type,opt_purpose,opt_template', 'banner')
+        const items = res.data || res || []
+        const map = {}
+        items.forEach(item => {
+          if (item.promptKey && item.promptText) {
+            map[item.promptKey] = item.promptText
+          }
+        })
+        promptMap.value = map
+      } catch {
+        promptMap.value = {}
+      }
+    }
 
     // Methods
     function triggerUpload() { fileInput.value?.click() }
@@ -579,14 +663,14 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
     function removeProductFile(index) { uploadedFiles.value.splice(index, 1); productFiles.value.splice(index, 1); if (uploadedFiles.value.length === 0) { originalImage.value = ''; originalFile.value = null } else { originalImage.value = uploadedFiles.value[0]; originalFile.value = productFiles.value[0] } }
     function selectCanvasPreset(s) { canvasPreset.value = s.value; canvasWidth.value = s.w; canvasHeight.value = s.h }
     function onCanvasPresetChange(val) {
-      const s = sizePresets.find(p => p.value === val)
+      const s = sizePresets.value.find(p => p.value === val)
       if (s && s.value !== 'custom') { canvasWidth.value = s.w; canvasHeight.value = s.h }
     }
     function onCustomSize() { canvasPreset.value = 'custom' }
     function toggleAllSections() { const val = !allExpanded.value; Object.keys(sections).forEach(k => { sections[k] = val }) }
     function toggleSection(key) { if (sections.hasOwnProperty(key)) sections[key] = !sections[key] }
     function togglePurpose(key) { const idx = selectedPurposes.value.indexOf(key); if (idx >= 0) selectedPurposes.value.splice(idx, 1); else selectedPurposes.value.push(key) }
-    function selectTemplate(tpl) { selectedTemplate.value = tpl; if (tpl.title) { const parts = tpl.title.split('\n'); mainTitle.value = parts[0] || ''; subTitle.value = parts[1] || '' }; if (tpl.tag) { const m = bannerTypes.find(b => b.name === tpl.tag); if (m) activeBannerType.value = m.key } }
+    function selectTemplate(tpl) { selectedTemplate.value = tpl; if (tpl.title) { const parts = tpl.title.split('\n'); mainTitle.value = parts[0] || ''; subTitle.value = parts[1] || '' }; if (tpl.tag) { const m = bannerTypes.value.find(b => b.name === tpl.tag); if (m) activeBannerType.value = m.key } }
     function scrollTemplates(dir) { const grid = document.querySelector('.templates-grid'); if (grid) grid.scrollBy({ left: dir === 'next' ? 240 : -240, behavior: 'smooth' }) }
     function refreshTemplates() { templates.value = [...templates.value].sort(() => Math.random() - 0.5) }
     function undo() {}
@@ -638,7 +722,7 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
       canvasPreset, canvasWidth, canvasHeight, sizeLinked, sizePresets, selectCanvasPreset, onCanvasPresetChange, onCustomSize,
       sections, allExpanded, toggleAllSections, toggleSection,
       activeBannerType, bannerTypes, selectedPurposes, purposes, togglePurpose,
-      mainTitle, subTitle, btnText, generateCount, customCount,
+      mainTitle, subTitle, btnText, generateCount, maxGenerateCount, promptMap,
       language, languages,
       boostProduct, boostMaterial, boostProductRef, boostMaterialRef,
       activeTemplateTab, templateTabs, templates, selectedTemplate, filteredTemplates, selectTemplate, scrollTemplates, refreshTemplates,
