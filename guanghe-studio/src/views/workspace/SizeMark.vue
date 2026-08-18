@@ -1,17 +1,17 @@
 <template>
   <div class="workspace-page">
-    <!-- Steps bar -->
-    <div class="steps-bar">
-      <template v-for="(s, i) in workflowSteps" :key="i">
-        <div class="step-item" :class="getStepClass(i + 1, 4)"><div class="step-num">{{ i + 1 }}</div> {{ s.label }}</div>
-        <div v-if="i < workflowSteps.length - 1" class="step-line" :class="{ done: isStepLineDone(i + 1) }"></div>
-      </template>
-    </div>
 
     <!-- Two-column layout -->
     <div class="three-col">
       <!-- ===== LEFT: Canvas (50%) ===== -->
       <div class="canvas-col" :style="{ flex: canvasFlex }">
+        <!-- Steps bar -->
+        <div class="steps-bar">
+          <template v-for="(s, i) in workflowSteps" :key="i">
+            <div class="step-item" :class="getStepClass(i + 1, 4)"><div class="step-num">{{ i + 1 }}</div> {{ s.label }}</div>
+            <div v-if="i < workflowSteps.length - 1" class="step-line" :class="{ done: isStepLineDone(i + 1) }"></div>
+          </template>
+        </div>
 
         <!-- Canvas Area -->
         <div class="canvas-box">
@@ -99,6 +99,15 @@
             <div class="panel-header" @click="toggleAllSections">
               <span>创作配置</span>
               <span class="panel-toggle-all">{{ allExpanded ? '全部折叠 ▲' : '全部展开 ▼' }}</span>
+            </div>
+
+            <!-- 反推提示词入口 -->
+            <div class="reverse-prompt-entry">
+              <el-button type="primary" plain class="reverse-prompt-btn" @click="openReversePromptDialog">
+                <el-icon><MagicStick /></el-icon>
+                <span>反推提示词</span>
+              </el-button>
+              <p class="entry-helper">上传参考图，AI 帮你描述想要的画面效果</p>
             </div>
 
             <!-- Section: 上传商品图 -->
@@ -303,85 +312,90 @@
       <!-- ===== RIGHT: AI Panel ===== -->
       <div class="ai-col" :style="{ flex: aiFlex }" ref="aiPanel">
         <div class="ai-resize-handle" @mousedown="startAiResize"></div>
-        <div class="ai-header">
-          <h3>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:4px">
-              <path d="M8 1L14 8L8 15L2 8L8 1Z" fill="#2563FF" opacity="0.15"/>
-              <path d="M8 3L12 8L8 13L4 8L8 3Z" fill="#2563FF" opacity="0.5"/>
-              <path d="M8 5.5L10 8L8 10.5L6 8L8 5.5Z" fill="#2563FF"/>
-            </svg>
-            AI 助手
-          </h3>
-          <button class="ai-clear-btn" @click="clearChat">清空对话</button>
-        </div>
-
-        <!-- Chat messages -->
-        <div class="ai-chat" ref="chatContainer">
-          <div class="chat-msg bot">
-            <div class="chat-avatar">AI</div>
-            <div class="chat-bubble">您好！我可以帮您生成清晰规范的尺寸标记图，请上传商品图片并填写尺寸数据。</div>
-          </div>
-          <div v-for="(msg, i) in chatMessages" :key="i" class="chat-msg" :class="msg.role">
-            <div v-if="msg.role === 'bot'" class="chat-avatar">AI</div>
-            <div class="chat-bubble">{{ msg.text }}</div>
-          </div>
-          <div v-if="generating" class="chat-msg bot">
-            <div class="chat-avatar">AI</div>
-            <div class="chat-bubble">正在为您生成尺寸标记图...</div>
-          </div>
-        </div>
-
-        <!-- Prompt suggestion -->
-        <div class="prompt-suggestion" v-if="originalImage && !chatMessages.length">
-          <div class="prompt-card">
-            <p>请自动生成清晰的尺寸标记图，标注宽度{{ dimWidth }}{{ unit }}、长度{{ dimDepth }}{{ unit }}、高度{{ dimHeight }}{{ unit }}，风格简洁，适合电商平台使用。</p>
-            <div class="prompt-apply" @click="applyPrompt">应用提示词 ›</div>
-          </div>
-        </div>
-
-        <!-- Chat input -->
-        <div class="chat-input-area">
-          <textarea
-            class="chat-input"
-            v-model="chatPrompt"
-            placeholder="请输入您的需求，描述越详细，效果越好..."
-            @keydown.enter.exact.prevent="sendMessage"
-            maxlength="2000"
-          ></textarea>
-        </div>
-        <div class="chat-footer">
-          <div>
-            <span class="chat-counter">{{ chatPrompt.length }}/2000</span>
-            <br />
-            <!-- <span class="chat-cost">本次操作将消耗 2 积分</span> -->
-          </div>
-          <button class="chat-send" @click="sendMessage" :disabled="!chatPrompt.trim() || generating">
-            <el-icon><Promotion /></el-icon>
-            -2积分
-          </button>
-        </div>
+        <AiAssistant
+          ref="aiAssistantRef"
+          :generate-fn="handleGenerate"
+          :is-generating="isGenerating"
+          :gen-status="genStatus"
+          :gen-progress="genProgress"
+          :gen-error="genError"
+        />
       </div>
     </div>
 
     <!-- Hidden file input -->
     <input type="file" ref="fileInput" accept="image/*" multiple hidden @change="handleFileSelect" />
+
+    <!-- 反推提示词模态框 -->
+    <el-dialog
+      v-model="reverseDialogVisible"
+      title="反推提示词"
+      width="560px"
+      :close-on-click-modal="false"
+      append-to-body
+      class="reverse-prompt-dialog"
+    >
+      <div class="reverse-prompt-body">
+        <!-- 图片上传区 -->
+        <div class="rp-upload-zone" @click="triggerReverseUpload" @dragover.prevent @drop.prevent="handleReverseDrop">
+          <img v-if="reverseImagePreview" :src="reverseImagePreview" class="rp-preview-img" alt="" />
+          <template v-else>
+            <el-icon :size="36" color="#9CA3AF"><UploadFilled /></el-icon>
+            <p class="rp-upload-text">点击或拖拽图片到此处</p>
+            <p class="rp-upload-hint">支持 JPG/PNG/WebP，最多 20MB</p>
+          </template>
+          <button v-if="reverseImagePreview" class="rp-clear-btn" @click.stop="clearReverseImage">✕</button>
+        </div>
+
+        <!-- 提示词输入框 -->
+        <div class="rp-prompt-row">
+          <label class="rp-label">补充提示词</label>
+          <el-input
+            v-model="reversePromptInput"
+            type="textarea"
+            :rows="6"
+            maxlength="1000"
+            show-word-limit
+          />
+        </div>
+
+        <!-- 结果区 -->
+        <div v-if="reverseResult" class="rp-result-area">
+          <div class="rp-result-header">
+            <span class="rp-label">AI 推理结果</span>
+            <el-button link type="primary" size="small" @click="copyResult(reverseResult)">
+              <el-icon><DocumentCopy /></el-icon> 复制
+            </el-button>
+          </div>
+          <div class="rp-result-box">{{ reverseResult }}</div>
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="reverseDialogVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="reverseLoading" :disabled="!reverseImageFile" @click="submitReversePrompt">
+          {{ reverseLoading ? '推理中…' : '发送推理' }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { UploadFilled, ArrowDown, ArrowLeft, ArrowRight, Promotion } from '@element-plus/icons-vue'
+import { UploadFilled, ArrowDown, ArrowLeft, ArrowRight, MagicStick, DocumentCopy } from '@element-plus/icons-vue'
 // import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
 // import CanvasOverlay from '@/components/CanvasOverlay.vue'
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { useWorkflowProgress } from '@/composables/useWorkflowProgress'
 import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
-import { aiDialogue } from '@/api/customer'
+import AiAssistant from '@/components/AiAssistant.vue'
 import { ElMessage } from 'element-plus'
+import { reversePrompt } from '@/api/customer'
 
 export default {
   name: 'SizeMarkView',
-  components: { UploadFilled, ArrowDown, ArrowLeft, ArrowRight, Promotion, PromptLibrarySelect },
+  components: { UploadFilled, ArrowDown, ArrowLeft, ArrowRight, MagicStick, DocumentCopy, PromptLibrarySelect, AiAssistant },
   setup() {
     // ---- Canvas Interactions ----
     // const { canvasUI, handleCanvasExport } = useCanvasInteractions({
@@ -633,30 +647,121 @@ export default {
       chatPrompt.value = `请自动生成清晰的尺寸标记图，标注宽度${dimWidth.value}${unit.value}、长度${dimDepth.value}${unit.value}、高度${dimHeight.value}${unit.value}，风格简洁，适合电商平台使用。`
     }
 
-    async function sendMessage() {
-      const text = chatPrompt.value.trim()
-      if (!text || generating.value) return
-      chatMessages.value.push({ role: 'user', text })
-      chatPrompt.value = ''
-      generating.value = true
-      await nextTick()
-      scrollChat()
+    async function handleGenerate() {
+      const text = aiAssistantRef.value?.inputText?.trim() || ''
+      if (!originalFile.value) { ElMessage.warning('请先上传产品图片'); return }
+      if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
       try {
-        const historyMessages = chatMessages.value.slice(0, -1).map(m => ({ role: m.role === 'bot' ? 'assistant' : 'user', content: m.text }))
-        const res = await aiDialogue({ messages: historyMessages, content: text, model: 'deepseek' })
-        chatMessages.value.push({ role: 'bot', text: res?.data?.reply || '好的，已为您处理。' })
+        const basePrompt = `生成尺寸标记图，宽度${dimWidth.value}${unit.value}、长度${dimDepth.value}${unit.value}、高度${dimHeight.value}${unit.value}，风格简洁，适合电商平台`
+        const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
+        const prompt = boostText ? `${basePrompt}；${text ? text + '。' : ''}约束：${boostText}。` : `${basePrompt}${text ? '。' + text : ''}`
+        await gen.fullGenerate([originalFile.value], prompt, { consumePoints: 2, featureName: 'size_mark', title: '尺寸标记生成', n: 1 })
       } catch (e) {
-        chatMessages.value.push({ role: 'bot', text: '抱歉，AI服务暂时不可用。' })
-      } finally {
-        generating.value = false
-        nextTick(() => scrollChat())
+        console.error('尺寸标记生成失败:', e)
+        const isTimeout = e?.code === 'ECONNABORTED'
+          || /timeout|超时|人数过多|繁忙|busy/i.test(e?.message || '')
+        ElMessage.error(isTimeout
+          ? '当前模型使用人数过多，可选用其他模型生图或稍后再试'
+          : '生成失败，请稍后重试')
       }
     }
 
-    function clearChat() { chatMessages.value = [] }
-    function scrollChat() {
-      const el = document.querySelector('.ai-chat')
-      if (el) el.scrollTop = el.scrollHeight
+    // ---- 生成状态（供 AiAssistant 组件使用） ----
+    const isGenerating = computed(() => gen.generating.value)
+    const genProgress = computed(() => gen.progress.value)
+    const genStatus = computed(() => gen.statusText.value)
+    const genError = computed(() => gen.error.value)
+    const aiAssistantRef = ref(null)
+
+    // ===== 反推提示词 =====
+    const reverseDialogVisible = ref(false)
+    const reverseImageFile = ref(null)
+    const reverseImagePreview = ref('')
+    const reverseResult = ref('')
+    const reverseLoading = ref(false)
+    const REVERSE_DEFAULT_PROMPT = `请对原图进行逆向视觉解构，推测其生成逻辑与核心构成元素。请以结构化、专业的中文提示词格式输出，需涵盖：结构布局与质感；关键细节；技术参数与视角。 输出结果应具有高度可复用性，能直接用于引导图像生成。`
+    const reversePromptInput = ref(REVERSE_DEFAULT_PROMPT)
+
+    function openReversePromptDialog() {
+      reverseDialogVisible.value = true
+    }
+
+    function triggerReverseUpload() {
+      if (reverseImagePreview.value) return
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp'
+      input.onchange = (e) => {
+        const file = e.target.files?.[0]
+        if (file) handleReverseFile(file)
+        e.target.value = ''
+      }
+      input.click()
+    }
+
+    function handleReverseDrop(e) {
+      const file = e.dataTransfer?.files?.[0]
+      if (file) handleReverseFile(file)
+    }
+
+    const REVERSE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+    const REVERSE_MAX_SIZE = 20 * 1024 * 1024
+
+    function handleReverseFile(file) {
+      if (!REVERSE_ALLOWED_TYPES.includes(file.type)) {
+        ElMessage.error('仅支持 JPG / PNG / WebP 格式的图片')
+        return
+      }
+      if (file.size > REVERSE_MAX_SIZE) {
+        ElMessage.error('图片大小不能超过 20MB')
+        return
+      }
+      reverseImageFile.value = file
+      reverseResult.value = ''
+      const reader = new FileReader()
+      reader.onload = (ev) => { reverseImagePreview.value = ev.target.result }
+      reader.readAsDataURL(file)
+    }
+
+    function clearReverseImage() {
+      reverseImageFile.value = null
+      reverseImagePreview.value = ''
+      reverseResult.value = ''
+    }
+
+    async function submitReversePrompt() {
+      if (!reverseImageFile.value) {
+        ElMessage.warning('请先上传一张图片')
+        return
+      }
+      reverseLoading.value = true
+      reverseResult.value = ''
+      try {
+        const imageDataUri = reverseImagePreview.value
+        const prompt = reversePromptInput.value?.trim()
+          ? reversePromptInput.value.trim()
+          : REVERSE_DEFAULT_PROMPT
+        const res = await reversePrompt({ image: imageDataUri, prompt })
+        const data = res?.data || res
+        const result = typeof data === 'string' ? data : (data?.prompt || data?.result || '')
+        reverseResult.value = result || 'AI 未返回文本结果'
+        ElMessage.success('推理完成')
+      } catch (e) {
+        console.error('反推提示词失败:', e)
+        ElMessage.error(e?.message || '反推提示词失败，请重试')
+      } finally {
+        reverseLoading.value = false
+      }
+    }
+
+    async function copyResult(text) {
+      if (!text) return
+      try {
+        await navigator.clipboard.writeText(text)
+        ElMessage.success('已复制到剪贴板')
+      } catch {
+        ElMessage.error('复制失败')
+      }
     }
 
     return {
@@ -671,7 +776,6 @@ export default {
       language, languages,
       productViews,
       sections,
-      chatPrompt, chatMessages,
       allExpanded,
       canvasFlex, configFlex, aiFlex,
       aiPanel,
@@ -683,8 +787,14 @@ export default {
       toggleFullscreen,
       regenerate, downloadPng, copyLink,
       moreTemplates, startGenerate,
-      applyPrompt, sendMessage, clearChat,
+      applyPrompt,
       startColResize, startAiResize,
+      // ---- AiAssistant ----
+      isGenerating, genProgress, genStatus, genError, aiAssistantRef, handleGenerate,
+      // ---- 反推提示词 ----
+      reverseDialogVisible, reverseImageFile, reverseImagePreview, reverseResult, reverseLoading,
+      reversePromptInput, openReversePromptDialog, triggerReverseUpload, handleReverseDrop,
+      clearReverseImage, submitReversePrompt, copyResult,
     }
   }
 }
@@ -705,9 +815,8 @@ export default {
 .steps-bar {
   display: flex;
   align-items: center;
-  padding: 12px 24px;
-  background: #fff;
-  border-bottom: 1px solid #E8EDF5;
+  padding: 0 0 12px;
+  background: transparent;
   flex-shrink: 0;
   overflow-x: auto;
   gap: 0;
@@ -1366,7 +1475,7 @@ export default {
    Responsive
    ============================================================ */
 @media (max-width: 1024px) {
-  .steps-bar { padding: 10px 16px; gap: 4px; }
+  .steps-bar { padding: 0 0 8px; gap: 4px; }
   .step-item { font-size: 11px; }
   .step-line { min-width: 8px; margin: 0 4px; }
   .three-col { flex-wrap: wrap; }
@@ -1385,5 +1494,111 @@ export default {
   .ai-col { flex: 1 1 auto !important; min-height: 250px; }
   .ai-resize-handle { display: none; }
   .canvas-toolbar { flex-wrap: wrap; gap: 8px; }
+}
+
+/* ===== 反推提示词入口按钮 ===== */
+.reverse-prompt-entry {
+  margin: 0 0 12px 0;
+}
+.reverse-prompt-btn {
+  width: 100%;
+  justify-content: center;
+}
+.entry-helper {
+  font-size: 12px;
+  color: #9CA3AF;
+  margin: 6px 0 0 0;
+  text-align: center;
+}
+
+/* ===== 反推提示词模态框 ===== */
+.reverse-prompt-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.rp-upload-zone {
+  position: relative;
+  border: 1px dashed #D1D5DB;
+  border-radius: 8px;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  background: #FAFBFC;
+  transition: border-color 0.2s;
+}
+.rp-upload-zone:hover {
+  border-color: #2563FF;
+}
+.rp-upload-text {
+  font-size: 14px;
+  color: #4B5563;
+  margin: 8px 0 0 0;
+}
+.rp-upload-hint {
+  font-size: 12px;
+  color: #9CA3AF;
+  margin: 4px 0 0 0;
+}
+.rp-preview-img {
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  display: block;
+}
+.rp-clear-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rp-clear-btn:hover {
+  background: #EF4444;
+}
+.rp-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1F2937;
+  display: block;
+}
+.rp-prompt-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rp-result-area {
+  border-top: 1px solid #E5E7EB;
+  padding-top: 12px;
+}
+.rp-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.rp-result-box {
+  background: #F3F4F6;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #1F2937;
+  white-space: pre-wrap;
+  max-height: 180px;
+  overflow-y: auto;
 }
 </style>

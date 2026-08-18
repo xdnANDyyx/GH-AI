@@ -18,7 +18,8 @@
         <!-- Canvas Area -->
         <div class="canvas-box">
           <!-- <CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" /> -->
-          <div v-if="productFiles.length === 0 && resultImages.length === 0" class="canvas-placeholder">
+          <!-- 未生成：显示空状态 -->
+          <div v-if="resultImages.length === 0" class="canvas-placeholder">
             <svg viewBox="0 0 48 48" fill="none">
               <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
               <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
@@ -26,9 +27,13 @@
             </svg>
             <h3>AI 主图生成后将显示在此处</h3>
             <p>请在右侧配置生成参数并点击发送</p>
+            <div v-if="isGenerating" class="generating-overlay">
+              <div class="progress-ring">{{ genProgress }}%</div>
+              <p>{{ genStatus }}</p>
+            </div>
           </div>
           <!-- 有结果图时：2×2 网格展示 -->
-          <div v-else-if="resultImages.length > 0" class="result-grid" :class="{ generating: isGenerating }">
+          <div v-else class="result-grid" :class="{ generating: isGenerating }">
             <div v-for="(img, idx) in resultImages" :key="'r'+idx" class="result-card">
               <img :src="img.url || img" class="result-img" />
             </div>
@@ -37,17 +42,9 @@
               <p>{{ genStatus }}</p>
             </div>
           </div>
-          <!-- 仅上传商品图，无结果时 -->
-          <div v-else class="canvas-result" :class="{ generating: isGenerating }">
-            <img v-for="(img, idx) in productFiles" :key="idx" :src="getObjectUrl(img)" class="uploaded-img" />
-            <div v-if="isGenerating" class="generating-overlay">
-              <div class="progress-ring">{{ genProgress }}%</div>
-              <p>{{ genStatus }}</p>
-            </div>
-          </div>
         </div>
 
-        <div class="canvas-bottom-bar">AI生成的内容仅供参考，请注意核对细节与版权信息。</div>
+        <!-- <div class="canvas-bottom-bar">AI生成的内容仅供参考，请注意核对细节与版权信息。</div> -->
       </div>
 
       <!-- Divider + Toggle: canvas ⇔ right panel -->

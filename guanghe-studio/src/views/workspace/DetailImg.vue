@@ -15,9 +15,10 @@
           </template>
         </div>
 
-        <!-- Canvas Display (no upload) -->
+        <!-- Canvas Display -->
         <div class="canvas-box">
-          <div v-if="productFiles.length === 0 && resultImages.length === 0" class="canvas-placeholder">
+          <!-- 未生成：显示空状态 -->
+          <div v-if="resultImages.length === 0" class="canvas-placeholder">
             <svg viewBox="0 0 48 48" fill="none">
               <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
               <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
@@ -25,9 +26,13 @@
             </svg>
             <h3>AI 详情图生成后将显示在此处</h3>
             <p>请在右侧配置生成参数并点击发送</p>
+            <div v-if="isGenerating" class="generating-overlay">
+              <div class="progress-ring">{{ genProgress }}%</div>
+              <p>{{ genStatus }}</p>
+            </div>
           </div>
           <!-- 有结果图时：展示结果 -->
-          <div v-else-if="resultImages.length > 0" class="result-grid" :class="{ generating: isGenerating }">
+          <div v-else class="result-grid" :class="{ generating: isGenerating }">
             <div v-for="(img, idx) in resultImages" :key="'r'+idx" class="result-card">
               <img :src="img.url || img" class="result-img" />
             </div>
@@ -36,20 +41,12 @@
               <p>{{ genStatus }}</p>
             </div>
           </div>
-          <!-- 仅上传产品图，无结果时 -->
-          <div v-else class="canvas-result" :class="{ generating: isGenerating }">
-            <img v-for="(f, idx) in productFiles" :key="idx" :src="getObjectUrl(f)" class="uploaded-img" />
-            <div v-if="isGenerating" class="generating-overlay">
-              <div class="progress-ring">{{ genProgress }}%</div>
-              <p>{{ genStatus }}</p>
-            </div>
-          </div>
         </div>
 
-        <div class="canvas-bottom-bar">AI生成的内容仅供参考，请注意核对细节与版权信息。</div>
+        <!-- <div class="canvas-bottom-bar">AI生成的内容仅供参考，请注意核对细节与版权信息。</div> -->
 
         <!-- Page Management -->
-        <div class="page-mgmt">
+        <!-- <div class="page-mgmt">
           <div class="page-mgmt-header">
             <span class="page-mgmt-title">页面管理</span>
             <span class="page-mgmt-subtitle">（可拖拽排序）</span>
@@ -82,7 +79,7 @@
             <span class="page-mgmt-hint">建议页数：5~10页，突出核心卖点，提升转化效果</span>
             <span class="page-mgmt-count">共 {{ pages.length }} 页</span>
           </div>
-        </div>
+        </div> -->
       </div>
 
       <!-- Divider + Toggle: canvas ⇔ right panels -->
@@ -118,7 +115,7 @@
               </div>
 
               <!-- Section: 页面尺寸 -->
-              <div class="config-section collapsible">
+              <!-- <div class="config-section collapsible">
                 <div class="section-header" @click="toggleSection('pageSize')">
                   <span class="section-label">页面尺寸</span>
                   <span class="expand-text">
@@ -136,7 +133,7 @@
                   </select>
                   <p class="config-hint">高度将根据内容自动延展</p>
                 </div>
-              </div>
+              </div> -->
 
               <!-- Section: 平台与语言 -->
               <div class="config-section collapsible">
@@ -160,10 +157,7 @@
                   </div>
                   <span class="config-label">语言</span>
                   <select class="form-select block" v-model="language">
-                    <option value="en">英语（美国）</option>
-                    <option value="zh">中文（简体）</option>
-                    <option value="ja">日语</option>
-                    <option value="ko">韩语</option>
+                    <option v-for="lang in languageOptions" :key="lang.value" :value="lang.value">{{ lang.label }}</option>
                   </select>
                 </div>
               </div>
@@ -171,7 +165,7 @@
               <!-- Section: 核心卖点 -->
               <div class="config-section collapsible">
                 <div class="section-header" @click="toggleSection('sellingPoints')">
-                  <span class="section-label">核心卖点 <span style="font-weight:400;font-size:11px;color:#9CA3AF;">（建议选择 3~6 项）</span></span>
+                  <span class="section-label">核心卖点 <span style="font-weight:400;font-size:11px;color:#9CA3AF;">（建议选择 3~{{ maxSellingCount }} 项）</span></span>
                   <span class="expand-text">
                     {{ sections.sellingPoints ? '收起' : '展开' }}
                     <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.sellingPoints }"><ArrowDown /></el-icon>
@@ -194,7 +188,7 @@
               <!-- Section: 画布尺寸 -->
               <div class="config-section collapsible">
                 <div class="section-header" @click="toggleSection('canvasSize')">
-                  <span class="section-label">画布尺寸</span>
+                  <span class="section-label">尺寸</span>
                   <span class="expand-text">
                     {{ sections.canvasSize ? '收起' : '展开' }}
                     <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.canvasSize }"><ArrowDown /></el-icon>
@@ -301,7 +295,7 @@
                   <span class="config-label">生成数量</span>
                   <div class="option-tags">
                     <div
-                      v-for="n in [1,2,3,4,5]"
+                      v-for="n in maxGenerateCount"
                       :key="n"
                       class="option-tag"
                       :class="{ active: genCount === n }"
@@ -426,7 +420,7 @@ import { ref, reactive, computed, nextTick, onMounted, onBeforeUnmount } from 'v
 import { ArrowDown, ArrowLeft, ArrowRight, UploadFilled, DocumentCopy, Promotion } from '@element-plus/icons-vue'
 // import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
 // import CanvasOverlay from '@/components/CanvasOverlay.vue'
-import { aiDialogue, reversePrompt } from '@/api/customer'
+import { aiDialogue, reversePrompt, getPublicCreationConfigByGroup, listPromptLibraryBatch } from '@/api/customer'
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { useWorkflowProgress } from '@/composables/useWorkflowProgress'
 import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
@@ -638,16 +632,25 @@ function toggleAllSections() {
 }
 
 // Platform
-const platforms = ['亚马逊', 'Shopee', 'Lazada', '速卖通', '淘宝', '京东', '独立站', '其他']
+const platforms = ref(['亚马逊', 'Shopee', 'Lazada', '速卖通', '淘宝', '京东', '独立站', '其他'])
 const selectedPlatform = ref('亚马逊')
 const language = ref('en')
 const pageWidth = ref('970')
+// 语言列表（从后台加载）
+const languageOptions = ref([
+  { label: '英语（美国）', value: 'en' },
+  { label: '中文（简体）', value: 'zh' },
+  { label: '日语', value: 'ja' },
+  { label: '韩语', value: 'ko' }
+])
 
 // Selling Points
-const sellingPoints = ['高品质材料', '耐用结实', '多功能使用', '易于安装', '防刮涂层', '安全环保', '时尚设计', '性价比高', '智能设计', '抗菌防霉', '防滑防水', '静音减震', '节省空间', '大量收纳', '便捷技巧']
+const sellingPoints = ref(['高品质材料', '耐用结实', '多功能使用', '易于安装', '防刮涂层', '安全环保', '时尚设计', '性价比高', '智能设计', '抗菌防霉', '防滑防水', '静音减震', '节省空间', '大量收纳', '便捷技巧'])
 const activePoints = ref(['高品质材料', '多功能使用', '安全环保'])
 const customPoint = ref('')
 const customPointDialog = ref(false)
+// 建议卖点数量上限
+const maxSellingCount = ref(6)
 
 function togglePoint(p) {
   const idx = activePoints.value.indexOf(p)
@@ -698,6 +701,10 @@ const contentStructure = reactive([
 
 // Generate Count
 const genCount = ref('')
+// 生成数量上限（从后台加载）
+const maxGenerateCount = ref(5)
+// 提示词映射：value → promptText（从提示词库加载）
+const promptMap = ref({})
 
 // AI Model
 const selectedModel = ref('deepseek')
@@ -857,7 +864,124 @@ async function copyResult(text) {
   }
 }
 
+// ===== 从后台创作配置读取详情图/A+ 配置 =====
+async function loadCreationConfig() {
+  try {
+    const res = await getPublicCreationConfigByGroup('detail_img')
+    const list = res.data || res.rows || []
+    const map = {}
+    list.forEach(c => { map[c.configKey] = c })
+
+    // ---- 目标平台 ----
+    const platformCfg = map.platform_options
+    if (platformCfg && platformCfg.configValue) {
+      const arr = JSON.parse(platformCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        // 兼容字符串数组和对象数组
+        platforms.value = arr.map(s => typeof s === 'string' ? s : (s.label || s.value))
+      }
+    }
+
+    // ---- 核心卖点 ----
+    const sellingCfg = map.selling_points
+    if (sellingCfg && sellingCfg.configValue) {
+      const arr = JSON.parse(sellingCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        sellingPoints.value = arr.map(s => typeof s === 'string' ? s : (s.label || s.value))
+      }
+    }
+
+    // ---- 内容结构模块 ----
+    const structureCfg = map.content_structure
+    if (structureCfg && structureCfg.configValue) {
+      const arr = JSON.parse(structureCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        // 更新 contentStructure 的 enabled 状态，保留原有图标
+        const existingMap = {}
+        contentStructure.forEach(item => { existingMap[item.name] = item })
+        contentStructure.splice(0, contentStructure.length)
+        arr.forEach(item => {
+          const label = typeof item === 'string' ? item : (item.label || item.value)
+          const existing = existingMap[label]
+          if (existing) {
+            contentStructure.push({ ...existing, enabled: item.enabled !== false })
+          } else {
+            contentStructure.push({
+              icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>',
+              name: label,
+              desc: typeof item === 'object' ? (item.desc || '') : '',
+              detail: typeof item === 'object' ? (item.detail || '') : '',
+              enabled: item.enabled !== false
+            })
+          }
+        })
+      }
+    }
+
+    // ---- 页面尺寸 ----
+    const sizeCfg = map.page_sizes
+    if (sizeCfg && sizeCfg.configValue) {
+      const arr = JSON.parse(sizeCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        // 取第一个作为默认页面宽度
+        const first = arr[0]
+        if (first && first.value) pageWidth.value = first.value
+      }
+    }
+
+    // ---- 建议卖点数量 ----
+    const maxSellingCfg = map.max_selling_count
+    if (maxSellingCfg && maxSellingCfg.configValue) {
+      const n = Number(JSON.parse(maxSellingCfg.configValue))
+      if (n > 0) maxSellingCount.value = n
+    }
+
+    // ---- 生成数量上限 ----
+    const maxCountCfg = map.max_generate_count
+    if (maxCountCfg && maxCountCfg.configValue) {
+      const n = Number(JSON.parse(maxCountCfg.configValue))
+      if (n > 0) maxGenerateCount.value = n
+    }
+
+    // ---- 语言列表（从通用配置加载） ----
+    try {
+      const commonRes = await getPublicCreationConfigByGroup('common')
+      const commonList = commonRes.data || commonRes.rows || []
+      const commonMap = {}
+      commonList.forEach(c => { commonMap[c.configKey] = c })
+      const langCfg = commonMap.languages
+      if (langCfg && langCfg.configValue) {
+        const items = JSON.parse(langCfg.configValue)
+        if (Array.isArray(items) && items.length) {
+          languageOptions.value = items.filter(l => l.value)
+        }
+      }
+    } catch { /* use defaults */ }
+
+    // 加载提示词映射
+    await loadPromptMap()
+  } catch { /* use defaults */ }
+}
+
+// 加载提示词库映射：将配置项的 value 映射到对应的提示词内容
+async function loadPromptMap() {
+  try {
+    const res = await listPromptLibraryBatch('opt_platform,opt_selling,opt_page', 'detail')
+    const items = res.data || res || []
+    const map = {}
+    items.forEach(item => {
+      if (item.promptKey && item.promptText) {
+        map[item.promptKey] = item.promptText
+      }
+    })
+    promptMap.value = map
+  } catch {
+    promptMap.value = {}
+  }
+}
+
 onMounted(() => {
+  loadCreationConfig()
   document.addEventListener('mousemove', onMouseMove)
   document.addEventListener('mouseup', onMouseUp)
 })
@@ -882,54 +1006,45 @@ onBeforeUnmount(() => {
 .steps-bar {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 12px 0;
-  gap: 0;
+  padding: 0 0 12px;
+  background: transparent;
   flex-shrink: 0;
-  background: #fff;
-  border-bottom: 1px solid #E8EDF5;
+  overflow-x: auto;
+  gap: 0;
 }
 .step-item {
   display: flex;
   align-items: center;
   gap: 6px;
-}
-.step-item .step-num {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: #E8EDF5;
-  color: #9CA3AF;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   font-size: 12px;
-  font-weight: 600;
+  color: #6B7280;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.step-item.active { color: #2563FF; font-weight: 600; }
+.step-num {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600;
+  border: 2px solid #E8EDF5;
+  flex-shrink: 0;
+  background: #fff;
+  color: #9CA3AF;
 }
 .step-item.active .step-num {
-  background: #2563FF;
-  color: #fff;
+  background: #2563FF; color: #fff; border-color: #2563FF;
 }
+.step-item.done { color: #22C55E; }
 .step-item.done .step-num {
-  background: #22C55E;
-  color: #fff;
+  background: #22C55E; color: #fff; border-color: #22C55E;
 }
 .step-item span {
   font-size: 12px;
-  color: #9CA3AF;
-}
-.step-item.active span {
-  color: #2563FF;
-  font-weight: 700;
-}
-.step-item.done span {
-  color: #22C55E;
+  color: inherit;
 }
 .step-line {
-  width: 36px;
-  height: 2px;
-  background: #E8EDF5;
-  margin: 0 6px;
+  flex: 1; height: 2px; background: #E8EDF5; min-width: 12px; margin: 0 6px;
 }
 .step-line.done { background: #22C55E; }
 
@@ -1012,22 +1127,23 @@ onBeforeUnmount(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 16px;
-  min-width: 300px;
+  min-width: 0;
+  background: #F7F9FC;
 }
 
 .canvas-box {
   flex: 1;
-  min-height: 300px;
-  background: #fff;
+  border: 2px dashed #E8EDF5;
   border-radius: 12px;
-  border: 1px solid #E8EDF5;
-  overflow: hidden;
-  position: relative;
+  background: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+  min-height: 0;
+  position: relative;
 }
 
 .canvas-placeholder {

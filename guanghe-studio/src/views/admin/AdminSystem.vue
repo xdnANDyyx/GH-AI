@@ -124,7 +124,7 @@
               <el-option label="停用" value="1" />
             </el-select>
             <el-button @click="fetchCreationConfigs">查询</el-button>
-            <el-button v-if="creationFilters.configGroup !== 'white_bg' && creationFilters.configGroup !== 'bg_generation' && creationFilters.configGroup !== 'main_image'" type="primary" @click="openCreationDialog()">新增配置</el-button>
+            <el-button v-if="canAddCreationConfig" type="primary" @click="openCreationDialog()">新增配置</el-button>
           </div>
         </div>
 
@@ -597,6 +597,10 @@ const creationFilters = reactive({ configGroup: '', status: '' })
 const promptFilters = reactive({ module: '', status: '' })
 const tagFilters = reactive({ tagName: '', tagType: '', status: '' })
 
+// 以下工作台的配置由提示词库自动同步，不需要手动新增
+const autoSyncGroups = ['white_bg', 'bg_generation', 'main_image', 'detail_img']
+const canAddCreationConfig = computed(() => !autoSyncGroups.includes(creationFilters.configGroup))
+
 const promptSubTab = ref('template')
 const libraryLoading = ref(false)
 const savingLibrary = ref(false)
@@ -661,7 +665,7 @@ const legacyCategoryMap = {
 // 提示词配置过滤用（全量分类，管理员可见所有分类）
 const libraryFilterCategoryOptions = unifiedCategoryOptions
 
-// 创作配置绑定用（从统一列表中只取 opt_ 开头的 UI 选项库分类；AI白底图仅显示阴影+尺寸；白底图生成背景仅显示平台/场景/光线/风格/尺寸；主图设计仅显示平台/尺寸/用途/卖点）
+// 创作配置绑定用（从统一列表中只取 opt_ 开头的 UI 选项库分类；AI白底图仅显示阴影+尺寸；白底图生成背景仅显示平台/场景/光线/风格/尺寸；主图设计仅显示平台/尺寸/用途/卖点；详情图/A+仅显示平台/尺寸/卖点/详情页模块）
 const promptPickerCategoryOptions = computed(() => {
   const optList = unifiedCategoryOptions.filter(o => o.value.startsWith('opt_'))
   if (creationForm.configGroup === 'white_bg') {
@@ -672,6 +676,9 @@ const promptPickerCategoryOptions = computed(() => {
   }
   if (creationForm.configGroup === 'main_image') {
     return optList.filter(o => ['opt_platform', 'opt_size', 'opt_purpose', 'opt_selling'].includes(o.value))
+  }
+  if (creationForm.configGroup === 'detail_img') {
+    return optList.filter(o => ['opt_platform', 'opt_size', 'opt_selling', 'opt_page'].includes(o.value))
   }
   return optList
 })
@@ -853,14 +860,26 @@ async function loadPromptPicker() {
   if (key === promptPickerLoadedKey.value && promptPickerItems.value.length) return
   promptPickerLoading.value = true
   try {
-    const res = await listAdminPromptLibrary({
+    // 先按 分类 + scope 精确查询
+    let res = await listAdminPromptLibrary({
       pageNum: 1,
       pageSize: 500,
       category: cat || undefined,
       scope: scope,
       status: '0'
     })
-    promptPickerItems.value = res.rows || []
+    let rows = res.rows || []
+    // 若精确查询无结果，回退为仅按分类查询（不限 scope），避免某些分类在该工作台下没有数据时下拉为空
+    if (rows.length === 0 && cat && scope) {
+      res = await listAdminPromptLibrary({
+        pageNum: 1,
+        pageSize: 500,
+        category: cat || undefined,
+        status: '0'
+      })
+      rows = res.rows || []
+    }
+    promptPickerItems.value = rows
     promptPickerLoadedKey.value = key
     syncPickerSelection()
   } catch {
@@ -1392,6 +1411,12 @@ function openTagDialog(row) {
 function openCreationDialog(row) {
   resetCreationForm()
   if (row) Object.assign(creationForm, row)
+  // 新增时自动继承当前选中的工作台分组
+  if (!row && creationFilters.configGroup) {
+    creationForm.configGroup = creationFilters.configGroup
+    // 手动触发工作台变更逻辑，加载对应的提示词库分类与 scope
+    onConfigGroupInput()
+  }
   loadCreationEditor(row ? row.configValue : '')
   creationDialogVisible.value = true
 }

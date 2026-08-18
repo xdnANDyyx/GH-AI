@@ -116,7 +116,7 @@ const menuGroups = [
       { path: '/admin/banner', title: 'Banner管理', icon: 'PictureFilled' },
       { path: '/admin/material', title: '官方素材管理', icon: 'FolderOpened' },
       { path: '/admin/ai-model', title: 'AI模特管理', icon: 'User' },
-      { path: '/admin/creation-config', title: '创作功能管理', icon: 'Setting' }
+      //{ path: '/admin/creation-config', title: '创作功能管理', icon: 'Setting' }
     ]
   },
   {

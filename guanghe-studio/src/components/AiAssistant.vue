@@ -205,6 +205,8 @@ async function sendMessage() {
 function clearChat() {
   messages.value = []
 }
+
+defineExpose({ inputText, messages })
 </script>
 
 <style lang="scss" scoped>

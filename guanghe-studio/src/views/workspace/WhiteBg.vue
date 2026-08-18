@@ -32,7 +32,7 @@
         </div>
 
         <div class="canvas-bottom-bar">
-          <span>提示：上传优质素材被下载即可获得积分奖励 <a class="canvas-link" href="#">去上传 →</a></span>
+          <!-- <span>提示：上传优质素材被下载即可获得积分奖励 <a class="canvas-link" href="#">去上传 →</a></span> -->
           <!-- <span v-if="!hasResult"><span>本次生成预计消耗：<strong>{{ consumePoints }}</strong> 积分</span></span> -->
           <span v-if="hasResult" class="result-status"><span class="result-dot"></span> 生成完成</span>
         </div>

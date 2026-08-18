@@ -33,7 +33,7 @@ const adminMeta = {
   '/admin/banner': { title: 'Banner管理' },
   '/admin/material': { title: '官方素材管理' },
   '/admin/ai-model': { title: 'AI模特管理' },
-  '/admin/creation-config': { title: '创作功能管理' },
+  // '/admin/creation-config': { title: '创作功能管理' },
   '/admin/system': { title: '系统设置' }
 }
 
@@ -67,7 +67,7 @@ const routes = [
       { path: 'banner',    name: 'AdminBanner',    component: () => import('@/views/admin/AdminBanner.vue'),    meta: { ...adminMeta['/admin/banner'], requiresAdmin: true } },
       { path: 'material',  name: 'AdminMaterial',  component: () => import('@/views/admin/AdminMaterial.vue'),  meta: { ...adminMeta['/admin/material'], requiresAdmin: true } },
       { path: 'ai-model',  name: 'AdminAiModel',   component: () => import('@/views/admin/AdminAiModel.vue'),   meta: { ...adminMeta['/admin/ai-model'], requiresAdmin: true } },
-      { path: 'creation-config', name: 'AdminCreationConfig', component: () => import('@/views/admin/AdminCreationConfig.vue'), meta: { ...adminMeta['/admin/creation-config'], requiresAdmin: true } },
+      // { path: 'creation-config', name: 'AdminCreationConfig', component: () => import('@/views/admin/AdminCreationConfig.vue'), meta: { ...adminMeta['/admin/creation-config'], requiresAdmin: true } },
       { path: 'system',    name: 'AdminSystem',    component: () => import('@/views/admin/AdminSystem.vue'),    meta: { ...adminMeta['/admin/system'], requiresAdmin: true } }
     ]
   },

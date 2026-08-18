@@ -1,17 +1,17 @@
 <template>
   <div class="workspace-page">
-    <!-- Steps bar -->
-    <div class="steps-bar">
-      <template v-for="(s, i) in workflowSteps" :key="i">
-        <div class="step-item" :class="getStepClass(i + 1, 5)"><div class="step-num">{{ i + 1 }}</div> {{ s.label }}</div>
-        <div v-if="i < workflowSteps.length - 1" class="step-line" :class="{ done: isStepLineDone(i + 1) }"></div>
-      </template>
-    </div>
 
     <!-- Three-column -->
     <div class="three-col">
       <!-- ===== Canvas ===== -->
         <div class="canvas-col" :style="{ flex: canvasFlex }">
+        <!-- Steps bar -->
+        <div class="steps-bar">
+          <template v-for="(s, i) in workflowSteps" :key="i">
+            <div class="step-item" :class="getStepClass(i + 1, 5)"><div class="step-num">{{ i + 1 }}</div> {{ s.label }}</div>
+            <div v-if="i < workflowSteps.length - 1" class="step-line" :class="{ done: isStepLineDone(i + 1) }"></div>
+          </template>
+        </div>
 
         <div class="canvas-dropzone"
           @drop.prevent="handleDrop"
@@ -75,6 +75,15 @@
             <div class="panel-header" @click="toggleAllSections">
               <span>创作配置</span>
               <span class="panel-toggle-all">{{ allExpanded ? '全部折叠 ▲' : '全部展开 ▼' }}</span>
+            </div>
+
+            <!-- 反推提示词入口 -->
+            <div class="reverse-prompt-entry">
+              <el-button type="primary" plain class="reverse-prompt-btn" @click="openReversePromptDialog">
+                <el-icon><MagicStick /></el-icon>
+                <span>反推提示词</span>
+              </el-button>
+              <p class="entry-helper">上传参考图，AI 帮你描述想要的画面效果</p>
             </div>
 
             <!-- 画布尺寸 -->
@@ -240,29 +249,73 @@
       <!-- ===== AI Panel ===== -->
       <div class="ai-col" :style="{ flex: aiFlex }" ref="aiPanel">
         <div class="ai-resize-handle" @mousedown="startAiResize"></div>
-        <div class="ai-header"><h3>AI 助手</h3><button class="ai-clear-btn" @click="clearChat">清空对话</button></div>
-        <div class="ai-suggestions"><span v-for="sug in aiSuggestions" :key="sug" class="ai-sug-tag" @click="appendToAiInput(sug)">{{ sug }}</span></div>
-        <div class="ai-chat" ref="chatContainer">
-          <div class="chat-msg bot"><div class="chat-avatar">AI</div><div class="chat-bubble">您好！我是光合AI助手，有什么可以帮您？</div></div>
-          <div v-for="(msg, i) in aiMessages" :key="i" class="chat-msg" :class="msg.role">
-            <div v-if="msg.role === 'bot'" class="chat-avatar">AI</div>
-            <div class="chat-bubble">{{ msg.text }}</div>
-          </div>
-          <div v-if="aiLoading" class="chat-msg bot"><div class="chat-avatar">AI</div><div class="chat-bubble">正在为您生成中...</div></div>
-        </div>
-        <div class="ai-input-area">
-          <textarea class="ai-textarea" v-model="aiInput" placeholder="请输入您的需求，描述越详细，效果越好..." @keydown.enter.exact.prevent="sendAiMessage" maxlength="2000"></textarea>
-          <div class="ai-input-footer">
-            <span class="ai-char-count">{{ aiInput.length }}/2000</span>
-            <button class="ai-send-btn" @click="sendAiMessage" :disabled="!aiInput.trim() || aiLoading">发送<el-icon :size="14"><Promotion /></el-icon></button>
-          </div>
-        </div>
+        <AiAssistant
+          ref="aiAssistantRef"
+          :generate-fn="handleGenerateFromAi"
+          :is-generating="isGenerating"
+          :gen-status="genStatus"
+          :gen-progress="genProgress"
+          :gen-error="genError"
+        />
       </div>
     </div>
 
     <input type="file" ref="fileInput" accept="image/*" multiple hidden @change="handleFileSelect" />
     <input type="file" ref="bgFileInput" accept="image/*" multiple hidden @change="handleBgFileSelect" />
     <input type="file" ref="logoFileInput" accept="image/*" hidden @change="handleLogoFileSelect" />
+
+    <!-- 反推提示词模态框 -->
+    <el-dialog
+      v-model="reverseDialogVisible"
+      title="反推提示词"
+      width="560px"
+      :close-on-click-modal="false"
+      append-to-body
+      class="reverse-prompt-dialog"
+    >
+      <div class="reverse-prompt-body">
+        <!-- 图片上传区 -->
+        <div class="rp-upload-zone" @click="triggerReverseUpload" @dragover.prevent @drop.prevent="handleReverseDrop">
+          <img v-if="reverseImagePreview" :src="reverseImagePreview" class="rp-preview-img" alt="" />
+          <template v-else>
+            <el-icon :size="36" color="#9CA3AF"><UploadFilled /></el-icon>
+            <p class="rp-upload-text">点击或拖拽图片到此处</p>
+            <p class="rp-upload-hint">支持 JPG/PNG/WebP，最多 20MB</p>
+          </template>
+          <button v-if="reverseImagePreview" class="rp-clear-btn" @click.stop="clearReverseImage">✕</button>
+        </div>
+
+        <!-- 提示词输入框 -->
+        <div class="rp-prompt-row">
+          <label class="rp-label">补充提示词</label>
+          <el-input
+            v-model="reversePromptInput"
+            type="textarea"
+            :rows="6"
+            maxlength="1000"
+            show-word-limit
+          />
+        </div>
+
+        <!-- 结果区 -->
+        <div v-if="reverseResult" class="rp-result-area">
+          <div class="rp-result-header">
+            <span class="rp-label">AI 推理结果</span>
+            <el-button link type="primary" size="small" @click="copyResult(reverseResult)">
+              <el-icon><DocumentCopy /></el-icon> 复制
+            </el-button>
+          </div>
+          <div class="rp-result-box">{{ reverseResult }}</div>
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="reverseDialogVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="reverseLoading" :disabled="!reverseImageFile" @click="submitReversePrompt">
+          {{ reverseLoading ? '推理中…' : '发送推理' }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -270,16 +323,17 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { useWorkflowProgress } from '@/composables/useWorkflowProgress'
-import { aiDialogue } from '@/api/customer'
-import { ArrowDown, ArrowLeft, ArrowRight, WarningFilled, FullScreen, RefreshLeft, Delete, UploadFilled, Link, Promotion } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowLeft, ArrowRight, WarningFilled, FullScreen, RefreshLeft, Delete, UploadFilled, Link, MagicStick, DocumentCopy } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
+import AiAssistant from '@/components/AiAssistant.vue'
+import { reversePrompt } from '@/api/customer'
 // import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
 // import CanvasOverlay from '@/components/CanvasOverlay.vue'
 
 export default {
   name: 'BannerView',
-  components: { ArrowDown, ArrowLeft, ArrowRight, WarningFilled, FullScreen, RefreshLeft, Delete, UploadFilled, Link, Promotion, PromptLibrarySelect },
+  components: { ArrowDown, ArrowLeft, ArrowRight, WarningFilled, FullScreen, RefreshLeft, Delete, UploadFilled, Link, MagicStick, DocumentCopy, PromptLibrarySelect, AiAssistant },
   setup() {
     const gen = useImageGeneration('render')
     const { steps: workflowSteps, getStepClass, isStepLineDone } = useWorkflowProgress()
@@ -361,9 +415,105 @@ export default {
     const filteredTemplates = computed(() => activeTemplateTab.value === '全部' ? templates.value : templates.value.filter(t => t.tag === activeTemplateTab.value))
 
     // AI
-    const aiPanel = ref(null); const chatContainer = ref(null)
-    const aiInput = ref(''); const aiMessages = ref([]); const aiLoading = ref(false)
-    const aiSuggestions = ['如何设计高点击Banner？', 'Banner尺寸规范', '配色方案建议']
+const aiPanel = ref(null)
+const aiAssistantRef = ref(null)
+
+    // ===== 反推提示词 =====
+    const reverseDialogVisible = ref(false)
+    const reverseImageFile = ref(null)
+    const reverseImagePreview = ref('')
+    const reverseResult = ref('')
+    const reverseLoading = ref(false)
+    const REVERSE_DEFAULT_PROMPT = `请对原图进行逆向视觉解构，推测其生成逻辑与核心构成元素。请以结构化、专业的中文提示词格式输出，需涵盖：结构布局与质感；关键细节；技术参数与视角。 输出结果应具有高度可复用性，能直接用于引导图像生成。`
+    const reversePromptInput = ref(REVERSE_DEFAULT_PROMPT)
+
+    function openReversePromptDialog() {
+      reverseDialogVisible.value = true
+    }
+
+    function triggerReverseUpload() {
+      if (reverseImagePreview.value) return
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp'
+      input.onchange = (e) => {
+        const file = e.target.files?.[0]
+        if (file) handleReverseFile(file)
+        e.target.value = ''
+      }
+      input.click()
+    }
+
+    function handleReverseDrop(e) {
+      const file = e.dataTransfer?.files?.[0]
+      if (file) handleReverseFile(file)
+    }
+
+    const REVERSE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+    const REVERSE_MAX_SIZE = 20 * 1024 * 1024
+
+    function handleReverseFile(file) {
+      if (!REVERSE_ALLOWED_TYPES.includes(file.type)) {
+        ElMessage.error('仅支持 JPG / PNG / WebP 格式的图片')
+        return
+      }
+      if (file.size > REVERSE_MAX_SIZE) {
+        ElMessage.error('图片大小不能超过 20MB')
+        return
+      }
+      reverseImageFile.value = file
+      reverseResult.value = ''
+      const reader = new FileReader()
+      reader.onload = (ev) => { reverseImagePreview.value = ev.target.result }
+      reader.readAsDataURL(file)
+    }
+
+    function clearReverseImage() {
+      reverseImageFile.value = null
+      reverseImagePreview.value = ''
+      reverseResult.value = ''
+    }
+
+    async function submitReversePrompt() {
+      if (!reverseImageFile.value) {
+        ElMessage.warning('请先上传一张图片')
+        return
+      }
+      reverseLoading.value = true
+      reverseResult.value = ''
+      try {
+        const imageDataUri = reverseImagePreview.value
+        const prompt = reversePromptInput.value?.trim()
+          ? reversePromptInput.value.trim()
+          : REVERSE_DEFAULT_PROMPT
+        const res = await reversePrompt({ image: imageDataUri, prompt })
+        const data = res?.data || res
+        const result = typeof data === 'string' ? data : (data?.prompt || data?.result || '')
+        reverseResult.value = result || 'AI 未返回文本结果'
+        ElMessage.success('推理完成')
+      } catch (e) {
+        console.error('反推提示词失败:', e)
+        ElMessage.error(e?.message || '反推提示词失败，请重试')
+      } finally {
+        reverseLoading.value = false
+      }
+    }
+
+    async function copyResult(text) {
+      if (!text) return
+      try {
+        await navigator.clipboard.writeText(text)
+        ElMessage.success('已复制到剪贴板')
+      } catch {
+        ElMessage.error('复制失败')
+      }
+    }
+
+// ---- 生成状态（供 AiAssistant 组件使用） ----
+const isGenerating = computed(() => gen.generating.value)
+const genProgress = computed(() => gen.progress.value)
+const genStatus = computed(() => gen.statusText.value)
+const genError = computed(() => gen.error.value)
 
     const canGenerate = computed(() => !!originalImage.value && !gen.generating.value)
 
@@ -460,16 +610,27 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
       } catch (e) { console.error('生成失败:', e) }
     }
 
-    function appendToAiInput(text) { aiInput.value = aiInput.value ? `${aiInput.value} ${text}` : text }
-    async function sendAiMessage() {
-      if (!aiInput.value.trim() || aiLoading.value) return
-      const text = aiInput.value.trim(); aiMessages.value.push({ role: 'user', text }); aiInput.value = ''; aiLoading.value = true; await nextTick(); scrollChat()
-      try { const res = await aiDialogue({ content: text, sessionType: 'render' }); const reply = res.data?.content || res.data?.reply || '好的，正在为您处理中...'; aiMessages.value.push({ role: 'bot', text: reply }) }
-      catch { aiMessages.value.push({ role: 'bot', text: '抱歉，暂时无法回复，请稍后重试。' }) }
-      finally { aiLoading.value = false; await nextTick(); scrollChat() }
+    async function handleGenerateFromAi() {
+      const text = aiAssistantRef.value?.inputText?.trim() || ''
+      if (!originalFile.value) { ElMessage.warning('请先上传产品图片'); return }
+      if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
+      try {
+        const extraParams = { n: generateCount.value, extraOptions: { canvasWidth: canvasWidth.value, canvasHeight: canvasHeight.value, bannerType: activeBannerType.value, purposes: [...selectedPurposes.value], mainTitle: mainTitle.value, subTitle: subTitle.value, btnText: btnText.value }, consumePoints: 2, featureName: 'banner', title: 'Banner设计' }
+        if (bgFile.value) { const bgUrl = await gen.uploadImage(bgFile.value); extraParams.backgroundImage = bgUrl }
+        if (logoFile.value) { const logoUrl = await gen.uploadImage(logoFile.value); extraParams.logoImage = logoUrl }
+        const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
+        const baseText = mainTitle.value + ' ' + subTitle.value + (text ? ' ' + text : '')
+        const fullPrompt = boostText ? `${baseText}。约束：${boostText}。` : baseText
+        await gen.fullGenerate([originalFile.value], fullPrompt, extraParams)
+      } catch (e) {
+        console.error('生成失败:', e)
+        const isTimeout = e?.code === 'ECONNABORTED'
+          || /timeout|超时|人数过多|繁忙|busy/i.test(e?.message || '')
+        ElMessage.error(isTimeout
+          ? '当前模型使用人数过多，可选用其他模型生图或稍后再试'
+          : '生成失败，请稍后重试')
+      }
     }
-    function clearChat() { aiMessages.value = [] }
-    function scrollChat() { const el = chatContainer.value; if (el) el.scrollTop = el.scrollHeight }
 
     return {
       gen, fileInput, bgFileInput, logoFileInput, originalImage, originalFile, bgImage, bgFile, logoImage, logoFile, uploadedFiles, productFiles, zoom,
@@ -481,11 +642,15 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
       language, languages,
       boostProduct, boostMaterial, boostProductRef, boostMaterialRef,
       activeTemplateTab, templateTabs, templates, selectedTemplate, filteredTemplates, selectTemplate, scrollTemplates, refreshTemplates,
-      canvasFlex, configFlex, aiFlex, aiPanel, chatContainer, configCollapsed, startColResize, startAiResize,
+      canvasFlex, configFlex, aiFlex, aiPanel, configCollapsed, startColResize, startAiResize,
       triggerUpload, triggerBgUpload, triggerLogoUpload, handleFileSelect, handleBgFileSelect, handleLogoFileSelect, handleDrop, clearImage, removeProductFile,
       undo, redo, reset, zoomIn, zoomOut, toggleFullscreen, handleGenerate, canGenerate,
-      aiInput, aiMessages, aiLoading, aiSuggestions, appendToAiInput, sendAiMessage, clearChat,
-      // canvasUI, handleCanvasExport,
+      // ---- AiAssistant ----
+      isGenerating, genProgress, genStatus, genError, aiAssistantRef, handleGenerateFromAi,
+      // ---- 反推提示词 ----
+      reverseDialogVisible, reverseImageFile, reverseImagePreview, reverseResult, reverseLoading,
+      reversePromptInput, openReversePromptDialog, triggerReverseUpload, handleReverseDrop,
+      clearReverseImage, submitReversePrompt, copyResult,
     }
   }
 }
@@ -495,15 +660,14 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
 .workspace-page { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
 
 /* Steps Bar */
-.steps-bar { display: flex; align-items: center; padding: 12px 24px; background: #fff; border-bottom: 1px solid #E8EDF5; flex-shrink: 0; gap: 0; }
-.step-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #6B7280; white-space: nowrap; }
+.steps-bar { display: flex; align-items: center; padding: 0 0 12px; background: transparent; flex-shrink: 0; overflow-x: auto; gap: 0; }
+.step-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #6B7280; white-space: nowrap; cursor: pointer; }
 .step-item.active { color: #2563FF; font-weight: 600; }
 .step-num { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; border: 2px solid #E8EDF5; flex-shrink: 0; }
 .step-item.active .step-num { background: #2563FF; color: #fff; border-color: #2563FF; }
 .step-item.done { color: #22C55E; }
 .step-item.done .step-num { background: #22C55E; color: #fff; border-color: #22C55E; }
 .step-line { flex: 1; height: 2px; background: #E8EDF5; min-width: 12px; margin: 0 6px; }
-.step-line.active { background: #2563FF; }
 .step-line.done { background: #22C55E; }
 
 .prompt-boost-row { margin-bottom: 10px; }
@@ -791,18 +955,15 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
 ::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
 
 @media (max-width: 1280px) {
-  .steps-bar { padding: 10px 16px; gap: 4px; }
-  .step-item { font-size: 11px; }
-  .step-line { min-width: 8px; margin: 0 4px; }
   .canvas-col { padding: 12px; }
   .config-col { min-width: 260px; }
   .ai-col { min-width: 180px; }
 }
 
 @media (max-width: 1024px) {
-  .steps-bar { padding: 8px 12px; gap: 2px; }
-  .step-item { font-size: 10px; }
-  .step-line { min-width: 6px; margin: 0 3px; }
+  .steps-bar { padding: 0 0 8px; gap: 4px; }
+  .step-item { font-size: 11px; }
+  .step-line { min-width: 8px; margin: 0 4px; }
   .three-col { flex-wrap: wrap; }
   .canvas-col { flex: 0 0 100% !important; max-height: 50vh; }
   .config-col { flex: 0 0 50% !important; }
@@ -827,5 +988,111 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
   .upload-row { flex-direction: column; }
   .upload-card { flex-direction: row; padding: 8px 10px; gap: 8px; text-align: left; }
   .upload-card-icon { margin-bottom: 0; }
+}
+
+/* ===== 反推提示词入口按钮 ===== */
+.reverse-prompt-entry {
+  margin: 0 0 12px 0;
+}
+.reverse-prompt-btn {
+  width: 100%;
+  justify-content: center;
+}
+.entry-helper {
+  font-size: 12px;
+  color: #9CA3AF;
+  margin: 6px 0 0 0;
+  text-align: center;
+}
+
+/* ===== 反推提示词模态框 ===== */
+.reverse-prompt-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.rp-upload-zone {
+  position: relative;
+  border: 1px dashed #D1D5DB;
+  border-radius: 8px;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  background: #FAFBFC;
+  transition: border-color 0.2s;
+}
+.rp-upload-zone:hover {
+  border-color: #2563FF;
+}
+.rp-upload-text {
+  font-size: 14px;
+  color: #4B5563;
+  margin: 8px 0 0 0;
+}
+.rp-upload-hint {
+  font-size: 12px;
+  color: #9CA3AF;
+  margin: 4px 0 0 0;
+}
+.rp-preview-img {
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  display: block;
+}
+.rp-clear-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rp-clear-btn:hover {
+  background: #EF4444;
+}
+.rp-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1F2937;
+  display: block;
+}
+.rp-prompt-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rp-result-area {
+  border-top: 1px solid #E5E7EB;
+  padding-top: 12px;
+}
+.rp-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.rp-result-box {
+  background: #F3F4F6;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #1F2937;
+  white-space: pre-wrap;
+  max-height: 180px;
+  overflow-y: auto;
 }
 </style>
