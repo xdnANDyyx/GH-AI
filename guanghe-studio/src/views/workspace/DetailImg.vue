@@ -307,6 +307,7 @@
 
         <!-- ===== AI Assistant Panel ===== -->
         <div class="ai-col" :style="{ flex: aiFlex }" ref="aiPanel">
+          <div class="ai-resize-handle-top" @mousedown="startAiHeightResize"></div>
           <div class="ai-header">
             <span class="panel-title">AI 助手</span>
             <span class="ai-clear" @click="clearChat">清空对话</span>
@@ -338,7 +339,7 @@
                   <el-select v-model="selectedModel" size="small" class="model-select" :disabled="isGenerating">
                     <el-option v-for="m in modelOptions" :key="m.value" :label="m.label" :value="m.value" />
                   </el-select>
-                  <button class="chat-send" @click="sendMessage" :disabled="!chatInput.trim() || isGenerating">
+                  <button class="chat-send" @click="sendMessage" :disabled="!chatInput.trim() || isGenerating || !originalImage">
                     <el-icon><Promotion /></el-icon>
                     {{ isGenerating ? '生成中...' : '发送' }}
                   </button>
@@ -536,6 +537,7 @@ const configCollapsed = ref(false)
 // ===== Layout Resize =====
 const _configWidthPx = ref(280)
 const _aiWidthPx = ref(360)
+const _aiHeightPx = ref(0) // 0 = auto-fill (no explicit height)
 const canvasFlex = computed(() => '1 1 0%')
 const rightFlex = computed(() => {
   const configW = configCollapsed.value ? 40 : _configWidthPx.value
@@ -545,7 +547,10 @@ const configFlex = computed(() => {
   if (configCollapsed.value) return '0 0 40px'
   return `0 0 ${_configWidthPx.value}px`
 })
-const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
+const aiFlex = computed(() => {
+  const heightStyle = _aiHeightPx.value > 0 ? `; min-height: 0; height: ${_aiHeightPx.value}px` : ''
+  return `0 0 ${_aiWidthPx.value}px${heightStyle}`
+})
 const aiPanel = ref(null)
 
 let isResizing = false
@@ -756,6 +761,10 @@ function sendQuick(tag) {
 
 function clearChat() {
   chatMessages.value = [{ role: 'ai', content: '您好！我是光合AI助手，有什么可以帮您？' }]
+  originalImage.value = ''
+  productFiles.value = []
+  resultImages.value = []
+  gen.reset()
 }
 
 function getObjectUrl(file) {
@@ -975,15 +984,54 @@ async function loadPromptMap() {
   }
 }
 
+// AI panel vertical resize (drag top border)
+let isAiHeightResizing = false
+let aiHeightStartY = 0
+let aiHeightStart = 0
+
+function startAiHeightResize(e) {
+  isAiHeightResizing = true
+  aiHeightStartY = e.clientY
+  const aiEl = aiPanel.value
+  aiHeightStart = aiEl
+    ? (_aiHeightPx.value > 0 ? _aiHeightPx.value : aiEl.getBoundingClientRect().height)
+    : 400
+  _aiHeightPx.value = Math.round(aiHeightStart)
+  document.body.style.cursor = 'ns-resize'
+  document.body.style.userSelect = 'none'
+  e.preventDefault()
+  e.stopPropagation()
+}
+
+function onAiHeightMouseMove(e) {
+  if (!isAiHeightResizing) return
+  const delta = e.clientY - aiHeightStartY
+  let newHeight = aiHeightStart + delta
+  newHeight = Math.max(300, Math.min(window.innerHeight - 100, Math.round(newHeight)))
+  _aiHeightPx.value = newHeight
+}
+
+function onAiHeightMouseUp() {
+  if (isAiHeightResizing) {
+    isAiHeightResizing = false
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }
+}
+
 onMounted(() => {
   loadCreationConfig()
   document.addEventListener('mousemove', onMouseMove)
   document.addEventListener('mouseup', onMouseUp)
+  document.addEventListener('mousemove', onAiHeightMouseMove)
+  document.addEventListener('mouseup', onAiHeightMouseUp)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('mousemove', onMouseMove)
   document.removeEventListener('mouseup', onMouseUp)
+  document.removeEventListener('mousemove', onAiHeightMouseMove)
+  document.removeEventListener('mouseup', onAiHeightMouseUp)
 })
 </script>
 
@@ -1116,6 +1164,17 @@ onBeforeUnmount(() => {
 }
 .right-panel-divider:hover,
 .right-panel-divider:active { background: #2563FF; }
+
+.ai-resize-handle-top {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  z-index: 5;
+  background: transparent;
+  transition: background 0.2s;
+}
+.ai-resize-handle-top:hover { background: #2563FF; }
 
 /* ===== Canvas Area ===== */
 .canvas-col {
@@ -1954,6 +2013,7 @@ onBeforeUnmount(() => {
   .canvas-col { flex: 0 0 45vh !important; max-height: 45vh; }
   .right-col { flex: 1 1 auto !important; min-height: 250px; }
   .right-panel-divider { display: none; }
+  .ai-resize-handle-top { display: none; }
   .config-col { max-height: 200px; overflow-y: auto; }
 }
 

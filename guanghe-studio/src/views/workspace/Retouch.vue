@@ -168,6 +168,7 @@
       <!-- ===== RIGHT: AI Panel (flex:1) ===== -->
       <div class="ai-col" :style="{ flex: aiFlex }" ref="aiPanel">
         <div class="ai-resize-handle" @mousedown="startAiResize"></div>
+        <div class="ai-resize-handle-top" @mousedown="startAiHeightResize"></div>
         <AiAssistant
           ref="aiAssistantRef"
           :generate-fn="handleGenerate"
@@ -175,6 +176,8 @@
           :gen-status="genStatus"
           :gen-progress="genProgress"
           :gen-error="genError"
+          :has-image="!!originalImage"
+          :on-clear-images="clearWorkspaceImages"
         />
       </div>
 
@@ -434,13 +437,17 @@ export default {
     // ---- Layout resize ----
     const _configWidthPx = ref(280)
     const _aiWidthPx = ref(360)
+    const _aiHeightPx = ref(0) // 0 = auto-fill (no explicit height)
     const canvas3Flex = computed(() => '1 1 0%')
     const canvasFlex = canvas3Flex
     const configFlex = computed(() => {
       if (configCollapsed.value) return '0 0 40px'
       return `0 0 ${_configWidthPx.value}px`
     })
-    const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
+    const aiFlex = computed(() => {
+      const heightStyle = _aiHeightPx.value > 0 ? `; min-height: 0; height: ${_aiHeightPx.value}px` : ''
+      return `0 0 ${_aiWidthPx.value}px${heightStyle}`
+    })
     let isResizing = false
     let resizeTarget = ''
     const aiPanel = ref(null)
@@ -519,11 +526,48 @@ export default {
       }
     }
 
+    // AI panel vertical resize (drag top border)
+    let isAiHeightResizing = false
+    let aiHeightStartY = 0
+    let aiHeightStart = 0
+
+    function startAiHeightResize(e) {
+      isAiHeightResizing = true
+      aiHeightStartY = e.clientY
+      const aiEl = aiPanel.value
+      aiHeightStart = aiEl
+        ? (_aiHeightPx.value > 0 ? _aiHeightPx.value : aiEl.getBoundingClientRect().height)
+        : 400
+      _aiHeightPx.value = Math.round(aiHeightStart)
+      document.body.style.cursor = 'ns-resize'
+      document.body.style.userSelect = 'none'
+      e.preventDefault()
+      e.stopPropagation()
+    }
+
+    function onAiHeightMouseMove(e) {
+      if (!isAiHeightResizing) return
+      const delta = e.clientY - aiHeightStartY
+      let newHeight = aiHeightStart + delta
+      newHeight = Math.max(300, Math.min(window.innerHeight - 100, Math.round(newHeight)))
+      _aiHeightPx.value = newHeight
+    }
+
+    function onAiHeightMouseUp() {
+      if (isAiHeightResizing) {
+        isAiHeightResizing = false
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+    }
+
     onMounted(() => {
       document.addEventListener('mousemove', onMouseMove)
       document.addEventListener('mouseup', onMouseUp)
       document.addEventListener('mousemove', onAiMouseMove)
       document.addEventListener('mouseup', onAiMouseUp)
+      document.addEventListener('mousemove', onAiHeightMouseMove)
+      document.addEventListener('mouseup', onAiHeightMouseUp)
       document.addEventListener('click', handleClickOutside)
       loadCreationConfig()
       consumeHandoffImage()
@@ -793,6 +837,14 @@ export default {
       }
     }
 
+    function clearWorkspaceImages() {
+      originalImage.value = null
+      processedImage.value = null
+      productFiles.value = []
+      uploadedFiles.value = []
+      gen.reset()
+    }
+
     return {
       configCollapsed,
       processed, originalImage, processedImage, productFiles, uploadedFiles,
@@ -813,7 +865,7 @@ export default {
       triggerUpload, handleFileSelect, handleDrop, clearImage, removeProductFile,
       undo, redo, reset, toggleFullscreen,
       toggleAllSections, toggleSection,
-      startColResize, startAiResize,
+      startColResize, startAiResize, startAiHeightResize,
       // canvasUI, handleCanvasExport,
       // ---- 图片接力右键菜单 ----
       handoffMenu, openHandoffMenu, hideHandoffMenu,
@@ -1279,6 +1331,17 @@ export default {
 }
 .ai-resize-handle:hover { background: #2563FF; }
 
+.ai-resize-handle-top {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  z-index: 5;
+  background: transparent;
+  transition: background 0.2s;
+}
+.ai-resize-handle-top:hover { background: #2563FF; }
+
 .ai-header {
   display: flex;
   justify-content: space-between;
@@ -1368,6 +1431,7 @@ export default {
   .config-col { flex: 0 0 auto !important; max-height: 200px; overflow-y: auto; }
   .ai-col { flex: 1 1 auto !important; min-height: 250px; }
   .ai-resize-handle { display: none; }
+  .ai-resize-handle-top { display: none; }
   .tool-grid { grid-template-columns: repeat(3, 1fr); }
 }
 

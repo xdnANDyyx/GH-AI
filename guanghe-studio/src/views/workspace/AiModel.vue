@@ -412,6 +412,7 @@
 
       <!-- ===== RIGHT: AI Panel ===== -->
       <div class="ai-col" :style="{ flex: aiFlex }" ref="aiPanel">
+        <div class="ai-resize-handle-top" @mousedown="startAiHeightResize"></div>
         <AiAssistant
           ref="aiAssistantRef"
           :generate-fn="handleGenerate"
@@ -419,6 +420,8 @@
           :gen-status="genStatus"
           :gen-progress="genProgress"
           :gen-error="genError"
+          :has-image="!!productImage"
+          :on-clear-images="clearWorkspaceImages"
         />
       </div>
     </div>
@@ -728,12 +731,16 @@ const allExpanded = computed(() => {
 // ---- Layout resize ----
 const _configWidthPx = ref(280)
 const _aiWidthPx = ref(360)
+const _aiHeightPx = ref(0) // 0 = auto-fill (no explicit height)
 const canvasFlex = computed(() => '1 1 0%')
 const configFlex = computed(() => {
   if (configCollapsed.value) return '0 0 40px'
   return `0 0 ${_configWidthPx.value}px`
 })
-const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
+const aiFlex = computed(() => {
+  const heightStyle = _aiHeightPx.value > 0 ? `; min-height: 0; height: ${_aiHeightPx.value}px` : ''
+  return `0 0 ${_aiWidthPx.value}px${heightStyle}`
+})
 const aiPanel = ref(null)
 let isResizing = false
 let resizeTarget = ''
@@ -777,11 +784,49 @@ function onMouseUp() {
   }
 }
 
+// AI panel vertical resize (drag top border)
+let isAiHeightResizing = false
+let aiHeightStartY = 0
+let aiHeightStart = 0
+
+function startAiHeightResize(e) {
+  isAiHeightResizing = true
+  aiHeightStartY = e.clientY
+  const aiEl = aiPanel.value
+  aiHeightStart = aiEl
+    ? (_aiHeightPx.value > 0 ? _aiHeightPx.value : aiEl.getBoundingClientRect().height)
+    : 400
+  _aiHeightPx.value = Math.round(aiHeightStart)
+  document.body.style.cursor = 'ns-resize'
+  document.body.style.userSelect = 'none'
+  e.preventDefault()
+  e.stopPropagation()
+}
+
+function onAiHeightMouseMove(e) {
+  if (!isAiHeightResizing) return
+  const delta = e.clientY - aiHeightStartY
+  let newHeight = aiHeightStart + delta
+  newHeight = Math.max(300, Math.min(window.innerHeight - 100, Math.round(newHeight)))
+  _aiHeightPx.value = newHeight
+}
+
+function onAiHeightMouseUp() {
+  if (isAiHeightResizing) {
+    isAiHeightResizing = false
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }
+}
+
 onMounted(() => {
   document.addEventListener('mousemove', onMouseMove)
   document.addEventListener('mouseup', onMouseUp)
   loadModelList()
   loadCreationConfig()
+  document.addEventListener('mousemove', onAiHeightMouseMove)
+  document.addEventListener('mouseup', onAiHeightMouseUp)
+
   nextTick(() => {
     const rightCol = document.querySelector('.right-col')
     if (rightCol) {
@@ -795,6 +840,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener('mousemove', onMouseMove)
   document.removeEventListener('mouseup', onMouseUp)
+  document.removeEventListener('mousemove', onAiHeightMouseMove)
+  document.removeEventListener('mouseup', onAiHeightMouseUp)
 })
 
 // ---- Methods ----
@@ -987,6 +1034,12 @@ async function loadPromptMap() {
     promptMap.value = {}
   }
 }
+
+function clearWorkspaceImages() {
+  productImage.value = ''
+  originalFile.value = null
+  gen.reset()
+}
 </script>
 
 <style lang="scss" scoped>
@@ -1119,6 +1172,17 @@ async function loadPromptMap() {
 }
 .col-divider:hover,
 .col-divider:active { background: #2563FF; }
+
+.ai-resize-handle-top {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  z-index: 5;
+  background: transparent;
+  transition: background 0.2s;
+}
+.ai-resize-handle-top:hover { background: #2563FF; }
 
 .config-toggle-btn {
   position: absolute;
@@ -1896,6 +1960,7 @@ async function loadPromptMap() {
   .ai-col { flex: 0 0 50% !important; }
   .col-divider-wrapper { display: none; }
   .col-divider { display: none; }
+  .ai-resize-handle-top { display: none; }
 }
 
 @media (max-width: 768px) {
@@ -1905,6 +1970,7 @@ async function loadPromptMap() {
   .canvas-col { flex: 0 0 45vh !important; max-height: 45vh; }
   .config-col { flex: 0 0 auto !important; max-height: 200px; overflow-y: auto; }
   .ai-col { flex: 1 1 auto !important; min-height: 250px; }
+  .ai-resize-handle-top { display: none; }
 }
 
 /* ===== 反推提示词入口按钮 ===== */

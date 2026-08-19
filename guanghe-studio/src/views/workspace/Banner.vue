@@ -248,6 +248,7 @@
       <!-- ===== AI Panel ===== -->
       <div class="ai-col" :style="{ flex: aiFlex }" ref="aiPanel">
         <div class="ai-resize-handle" @mousedown="startAiResize"></div>
+        <div class="ai-resize-handle-top" @mousedown="startAiHeightResize"></div>
         <AiAssistant
           ref="aiAssistantRef"
           :generate-fn="handleGenerateFromAi"
@@ -255,6 +256,8 @@
           :gen-status="genStatus"
           :gen-progress="genProgress"
           :gen-error="genError"
+          :has-image="!!originalImage"
+          :on-clear-images="clearWorkspaceImages"
         />
       </div>
     </div>
@@ -528,11 +531,15 @@ const genError = computed(() => gen.error.value)
     const canvasFlex = computed(() => '1 1 0%')
 const _configWidthPx = ref(340)
 const _aiWidthPx = ref(260)
+const _aiHeightPx = ref(0) // 0 = auto-fill (no explicit height)
 const configFlex = computed(() => {
   if (configCollapsed.value) return '0 0 40px'
   return `0 0 ${_configWidthPx.value}px`
 })
-const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
+const aiFlex = computed(() => {
+  const heightStyle = _aiHeightPx.value > 0 ? `; min-height: 0; height: ${_aiHeightPx.value}px` : ''
+  return `0 0 ${_aiWidthPx.value}px${heightStyle}`
+})
     let isResizing = false; let resizeTarget = ''
 
     function startColResize(e, target) { isResizing = true; resizeTarget = target; document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none'; e.preventDefault() }
@@ -560,15 +567,23 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
     function onAiMouseMove(e) { if (!isAiResizing) return; const delta = aiStartX - e.clientX; let newWidth = aiStartWidth + delta; newWidth = Math.max(200, Math.min(500, newWidth)); _aiWidthPx.value = newWidth }
     function onAiMouseUp() { if (isAiResizing) { isAiResizing = false; document.body.style.cursor = ''; document.body.style.userSelect = '' } }
 
+    // AI panel vertical resize (drag top border)
+    let isAiHeightResizing = false; let aiHeightStartY = 0; let aiHeightStart = 0
+    function startAiHeightResize(e) { isAiHeightResizing = true; aiHeightStartY = e.clientY; const aiEl = aiPanel.value; aiHeightStart = aiEl ? (_aiHeightPx.value > 0 ? _aiHeightPx.value : aiEl.getBoundingClientRect().height) : 400; _aiHeightPx.value = Math.round(aiHeightStart); document.body.style.cursor = 'ns-resize'; document.body.style.userSelect = 'none'; e.preventDefault(); e.stopPropagation() }
+    function onAiHeightMouseMove(e) { if (!isAiHeightResizing) return; const delta = e.clientY - aiHeightStartY; let newHeight = aiHeightStart + delta; newHeight = Math.max(300, Math.min(window.innerHeight - 100, Math.round(newHeight))); _aiHeightPx.value = newHeight }
+    function onAiHeightMouseUp() { if (isAiHeightResizing) { isAiHeightResizing = false; document.body.style.cursor = ''; document.body.style.userSelect = '' } }
+
     onMounted(async () => {
       document.addEventListener('mousemove', onMouseMove); document.addEventListener('mouseup', onMouseUp)
       document.addEventListener('mousemove', onAiMouseMove); document.addEventListener('mouseup', onAiMouseUp)
+      document.addEventListener('mousemove', onAiHeightMouseMove); document.addEventListener('mouseup', onAiHeightMouseUp)
       loadCreationConfig()
       await Promise.allSettled([gen.loadPromptInfo(), gen.loadPixelConfigs(), gen.loadDeductTypes()])
     })
     onBeforeUnmount(() => {
       document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp)
       document.removeEventListener('mousemove', onAiMouseMove); document.removeEventListener('mouseup', onAiMouseUp)
+      document.removeEventListener('mousemove', onAiHeightMouseMove); document.removeEventListener('mouseup', onAiHeightMouseUp)
     })
 
     // ===== 从后台创作配置读取Banner设计配置 =====
@@ -660,6 +675,7 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
     function handleDrop(e) { const files = e.dataTransfer.files; if (files.length) addFiles(files) }
     function addFiles(files) { for (const f of files) { const url = URL.createObjectURL(f); uploadedFiles.value.push(url); productFiles.value.push(f); if (!originalImage.value) { originalImage.value = url; originalFile.value = f } } }
     function clearImage() { originalImage.value = ''; originalFile.value = null; uploadedFiles.value = []; productFiles.value = [] }
+    function clearWorkspaceImages() { clearImage(); gen.reset() }
     function removeProductFile(index) { uploadedFiles.value.splice(index, 1); productFiles.value.splice(index, 1); if (uploadedFiles.value.length === 0) { originalImage.value = ''; originalFile.value = null } else { originalImage.value = uploadedFiles.value[0]; originalFile.value = productFiles.value[0] } }
     function selectCanvasPreset(s) { canvasPreset.value = s.value; canvasWidth.value = s.w; canvasHeight.value = s.h }
     function onCanvasPresetChange(val) {
@@ -726,7 +742,7 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
       language, languages,
       boostProduct, boostMaterial, boostProductRef, boostMaterialRef,
       activeTemplateTab, templateTabs, templates, selectedTemplate, filteredTemplates, selectTemplate, scrollTemplates, refreshTemplates,
-      canvasFlex, configFlex, aiFlex, aiPanel, configCollapsed, startColResize, startAiResize,
+      canvasFlex, configFlex, aiFlex, aiPanel, configCollapsed, startColResize, startAiResize, startAiHeightResize,
       triggerUpload, triggerBgUpload, triggerLogoUpload, handleFileSelect, handleBgFileSelect, handleLogoFileSelect, handleDrop, clearImage, removeProductFile,
       undo, redo, reset, zoomIn, zoomOut, toggleFullscreen, handleGenerate, canGenerate,
       // ---- AiAssistant ----
@@ -1008,6 +1024,17 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
 .ai-col { display: flex; flex-direction: column; background: #fff; padding: 14px 12px; overflow: hidden; min-width: 200px; position: relative; }
 .ai-resize-handle { position: absolute; left: 0; top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 5; background: transparent; transition: background 0.2s; }
 .ai-resize-handle:hover { background: #2563FF; }
+
+.ai-resize-handle-top {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  z-index: 5;
+  background: transparent;
+  transition: background 0.2s;
+}
+.ai-resize-handle-top:hover { background: #2563FF; }
 .ai-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-shrink: 0; gap: 8px; min-height: 24px; }
 .ai-header h3 { font-size: 14px; font-weight: 600; margin: 0; white-space: nowrap; }
 .ai-clear-btn { font-size: 11px; color: #2563FF; background: none; border: none; cursor: pointer; text-decoration: underline; white-space: nowrap; padding: 2px 4px; flex-shrink: 0; }
@@ -1054,6 +1081,7 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
   .ai-col { flex: 0 0 50% !important; }
   .col-divider { display: none; }
   .ai-resize-handle { display: none; }
+  .ai-resize-handle-top { display: none; }
   .canvas-toolbar { flex-wrap: wrap; gap: 4px; }
   .tb-center { order: 3; flex-basis: 100%; justify-content: flex-start; }
 }
@@ -1065,6 +1093,7 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
   .config-col { flex: 0 0 auto !important; max-height: 240px; overflow-y: auto; }
   .ai-col { flex: 1 1 auto !important; min-height: 260px; }
   .ai-resize-handle { display: none; }
+  .ai-resize-handle-top { display: none; }
   .templates-grid { padding-bottom: 4px; }
   .template-card { width: 180px; min-width: 180px; }
   .template-card-preview { height: 80px; }

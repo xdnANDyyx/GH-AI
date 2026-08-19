@@ -403,9 +403,16 @@
                 :loading="promptPickerLoading"
                 @change="(val) => onPickPromptItem(item, val)"
               >
-                <el-option v-for="p in promptPickerItems" :key="p.promptKey" :label="p.label" :value="p.promptKey">
+                <el-option
+                  v-for="p in promptPickerItems"
+                  :key="p.promptKey"
+                  :label="p.label"
+                  :value="p.promptKey"
+                  :disabled="isPickerItemTaken(idx, p.promptKey)"
+                >
                   <span class="picker-opt-label">{{ p.label }}</span>
-                  <span class="picker-opt-key">{{ p.promptKey }}</span>
+                  <span v-if="isPickerItemTaken(idx, p.promptKey)" class="picker-opt-taken">已选用</span>
+                  <span v-else class="picker-opt-key">{{ p.promptKey }}</span>
                 </el-option>
               </el-select>
 
@@ -940,6 +947,14 @@ function onPickPromptItem(item, val) {
   item.label = picked.label
   item.value = picked.promptKey
   item._pickerKey = val
+}
+
+// 判断某提示词Key是否已被其他选项行选用（用于去重：已选过的不能再选）
+function isPickerItemTaken(currentIdx, promptKey) {
+  if (!promptKey) return false
+  return creationOptions.value.some(
+    (item, idx) => idx !== currentIdx && item._pickerKey === promptKey
+  )
 }
 
 // 取某 promptKey 对应的提示词内容，用于在选项行下方展示
@@ -1989,6 +2004,13 @@ onMounted(() => {
 
 .picker-opt-label {
   float: left;
+}
+
+.picker-opt-taken {
+  float: right;
+  color: #f56c6c;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .picker-opt-key {

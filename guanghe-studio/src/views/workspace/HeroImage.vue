@@ -262,6 +262,7 @@
 
         <!-- AI Assistant column -->
         <div class="ai-col" :style="{ flex: aiFlex }" ref="aiPanel">
+          <div class="ai-resize-handle-top" @mousedown="startAiHeightResize"></div>
           <div class="ai-header">
             <h3>AI 助手</h3>
             <a href="#" @click.prevent="clearChat">清空对话</a>
@@ -307,7 +308,7 @@
                   :value="m.value"
                 />
               </el-select>
-              <button class="chat-send" @click="sendMessage" :disabled="!chatPrompt.trim() || generating">
+              <button class="chat-send" @click="sendMessage" :disabled="!chatPrompt.trim() || generating || !productFiles.length">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                 发送
               </button>
@@ -519,6 +520,7 @@ export default {
     // ---- Layout resize ----
     const _configWidthPx = ref(280)
     const _aiWidthPx = ref(360)
+    const _aiHeightPx = ref(0) // 0 = auto-fill (no explicit height)
     const canvasFlex = computed(() => '1 1 0%')
     const rightFlex = computed(() => {
       const configW = configCollapsed.value ? 40 : _configWidthPx.value
@@ -528,7 +530,10 @@ export default {
       if (configCollapsed.value) return '0 0 40px'
       return `0 0 ${_configWidthPx.value}px`
     })
-    const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
+    const aiFlex = computed(() => {
+      const heightStyle = _aiHeightPx.value > 0 ? `; min-height: 0; height: ${_aiHeightPx.value}px` : ''
+      return `0 0 ${_aiWidthPx.value}px${heightStyle}`
+    })
     let isResizing = false
     let resizeTarget = ''
     const aiPanel = ref(null)
@@ -690,12 +695,49 @@ export default {
       }
     }
 
+    // AI panel vertical resize (drag top border)
+    let isAiHeightResizing = false
+    let aiHeightStartY = 0
+    let aiHeightStart = 0
+
+    function startAiHeightResize(e) {
+      isAiHeightResizing = true
+      aiHeightStartY = e.clientY
+      const aiEl = aiPanel.value
+      aiHeightStart = aiEl
+        ? (_aiHeightPx.value > 0 ? _aiHeightPx.value : aiEl.getBoundingClientRect().height)
+        : 400
+      _aiHeightPx.value = Math.round(aiHeightStart)
+      document.body.style.cursor = 'ns-resize'
+      document.body.style.userSelect = 'none'
+      e.preventDefault()
+      e.stopPropagation()
+    }
+
+    function onAiHeightMouseMove(e) {
+      if (!isAiHeightResizing) return
+      const delta = e.clientY - aiHeightStartY
+      let newHeight = aiHeightStart + delta
+      newHeight = Math.max(300, Math.min(window.innerHeight - 100, Math.round(newHeight)))
+      _aiHeightPx.value = newHeight
+    }
+
+    function onAiHeightMouseUp() {
+      if (isAiHeightResizing) {
+        isAiHeightResizing = false
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+    }
+
     onMounted(() => {
       loadCreationConfig()
       document.addEventListener('mousemove', onMouseMove)
       document.addEventListener('mouseup', onMouseUp)
       document.addEventListener('mousemove', onAiMouseMove)
       document.addEventListener('mouseup', onAiMouseUp)
+      document.addEventListener('mousemove', onAiHeightMouseMove)
+      document.addEventListener('mouseup', onAiHeightMouseUp)
     })
 
     onBeforeUnmount(() => {
@@ -703,6 +745,8 @@ export default {
       document.removeEventListener('mouseup', onMouseUp)
       document.removeEventListener('mousemove', onAiMouseMove)
       document.removeEventListener('mouseup', onAiMouseUp)
+      document.removeEventListener('mousemove', onAiHeightMouseMove)
+      document.removeEventListener('mouseup', onAiHeightMouseUp)
     })
 
     // ---- Methods ----
@@ -805,7 +849,11 @@ export default {
       }
     }
 
-    function clearChat() { chatMessages.value = [] }
+    function clearChat() {
+      chatMessages.value = []
+      productFiles.value = []
+      gen.reset()
+    }
     function scrollChat() {
       const el = document.querySelector('.ai-chat')
       if (el) el.scrollTop = el.scrollHeight
@@ -923,7 +971,7 @@ export default {
       getObjectUrl,
       toggleAllSections, toggleSection,
       useSuggestion, sendMessage, clearChat,
-      startColResize, startRightPanelResize, startAiResize,
+      startColResize, startRightPanelResize, startAiResize, startAiHeightResize,
       // 反推提示词
       reverseDialogVisible, reverseImageFile, reverseImagePreview, reversePromptInput,
       reverseResult, reverseLoading,
@@ -1442,6 +1490,17 @@ export default {
 .right-panel-divider:hover,
 .right-panel-divider:active { background: #2563FF; }
 
+.ai-resize-handle-top {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  z-index: 5;
+  background: transparent;
+  transition: background 0.2s;
+}
+.ai-resize-handle-top:hover { background: #2563FF; }
+
 /* ============================================================
    AI Column
    ============================================================ */
@@ -1661,6 +1720,7 @@ export default {
   .canvas-col { flex: 0 0 45vh !important; max-height: 45vh; }
   .right-col { flex: 1 1 auto !important; min-height: 250px; }
   .right-panel-divider { display: none; }
+  .ai-resize-handle-top { display: none; }
   .config-col { max-height: 200px; overflow-y: auto; }
 }
 </style>

@@ -424,7 +424,8 @@
 
         <!-- ===== AI Assistant Column ===== -->
         <div class="ai-col" :style="{ flex: aiFlex }">
-          <AiAssistant ref="aiAssistantRef" />
+          <div class="ai-resize-handle-top" @mousedown="startAiHeightResize"></div>
+          <AiAssistant ref="aiAssistantRef" :has-image="productImages.length > 0" :on-clear-images="clearWorkspaceImages" />
         </div>
       </div>
     </div>
@@ -834,6 +835,7 @@ function toggleAllSections() {
 const configCollapsed = ref(false)
 const _configWidthPx = ref(320)
 const _aiWidthPx = ref(360)
+const _aiHeightPx = ref(0) // 0 = auto-fill (no explicit height)
 
 const canvasFlex = computed(() => '1 1 0%')
 const rightFlex = computed(() => {
@@ -844,7 +846,10 @@ const configFlex = computed(() => {
   if (configCollapsed.value) return '0 0 40px'
   return `0 0 ${_configWidthPx.value}px`
 })
-const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
+const aiFlex = computed(() => {
+  const heightStyle = _aiHeightPx.value > 0 ? `; min-height: 0; height: ${_aiHeightPx.value}px` : ''
+  return `0 0 ${_aiWidthPx.value}px${heightStyle}`
+})
 
 // ---------- Column resize logic (like WhiteBg) ----------
 let isResizing = false
@@ -899,6 +904,41 @@ function startRightPanelResize(e, target) {
   e.preventDefault()
 }
 
+// AI panel vertical resize (drag top border)
+let isAiHeightResizing = false
+let aiHeightStartY = 0
+let aiHeightStart = 0
+
+function startAiHeightResize(e) {
+  isAiHeightResizing = true
+  aiHeightStartY = e.clientY
+  const aiEl = document.querySelector('.ai-col')
+  aiHeightStart = aiEl
+    ? (_aiHeightPx.value > 0 ? _aiHeightPx.value : aiEl.getBoundingClientRect().height)
+    : 400
+  _aiHeightPx.value = Math.round(aiHeightStart)
+  document.body.style.cursor = 'ns-resize'
+  document.body.style.userSelect = 'none'
+  e.preventDefault()
+  e.stopPropagation()
+}
+
+function onAiHeightMouseMove(e) {
+  if (!isAiHeightResizing) return
+  const delta = e.clientY - aiHeightStartY
+  let newHeight = aiHeightStart + delta
+  newHeight = Math.max(300, Math.min(window.innerHeight - 100, Math.round(newHeight)))
+  _aiHeightPx.value = newHeight
+}
+
+function onAiHeightMouseUp() {
+  if (isAiHeightResizing) {
+    isAiHeightResizing = false
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }
+}
+
 // ==================== Lifecycle ====================
 onMounted(() => {
   document.addEventListener('mousemove', onMouseMove)
@@ -911,12 +951,21 @@ onMounted(() => {
       _aiWidthPx.value = Math.round(w * 0.55)
     }
   })
+  document.addEventListener('mousemove', onAiHeightMouseMove)
+  document.addEventListener('mouseup', onAiHeightMouseUp)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('mousemove', onMouseMove)
   document.removeEventListener('mouseup', onMouseUp)
+  document.removeEventListener('mousemove', onAiHeightMouseMove)
+  document.removeEventListener('mouseup', onAiHeightMouseUp)
 })
+
+function clearWorkspaceImages() {
+  productImages.value = []
+  gen.reset()
+}
 </script>
 
 <style scoped>
@@ -1045,6 +1094,17 @@ onBeforeUnmount(() => {
 }
 .right-panel-divider:hover,
 .right-panel-divider:active { background: #2563FF; }
+
+.ai-resize-handle-top {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  z-index: 5;
+  background: transparent;
+  transition: background 0.2s;
+}
+.ai-resize-handle-top:hover { background: #2563FF; }
 
 /* ============================================================
    Canvas Column

@@ -111,7 +111,7 @@
               </el-select>
               <el-button
                 type="primary"
-                :disabled="!inputText.trim() || isLoading"
+                :disabled="!inputText.trim() || isLoading || !props.hasImage"
                 :loading="isGenerating"
                 @click="sendMessage"
                 class="send-btn"
@@ -143,7 +143,9 @@ const props = defineProps({
   isGenerating: { type: Boolean, default: false },
   genStatus: { type: String, default: '' },
   genProgress: { type: Number, default: 0 },
-  genError: { type: String, default: '' }
+  genError: { type: String, default: '' },
+  hasImage: { type: Boolean, default: false },
+  onClearImages: { type: Function, default: null }
 })
 const emit = defineEmits(['toggle-collapse'])
 
@@ -204,6 +206,7 @@ async function sendMessage() {
 
 function clearChat() {
   messages.value = []
+  props.onClearImages?.()
 }
 
 defineExpose({ inputText, messages })

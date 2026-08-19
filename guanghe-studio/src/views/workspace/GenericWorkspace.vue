@@ -163,6 +163,7 @@
                 <span class="section-label ai-label">
                   <el-icon :size="16" color="#2563FF"><ChatDotRound /></el-icon> AI 助手
                 </span>
+                <span class="ai-clear" @click="clearChat">清空对话</span>
               </div>
               <div class="section-body">
                 <div class="ai-chat">
@@ -186,7 +187,7 @@
                   <textarea v-model="aiInput" class="ai-textarea" placeholder="请输入您的需求..." rows="3" maxlength="2000"></textarea>
                   <div class="ai-input-footer">
                     <span class="ai-counter">{{ aiInput.length }}/2000</span>
-                    <button class="ai-send-btn" @click="sendAiMessage" :disabled="!aiInput.trim()">发送</button>
+                    <button class="ai-send-btn" @click="sendAiMessage" :disabled="!aiInput.trim() || !originalImage">发送</button>
                   </div>
                 </div>
               </div>
@@ -344,6 +345,15 @@ async function handleGenerate() {
 }
 
 // AI 对话
+function clearChat() {
+  aiMessages.value = []
+  aiInput.value = ''
+  originalImage.value = ''
+  gen.reset()
+  currentStep.value = 1
+  activeResult.value = 0
+}
+
 async function sendAiMessage() {
   if (!aiInput.value.trim()) return
   const text = aiInput.value.trim()
@@ -423,6 +433,7 @@ onMounted(async () => {
   &.no-margin { margin-bottom: 0; }
   &.ai-label { display: flex; align-items: center; gap: 6px; }
 }
+.ai-clear { font-size: 12px; color: var(--gh-text-placeholder); cursor: pointer; }
 .section-header.collapsible { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 4px 0; }
 .expand-text { font-size: 12px; color: #9CA3AF; display: flex; align-items: center; gap: 2px; }
 .expand-arrow { transition: transform 0.2s; &.expanded { transform: rotate(180deg); } }

@@ -225,7 +225,7 @@
 
         <!-- AI Panel（保持不变） -->
         <div class="ai-col" :style="{ flex: aiFlex }" ref="aiPanel">
-          <AiAssistant ref="aiAssistantRef" :generate-fn="handleGenerate" :is-generating="isGenerating" :gen-status="genStatus" :gen-progress="genProgress" :gen-error="genError" />
+          <AiAssistant ref="aiAssistantRef" :generate-fn="handleGenerate" :is-generating="isGenerating" :gen-status="genStatus" :gen-progress="genProgress" :gen-error="genError" :has-image="!!originalImage" :on-clear-images="clearWorkspaceImages" />
         </div>
       </div>
     </div>
@@ -322,7 +322,7 @@ import { getPublicCreationConfigByGroup } from '@/api/customer'
 import { reversePrompt } from '@/api/customer'
 import { getImageUrl } from '@/utils/image'
 
-import { Plus, Delete, ArrowLeft, ArrowRight, Download, Right, UploadFilled, Coin, MagicStick, Loading, DocumentCopy, PictureFilled } from '@element-plus/icons-vue'
+import { Plus, Delete, ArrowLeft, ArrowRight, ArrowDown, Download, Right, UploadFilled, Coin, MagicStick, Loading, DocumentCopy, PictureFilled } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -1062,6 +1062,11 @@ watch(() => [resultImages.value.length, isGenerating.value], () => {
     })
   }
 })
+
+function clearWorkspaceImages() {
+  originalImage.value = ''
+  gen.reset()
+}
 </script>
 
 <style scoped>
