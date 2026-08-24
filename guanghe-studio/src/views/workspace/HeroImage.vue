@@ -262,58 +262,16 @@
 
         <!-- AI Assistant column -->
         <div class="ai-col" :style="{ flex: aiFlex }" ref="aiPanel">
-          <div class="ai-resize-handle-top" @mousedown="startAiHeightResize"></div>
-          <div class="ai-header">
-            <h3>AI 助手</h3>
-            <a href="#" @click.prevent="clearChat">清空对话</a>
-          </div>
-          <div class="ai-chat" ref="chatContainer">
-            <div class="chat-msg bot">
-              <div class="chat-avatar">AI</div>
-              <div class="chat-bubble">您好！我是光合AI助手，有什么可以帮您？</div>
-            </div>
-            <div v-for="(msg, i) in chatMessages" :key="i" class="chat-msg" :class="msg.role">
-              <div v-if="msg.role === 'bot'" class="chat-avatar">AI</div>
-              <div class="chat-bubble">{{ msg.text }}</div>
-            </div>
-            <div v-if="generating" class="chat-msg bot">
-              <div class="chat-avatar">AI</div>
-              <div class="chat-bubble">正在为您生成中...</div>
-            </div>
-          </div>
-          <div class="chat-input-area">
-            <textarea
-              class="chat-input"
-              v-model="chatPrompt"
-              placeholder="请输入您的需求，描述越详细，效果越好..."
-              @keydown.enter.exact.prevent="sendMessage"
-              maxlength="2000"
-            ></textarea>
-          </div>
-          <div class="chat-footer">
-            <div class="chat-footer-left">
-              <span class="char-count">{{ chatPrompt.length }}/2000</span>
-            </div>
-            <div class="chat-footer-right">
-              <el-select
-                v-model="selectedModel"
-                size="small"
-                class="model-select"
-                :disabled="generating"
-              >
-                <el-option
-                  v-for="m in modelOptions"
-                  :key="m.value"
-                  :label="m.label"
-                  :value="m.value"
-                />
-              </el-select>
-              <button class="chat-send" @click="sendMessage" :disabled="!chatPrompt.trim() || generating || !productFiles.length">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                发送
-              </button>
-            </div>
-          </div>
+          <AiAssistant
+            ref="aiAssistantRef"
+            :generate-fn="handleGenerate"
+            :is-generating="isGenerating"
+            :gen-status="genStatus"
+            :gen-progress="genProgress"
+            :gen-error="genError"
+            :has-image="productFiles.length > 0"
+            :on-clear-images="clearWorkspaceImages"
+          />
         </div>
       </div>
     </div>
@@ -384,12 +342,13 @@ import { ArrowDown, ArrowLeft, ArrowRight, UploadFilled, PictureFilled, MagicSti
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { useWorkflowProgress } from '@/composables/useWorkflowProgress'
 import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
+import AiAssistant from '@/components/AiAssistant.vue'
 import { aiDialogue, getPublicCreationConfigByGroup, listPromptLibraryBatch, reversePrompt } from '@/api/customer'
 import { ElMessage } from 'element-plus'
 
 export default {
   name: 'HeroImageView',
-  components: { ArrowDown, ArrowLeft, ArrowRight, UploadFilled, PictureFilled, MagicStick, DocumentCopy, PromptLibrarySelect },
+  components: { ArrowDown, ArrowLeft, ArrowRight, UploadFilled, PictureFilled, MagicStick, DocumentCopy, PromptLibrarySelect, AiAssistant },
   setup() {
     // ---- Canvas Interactions ----
     // const { canvasUI, handleCanvasExport } = useCanvasInteractions({
@@ -422,6 +381,8 @@ export default {
     const isGenerating = computed(() => gen.generating.value)
     const genProgress = computed(() => gen.progress.value)
     const genStatus = computed(() => gen.statusText.value)
+    const genError = computed(() => gen.error.value)
+    const aiAssistantRef = ref(null)
 
     // All expanded state
     const allExpanded = computed(() => {
@@ -520,7 +481,7 @@ export default {
     // ---- Layout resize ----
     const _configWidthPx = ref(280)
     const _aiWidthPx = ref(360)
-    const _aiHeightPx = ref(0) // 0 = auto-fill (no explicit height)
+    const aiPanel = ref(null)
     const canvasFlex = computed(() => '1 1 0%')
     const rightFlex = computed(() => {
       const configW = configCollapsed.value ? 40 : _configWidthPx.value
@@ -530,13 +491,9 @@ export default {
       if (configCollapsed.value) return '0 0 40px'
       return `0 0 ${_configWidthPx.value}px`
     })
-    const aiFlex = computed(() => {
-      const heightStyle = _aiHeightPx.value > 0 ? `; min-height: 0; height: ${_aiHeightPx.value}px` : ''
-      return `0 0 ${_aiWidthPx.value}px${heightStyle}`
-    })
+    const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
     let isResizing = false
     let resizeTarget = ''
-    const aiPanel = ref(null)
 
     function startColResize(e, target) {
       isResizing = true
@@ -695,49 +652,12 @@ export default {
       }
     }
 
-    // AI panel vertical resize (drag top border)
-    let isAiHeightResizing = false
-    let aiHeightStartY = 0
-    let aiHeightStart = 0
-
-    function startAiHeightResize(e) {
-      isAiHeightResizing = true
-      aiHeightStartY = e.clientY
-      const aiEl = aiPanel.value
-      aiHeightStart = aiEl
-        ? (_aiHeightPx.value > 0 ? _aiHeightPx.value : aiEl.getBoundingClientRect().height)
-        : 400
-      _aiHeightPx.value = Math.round(aiHeightStart)
-      document.body.style.cursor = 'ns-resize'
-      document.body.style.userSelect = 'none'
-      e.preventDefault()
-      e.stopPropagation()
-    }
-
-    function onAiHeightMouseMove(e) {
-      if (!isAiHeightResizing) return
-      const delta = e.clientY - aiHeightStartY
-      let newHeight = aiHeightStart + delta
-      newHeight = Math.max(300, Math.min(window.innerHeight - 100, Math.round(newHeight)))
-      _aiHeightPx.value = newHeight
-    }
-
-    function onAiHeightMouseUp() {
-      if (isAiHeightResizing) {
-        isAiHeightResizing = false
-        document.body.style.cursor = ''
-        document.body.style.userSelect = ''
-      }
-    }
-
     onMounted(() => {
       loadCreationConfig()
       document.addEventListener('mousemove', onMouseMove)
       document.addEventListener('mouseup', onMouseUp)
       document.addEventListener('mousemove', onAiMouseMove)
       document.addEventListener('mouseup', onAiMouseUp)
-      document.addEventListener('mousemove', onAiHeightMouseMove)
-      document.addEventListener('mouseup', onAiHeightMouseUp)
     })
 
     onBeforeUnmount(() => {
@@ -745,8 +665,6 @@ export default {
       document.removeEventListener('mouseup', onMouseUp)
       document.removeEventListener('mousemove', onAiMouseMove)
       document.removeEventListener('mouseup', onAiMouseUp)
-      document.removeEventListener('mousemove', onAiHeightMouseMove)
-      document.removeEventListener('mouseup', onAiHeightMouseUp)
     })
 
     // ---- Methods ----
@@ -812,41 +730,39 @@ export default {
     }
 
     function useSuggestion(text) {
-      chatPrompt.value = text
+      if (aiAssistantRef.value) aiAssistantRef.value.inputText = text
     }
 
-    async function sendMessage() {
-      const text = chatPrompt.value.trim()
-      if (!text || generating.value) return
-      chatMessages.value.push({ role: 'user', text })
-      chatPrompt.value = ''
+    async function handleGenerate() {
+      const text = aiAssistantRef.value?.inputText?.trim() || ''
+      if (!productFiles.value.length) { ElMessage.warning('请先上传产品图片'); return }
+      if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
       generating.value = true
-      await nextTick()
-      scrollChat()
       try {
-        const historyMessages = chatMessages.value.slice(0, -1).map(m => ({ role: m.role === 'bot' ? 'assistant' : 'user', content: m.text }))
-        const res = await aiDialogue({ messages: historyMessages, content: text, model: 'deepseek' })
-        chatMessages.value.push({ role: 'bot', text: res?.data?.reply || '已为您生成高转化主图设计。' })
-        if (productFiles.value.length && !resultImages.value.length) {
-          if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
-          try {
-            const extra = { consumePoints: 2, featureName: 'main_image', title: '主图设计', model: selectedModel.value }
-            if (activePlatform.value) {
-              // 使用提示词库中该平台对应的 promptText 传给 AI，而非 raw value
-              const promptText = promptMap.value[activePlatform.value]
-              if (promptText) extra.platformPrompt = promptText
-            }
-            if (effectiveOutputSize.value) extra.outputSize = effectiveOutputSize.value
-            if (generateCount.value) extra.n = Number(generateCount.value)
-            await gen.fullGenerate(productFiles.value, text, extra)
-          } catch (e) { console.error('主图生成失败:', e) }
+        const extra = { consumePoints: 2, featureName: 'main_image', title: '主图设计', model: selectedModel.value }
+        if (activePlatform.value) {
+          // 使用提示词库中该平台对应的 promptText 传给 AI，而非 raw value
+          const promptText = promptMap.value[activePlatform.value]
+          if (promptText) extra.platformPrompt = promptText
         }
+        if (effectiveOutputSize.value) extra.outputSize = effectiveOutputSize.value
+        if (generateCount.value) extra.n = Number(generateCount.value)
+        await gen.fullGenerate(productFiles.value, text, extra)
       } catch (e) {
-        chatMessages.value.push({ role: 'bot', text: '抱歉，AI服务暂时不可用。' })
+        console.error('主图生成失败:', e)
+        const isTimeout = e?.code === 'ECONNABORTED'
+          || /timeout|超时|人数过多|繁忙|busy/i.test(e?.message || '')
+        ElMessage.error(isTimeout
+          ? '当前模型使用人数过多，可选用其他模型生图或稍后再试'
+          : '生成失败，请稍后重试')
       } finally {
         generating.value = false
-        nextTick(() => scrollChat())
       }
+    }
+
+    function clearWorkspaceImages() {
+      productFiles.value = []
+      gen.reset()
     }
 
     function clearChat() {
@@ -959,7 +875,7 @@ export default {
       generateCount, maxGenerateCount,
       chatPrompt, chatMessages, selectedModel, modelOptions,
       allExpanded,
-      isGenerating, genProgress, genStatus,
+      isGenerating, genProgress, genStatus, genError, aiAssistantRef,
       canvasFlex, configFlex, aiFlex, rightFlex,
       configCollapsed,
       aiPanel,
@@ -970,8 +886,8 @@ export default {
       undo, redo, clearCanvas, fitToScreen, toggleFullscreen,
       getObjectUrl,
       toggleAllSections, toggleSection,
-      useSuggestion, sendMessage, clearChat,
-      startColResize, startRightPanelResize, startAiResize, startAiHeightResize,
+      useSuggestion, handleGenerate, clearWorkspaceImages, clearChat,
+      startColResize, startRightPanelResize, startAiResize,
       // 反推提示词
       reverseDialogVisible, reverseImageFile, reverseImagePreview, reversePromptInput,
       reverseResult, reverseLoading,
@@ -1134,22 +1050,26 @@ export default {
 }
 
 .canvas-placeholder {
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   color: #9CA3AF;
-  padding: 20px;
-  cursor: default;
+  padding: 24px;
+  text-align: center;
 
   svg {
     width: 48px;
     height: 48px;
-    margin-bottom: 12px;
+    margin-bottom: 4px;
     opacity: .4;
   }
 
   h3 {
     font-size: 14px;
     color: #6B7280;
-    margin-bottom: 6px;
+    margin-bottom: 0;
     font-weight: 500;
   }
 
@@ -1490,17 +1410,6 @@ export default {
 .right-panel-divider:hover,
 .right-panel-divider:active { background: #2563FF; }
 
-.ai-resize-handle-top {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 6px;
-  cursor: ns-resize;
-  z-index: 5;
-  background: transparent;
-  transition: background 0.2s;
-}
-.ai-resize-handle-top:hover { background: #2563FF; }
-
 /* ============================================================
    AI Column
    ============================================================ */
@@ -1512,84 +1421,6 @@ export default {
   overflow: hidden;
   min-width: 240px;
 }
-
-.ai-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-  flex-shrink: 0;
-}
-.ai-header h3 { font-size: 14px; font-weight: 600; margin: 0; }
-.ai-header a { font-size: 11px; color: #2563FF; text-decoration: none; &:hover { text-decoration: underline; } }
-
-.ai-chat {
-  background: #F7F9FC;
-  border-radius: 10px;
-  padding: 12px;
-  overflow-y: auto;
-  flex: 1;
-  margin-bottom: 8px;
-  min-height: 200px;
-}
-.chat-msg {
-  margin-bottom: 10px;
-  display: flex;
-  gap: 6px;
-}
-.chat-msg.bot { flex-direction: row; }
-.chat-msg.user { flex-direction: row-reverse; }
-.chat-avatar {
-  width: 22px; height: 22px; border-radius: 50%;
-  background: #2563FF; display: flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 10px; flex-shrink: 0;
-}
-.chat-bubble {
-  padding: 8px 12px; border-radius: 10px;
-  font-size: 12px; line-height: 1.5; max-width: 85%;
-}
-.chat-msg.bot .chat-bubble { background: #fff; color: #1F2937; }
-.chat-msg.user .chat-bubble { background: #EEF2FF; color: #2563FF; }
-
-.chat-input-area { display: flex; gap: 6px; flex-shrink: 0; }
-.chat-input {
-  flex: 1; padding: 8px 12px; border: 1px solid #E8EDF5; border-radius: 8px;
-  font-size: 12px; outline: none; height: 50px; min-height: 350px; max-height: 1000px; resize: vertical; font-family: inherit;
-}
-.chat-input:focus { border-color: #2563FF; }
-
-.chat-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  margin-top: 6px;
-  flex-shrink: 0;
-}
-.chat-footer-left {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.chat-footer-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.char-count { font-size: 10px; color: #9CA3AF; }
-.chat-cost { font-size: 10px; color: #22C55E; }
-.model-select {
-  width: 128px;
-}
-.chat-send {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 16px; background: #2563FF; color: #fff;
-  border: none; border-radius: 8px; font-size: 12px; cursor: pointer; font-weight: 500;
-  white-space: nowrap;
-}
-.chat-send:hover { opacity: 0.9; }
-.chat-send:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ============================================================
    反推提示词入口按钮
@@ -1720,7 +1551,6 @@ export default {
   .canvas-col { flex: 0 0 45vh !important; max-height: 45vh; }
   .right-col { flex: 1 1 auto !important; min-height: 250px; }
   .right-panel-divider { display: none; }
-  .ai-resize-handle-top { display: none; }
   .config-col { max-height: 200px; overflow-y: auto; }
 }
 </style>

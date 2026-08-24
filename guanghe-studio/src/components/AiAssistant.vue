@@ -77,7 +77,8 @@
         </div>
       </div>
 
-      <div class="ai-input-area">
+      <div class="ai-input-area" :style="{ flexBasis: inputAreaHeight + 'px' }">
+        <div class="input-resize-handle" @mousedown.prevent="startResize"></div>
         <!-- <div class="points-note">
           <el-icon><InfoFilled /></el-icon>
           本次操作将消耗 <strong>2</strong> 积分
@@ -91,7 +92,7 @@
             show-word-limit
             placeholder="描述你的设计需求，或向AI助手提问..."
             @keydown.enter.exact.prevent="sendMessage"
-            resize="vertical"
+            resize="none"
           />
           <div class="input-actions">
             <span class="char-counter">{{ inputText.length }}/2000</span>
@@ -135,7 +136,7 @@
 </template>
 
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, onBeforeUnmount } from 'vue'
 
 const props = defineProps({
   collapsed: { type: Boolean, default: false },
@@ -208,6 +209,42 @@ function clearChat() {
   messages.value = []
   props.onClearImages?.()
 }
+
+// ===== 输入区拖拽调整高度 =====
+const inputAreaHeight = ref(180) // 默认高度（px）
+let isResizing = false
+let startY = 0
+let startHeight = 0
+
+function startResize(e) {
+  isResizing = true
+  startY = e.clientY
+  startHeight = inputAreaHeight.value
+  document.body.style.cursor = 'row-resize'
+  document.body.style.userSelect = 'none'
+  document.addEventListener('mousemove', onResizeMove)
+  document.addEventListener('mouseup', stopResize)
+}
+
+function onResizeMove(e) {
+  if (!isResizing) return
+  const delta = startY - e.clientY // 向上拖增大
+  const newH = Math.max(120, Math.min(500, startHeight + delta))
+  inputAreaHeight.value = newH
+}
+
+function stopResize() {
+  isResizing = false
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+  document.removeEventListener('mousemove', onResizeMove)
+  document.removeEventListener('mouseup', stopResize)
+}
+
+onBeforeUnmount(() => {
+  document.removeEventListener('mousemove', onResizeMove)
+  document.removeEventListener('mouseup', stopResize)
+})
 
 defineExpose({ inputText, messages })
 </script>
@@ -424,8 +461,40 @@ defineExpose({ inputText, messages })
 
 // ========== 输入区 ==========
 .ai-input-area {
+  flex-shrink: 0;
   padding: 12px;
   border-top: 1px solid var(--gh-border-light);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.input-resize-handle {
+  height: 6px;
+  margin: -6px -12px 8px;
+  cursor: row-resize;
+  background: transparent;
+  border-top: 1px solid var(--gh-border-light);
+  position: relative;
+  transition: background 0.2s;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 3px;
+    border-radius: 2px;
+    background: #D1D5DB;
+    transition: background 0.2s;
+  }
+
+  &:hover {
+    background: rgba(37, 99, 255, 0.04);
+    &::after { background: var(--gh-primary); }
+  }
 }
 
 .points-note {
@@ -451,12 +520,23 @@ defineExpose({ inputText, messages })
 }
 
 .input-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  :deep(.el-textarea) {
+    flex: 1;
+    overflow: hidden;
+  }
   :deep(.el-textarea__inner) {
     border-radius: 12px;
     padding: 10px 14px;
     font-size: 13px;
     box-shadow: none;
     border: 1px solid var(--gh-border);
+    height: 100% !important;
+    resize: none;
 
     &:focus {
       border-color: var(--gh-primary);

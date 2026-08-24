@@ -51,14 +51,12 @@ export function useWorkflowProgress() {
   function getStepClass(stepIndex, currentStepNumber) {
     const key = WORKFLOW_STEPS[stepIndex - 1]?.key
     if (!key) return ''
-    if (completedMap.value[key]) return 'done'
     if (stepIndex === currentStepNumber) return 'active'
     return ''
   }
 
   function isStepLineDone(stepIndex) {
-    const key = WORKFLOW_STEPS[stepIndex - 1]?.key
-    return !!completedMap.value[key]
+    return false
   }
 
   function resetProgress() {

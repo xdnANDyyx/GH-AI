@@ -1,4 +1,4 @@
-﻿<template>
+﻿﻿<template>
   <div class="workspace-page">
     <!-- Three-column layout -->
     <div class="three-col">
@@ -309,63 +309,17 @@
         <div class="right-panel-divider" @mousedown="startRightPanelResize($event, 'ai')"></div>
 
         <!-- AI Assistant column -->
-        <div class="ai-col" :style="{ flex: aiFlex }" ref="aiPanel">
-          <div class="ai-resize-handle-top" @mousedown="startAiHeightResize"></div>
-          <div class="ai-header">
-            <h3>AI 助手</h3>
-            <a href="#" @click.prevent="clearChat">清空对话</a>
-          </div>
-          <div class="ai-chat" ref="chatBox">
-            <div class="chat-msg bot">
-              <div class="chat-avatar">AI</div>
-              <div class="chat-bubble">
-                您好！我是光合AI助手，有什么可以帮您？
-              </div>
-            </div>
-            <template v-for="(msg, i) in aiMessages" :key="i">
-              <div class="chat-msg user">
-                <div class="chat-bubble">{{ msg.text }}</div>
-              </div>
-              <div class="chat-msg bot" v-if="msg.reply">
-                <div class="chat-avatar">AI</div>
-                <div class="chat-bubble">{{ msg.reply }}</div>
-              </div>
-            </template>
-          </div>
-          <div class="chat-input-area">
-            <textarea
-              v-model="aiInput"
-              class="chat-input"
-              placeholder="请输入您的需求，描述越详细，效果越好..."
-              maxlength="2000"
-              @keydown.enter.exact.prevent="sendAiMessage"
-            ></textarea>
-          </div>
-          <div class="chat-footer">
-            <div class="chat-footer-left">
-              <span class="char-count">{{ aiInput.length }}/2000</span>
-              <!-- <span class="chat-cost">本次生成预计消耗：2 积分</span> -->
-            </div>
-            <div class="chat-footer-right">
-              <el-select
-                v-model="selectedModel"
-                size="small"
-                class="model-select"
-                :disabled="isGenerating"
-              >
-                <el-option
-                  v-for="m in modelOptions"
-                  :key="m.value"
-                  :label="m.label"
-                  :value="m.value"
-                />
-              </el-select>
-              <button class="chat-send" @click="sendAiMessage" :disabled="!aiInput.trim() || isGenerating || !productImages.length">
-                <el-icon><Promotion /></el-icon>
-                {{ isGenerating ? '生成中...' : '发送' }}
-              </button>
-            </div>
-          </div>
+        <div class="ai-col" :style="{ flex: aiFlex }">
+          <AiAssistant
+            ref="aiAssistantRef"
+            :generate-fn="handleGenerate"
+            :is-generating="isGenerating"
+            :gen-status="genStatus"
+            :gen-progress="genProgress"
+            :gen-error="genError"
+            :has-image="productFiles.length > 0"
+            :on-clear-images="clearWorkspaceImages"
+          />
         </div>
       </div>
     </div>
@@ -450,6 +404,7 @@ import { useImageHandoffStore } from '@/store'
 // import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
 // import CanvasOverlay from '@/components/CanvasOverlay.vue'
 import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
+import AiAssistant from '@/components/AiAssistant.vue'
 import { favoriteMaterial, cancelFavoriteMaterial, getPublicCreationConfigByGroup, listPromptLibraryBatch, reversePrompt } from '@/api/customer'
 import { urlToFile } from '@/utils/image'
 import { ArrowLeft, ArrowRight, ArrowDown, UploadFilled, Promotion, MagicStick, DocumentCopy } from '@element-plus/icons-vue'
@@ -517,7 +472,6 @@ const chatBox = ref(null)
 // Panel widths - 画布自动占满剩余空间，右侧栏宽度=配置栏+AI栏+分隔线
 const _configWidthPx = ref(280)
 const _aiWidthPx = ref(360)
-const _aiHeightPx = ref(0) // 0 = auto-fill (no explicit height)
 const configCollapsed = ref(false)
 const canvasFlex = computed(() => '1 1 0%')
 const rightFlex = computed(() => {
@@ -528,17 +482,12 @@ const configFlex = computed(() => {
   if (configCollapsed.value) return '0 0 40px'
   return `0 0 ${_configWidthPx.value}px`
 })
-const aiFlex = computed(() => {
-  const heightStyle = _aiHeightPx.value > 0 ? `; min-height: 0; height: ${_aiHeightPx.value}px` : ''
-  return `0 0 ${_aiWidthPx.value}px${heightStyle}`
-})
+    const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
 
 let isResizing = false
 let resizeTarget = ''
-const aiPanel = ref(null)
 
 const productFiles = ref([])
-const referenceFiles = ref([])
 
 const aiInput = ref('')
 const aiMessages = ref([])
@@ -646,6 +595,8 @@ const resultImages = computed(() => gen.resultImages.value)
 const isGenerating = computed(() => gen.generating.value)
 const genProgress = computed(() => gen.progress.value)
 const genStatus = computed(() => gen.statusText.value)
+const genError = computed(() => gen.error.value)
+const aiAssistantRef = ref(null)
 
 // All expanded state
 const allExpanded = computed(() => {
@@ -713,18 +664,12 @@ function handleRefFiles(e) {
   })
 }
 
-async function sendAiMessage() {
-  if (!aiInput.value.trim()) return
-  if (isGenerating.value) return
-  if (productFiles.value.length === 0) {
+async function handleGenerate() {
+  if (!productFiles.value.length) {
     ElMessage.warning('请先上传商品图')
     return
   }
-  const text = aiInput.value
-  aiMessages.value.push({ text, reply: '' })
-  aiInput.value = ''
-  await nextTick()
-  if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight
+  const text = aiAssistantRef.value?.inputText?.trim() || ''
 
   // 拼提示词：用户输入 + 选中标签对应的提示词库 prompt_text + 提示词增强约束词
   const tagPrompts = [
@@ -752,8 +697,6 @@ async function sendAiMessage() {
   // 每次发送都扣积分
   if (!(await gen.checkPoints(2))) {
     ElMessage.warning('积分不足，请先充值')
-    const lastMsg = aiMessages.value[aiMessages.value.length - 1]
-    lastMsg.reply = '积分不足，请先充值后再试。'
     return
   }
   extraParams.consumePoints = 2
@@ -761,18 +704,20 @@ async function sendAiMessage() {
   extraParams.title = '白底生成背景'
   try {
     await gen.fullGenerate(productFiles.value, prompt, extraParams)
-    const lastMsg = aiMessages.value[aiMessages.value.length - 1]
-    lastMsg.reply = '已根据您的需求开始生成，请在左侧画布查看结果。'
-    await nextTick()
-    if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight
   } catch (e) {
-    const lastMsg = aiMessages.value[aiMessages.value.length - 1]
     const isTimeout = e?.code === 'ECONNABORTED'
       || /timeout|超时|人数过多|繁忙|busy/i.test(e?.message || '')
-    lastMsg.reply = isTimeout
+    ElMessage.error(isTimeout
       ? '当前模型使用人数过多，可选用其他模型生图或稍后再试'
-      : '生成失败，请稍后重试。'
+      : '生成失败，请稍后重试')
   }
+}
+
+function clearWorkspaceImages() {
+  productImages.value = []
+  referenceImages.value = []
+  productFiles.value = []
+  gen.reset()
 }
 
 function clearChat() {
@@ -895,8 +840,6 @@ onMounted(() => {
   document.addEventListener('mousemove', onMouseMove)
   document.addEventListener('mouseup', onMouseUp)
   document.addEventListener('click', handleClickOutside)
-  document.addEventListener('mousemove', onAiHeightMouseMove)
-  document.addEventListener('mouseup', onAiHeightMouseUp)
   nextTick(() => {
     const rightCol = document.querySelector('.right-col')
     if (rightCol) {
@@ -909,41 +852,6 @@ onMounted(() => {
   loadPromptMap()
   consumeHandoffImage()
 })
-
-// AI panel vertical resize (drag top border)
-let isAiHeightResizing = false
-let aiHeightStartY = 0
-let aiHeightStart = 0
-
-function startAiHeightResize(e) {
-  isAiHeightResizing = true
-  aiHeightStartY = e.clientY
-  const aiEl = aiPanel.value
-  aiHeightStart = aiEl
-    ? (_aiHeightPx.value > 0 ? _aiHeightPx.value : aiEl.getBoundingClientRect().height)
-    : 400
-  _aiHeightPx.value = Math.round(aiHeightStart)
-  document.body.style.cursor = 'ns-resize'
-  document.body.style.userSelect = 'none'
-  e.preventDefault()
-  e.stopPropagation()
-}
-
-function onAiHeightMouseMove(e) {
-  if (!isAiHeightResizing) return
-  const delta = e.clientY - aiHeightStartY
-  let newHeight = aiHeightStart + delta
-  newHeight = Math.max(300, Math.min(window.innerHeight - 100, Math.round(newHeight)))
-  _aiHeightPx.value = newHeight
-}
-
-function onAiHeightMouseUp() {
-  if (isAiHeightResizing) {
-    isAiHeightResizing = false
-    document.body.style.cursor = ''
-    document.body.style.userSelect = ''
-  }
-}
 
 // keep-alive 复用时也消费接力图片（已切走再切回时 onMounted 不再触发）
 onActivated(() => {
@@ -1165,8 +1073,6 @@ onBeforeUnmount(() => {
   document.removeEventListener('mousemove', onMouseMove)
   document.removeEventListener('mouseup', onMouseUp)
   document.removeEventListener('click', handleClickOutside)
-  document.removeEventListener('mousemove', onAiHeightMouseMove)
-  document.removeEventListener('mouseup', onAiHeightMouseUp)
 })
 </script>
 
@@ -1318,16 +1224,6 @@ onBeforeUnmount(() => {
 .right-panel-divider:hover,
 .right-panel-divider:active { background: #2563FF; }
 
-.ai-resize-handle-top {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 6px;
-  cursor: ns-resize;
-  z-index: 5;
-  background: transparent;
-  transition: background 0.2s;
-}
-.ai-resize-handle-top:hover { background: #2563FF; }
 
 // ========== Canvas Column ==========
 .canvas-col {
@@ -1825,86 +1721,6 @@ onBeforeUnmount(() => {
   min-width: 240px;
 }
 
-.ai-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-  flex-shrink: 0;
-}
-
-.ai-header h3 { font-size: 14px; font-weight: 600; margin: 0; }
-.ai-header a { font-size: 11px; color: #2563FF; text-decoration: none; &:hover { text-decoration: underline; } }
-
-.ai-chat {
-  background: #F7F9FC;
-  border-radius: 10px;
-  padding: 12px;
-  overflow-y: auto;
-  flex: 1;
-  margin-bottom: 8px;
-  min-height: 200px;
-}
-
-.chat-msg {
-  margin-bottom: 10px;
-  display: flex;
-  gap: 6px;
-}
-.chat-msg.bot { flex-direction: row; }
-.chat-msg.user { flex-direction: row-reverse; }
-.chat-avatar {
-  width: 22px; height: 22px; border-radius: 50%;
-  background: #2563FF; display: flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 10px; flex-shrink: 0;
-}
-.chat-bubble {
-  padding: 8px 12px; border-radius: 10px;
-  font-size: 12px; line-height: 1.5; max-width: 85%;
-}
-.chat-msg.bot .chat-bubble { background: #fff; color: #1F2937; }
-.chat-msg.user .chat-bubble { background: #EEF2FF; color: #2563FF; }
-
-.chat-input-area { display: flex; gap: 6px; flex-shrink: 0; }
-.chat-input {
-  flex: 1; padding: 8px 12px; border: 1px solid #E8EDF5; border-radius: 8px;
-  font-size: 12px; outline: none; height: 50px; min-height: 350px; max-height: 1000px; resize: vertical; font-family: inherit;
-}
-.chat-input:focus { border-color: #2563FF; }
-
-.chat-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  margin-top: 6px;
-  flex-shrink: 0;
-}
-.chat-footer-left {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.chat-footer-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.char-count { font-size: 10px; color: #9CA3AF; }
-.chat-cost { font-size: 10px; color: #22C55E; }
-.model-select {
-  width: 128px;
-}
-.chat-send {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 16px; background: #2563FF; color: #fff;
-  border: none; border-radius: 8px; font-size: 12px; cursor: pointer; font-weight: 500;
-  white-space: nowrap;
-}
-.chat-send:hover { opacity: 0.9; }
-.chat-send:disabled { opacity: 0.4; cursor: not-allowed; }
-
 // ========== Responsive ==========
 @media (max-width: 1024px) {
   .steps-bar { padding: 0 0 8px; gap: 4px; }
@@ -1922,7 +1738,6 @@ onBeforeUnmount(() => {
   .canvas-col { flex: 0 0 45vh !important; max-height: 45vh; }
   .right-col { flex: 1 1 auto !important; min-height: 250px; }
   .right-panel-divider { display: none; }
-  .ai-resize-handle-top { display: none; }
   .config-col { max-height: 200px; overflow-y: auto; }
 }
 

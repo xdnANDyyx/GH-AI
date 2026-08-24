@@ -38,59 +38,36 @@
         </div>
         -->
          
-        <!-- Central canvas / upload zone -->
-        <div class="canvas-box" v-if="!generated"
-        >
-          <!-- <CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" /> -->
-          <div class="upload-zone" @click="triggerUpload" @dragover.prevent @drop.prevent="handleDrop">
-            <div class="upload-placeholder" v-if="!productImage">
-              <el-icon :size="48" color="#9CA3AF"><PictureFilled /></el-icon>
-              <p class="upload-main-text">拖拽图片到画布，或从右侧配置生成</p>
-              <p class="upload-sub-text">生成的模特效果将呈现在画布中</p>
-            </div>
-            <div class="upload-preview" v-else>
-              <img :src="productImage" class="preview-img" :style="{ transform: `scale(${zoom / 100})` }" />
-              <div class="preview-overlay">
-                <el-button type="danger" size="small" circle @click.stop="productImage = ''">
-                  <el-icon><Delete /></el-icon>
-                </el-button>
-              </div>
+        <!-- Canvas Area -->
+        <div class="canvas-box">
+          <!-- 未生成：显示空状态 -->
+          <div v-if="resultImages.length === 0" class="canvas-placeholder">
+            <svg viewBox="0 0 48 48" fill="none">
+              <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
+              <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
+              <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <h3>AI 模特生成后将显示在此处</h3>
+            <p>请在右侧上传商品图并点击发送</p>
+            <div v-if="isGenerating" class="generating-overlay">
+              <div class="progress-ring">{{ genProgress }}%</div>
+              <p>{{ genStatus }}</p>
             </div>
           </div>
-          <div class="canvas-zoom-controls" v-if="productImage">
-            <button class="zoom-btn" @click="zoomOut">−</button>
-            <span class="zoom-value">{{ zoom }}%</span>
-            <button class="zoom-btn" @click="zoomIn">+</button>
-          </div>
-        </div>
-
-        <!-- Result grid -->
-        <div class="result-area" v-else>
-          <div class="model-grid">
-            <div v-for="i in genCount" :key="i" class="model-card">
-              <div
-                class="model-thumb"
-                :style="{ background: `linear-gradient(135deg, hsl(${340 + i * 20}, 50%, 90%), hsl(${200 + i * 30}, 60%, 88%))` }"
-              >
-                <el-icon :size="44" style="opacity: 0.35"><User /></el-icon>
-                <span>模特方案 {{ i }}</span>
-              </div>
-              <div class="model-card-actions">
-                <el-button text size="small"><el-icon><Star /></el-icon></el-button>
-                <el-button text size="small" type="primary"><el-icon><Download /></el-icon></el-button>
-              </div>
+          <!-- 有结果图时：展示结果 -->
+          <div v-else class="result-grid" :class="{ generating: isGenerating }">
+            <div v-for="(img, idx) in resultImages" :key="'r'+idx" class="result-card">
+              <img :src="img.url || img" class="result-img" />
             </div>
-          </div>
-          <div class="result-bottom-actions">
-            <el-button @click="generated = false"><el-icon><RefreshLeft /></el-icon> 重新生成</el-button>
-            <el-button type="primary" @click="$router.push('/hero-image')">
-              下一步：主图设计 <el-icon><Right /></el-icon>
-            </el-button>
+            <div v-if="isGenerating" class="generating-overlay">
+              <div class="progress-ring">{{ genProgress }}%</div>
+              <p>{{ genStatus }}</p>
+            </div>
           </div>
         </div>
 
         <div class="canvas-bottom-bar">
-          <span>提示：在右侧上传商品图并配置参数，点击生成按钮即可生成AI模特效果。</span>
+          <span>提示：在右侧上传商品图，在AI助手中输入需求后点击发送即可生成。</span>
         </div>
       </div>
 
@@ -397,12 +374,6 @@
               </div>
             </div>
 
-            <!-- Generate button -->
-            <el-button type="primary" size="large" class="generate-btn" :loading="generating" @click="handleGenerate">
-              <el-icon><MagicStick /></el-icon>
-              生成AI模特
-              <span class="btn-points">-{{ totalPoints }} 积分</span>
-            </el-button>
           </div>
         </el-scrollbar>
       </div>
@@ -412,7 +383,7 @@
 
       <!-- ===== RIGHT: AI Panel ===== -->
       <div class="ai-col" :style="{ flex: aiFlex }" ref="aiPanel">
-        <div class="ai-resize-handle-top" @mousedown="startAiHeightResize"></div>
+        
         <AiAssistant
           ref="aiAssistantRef"
           :generate-fn="handleGenerate"
@@ -512,7 +483,7 @@ const configCollapsed = ref(false)
 const fileInput = ref(null)
 const productImage = ref('')
 const originalFile = ref(null)
-const generated = ref(false)
+const resultImages = ref([])
 const generating = ref(false)
 
 const zoom = ref(100)
@@ -731,16 +702,12 @@ const allExpanded = computed(() => {
 // ---- Layout resize ----
 const _configWidthPx = ref(280)
 const _aiWidthPx = ref(360)
-const _aiHeightPx = ref(0) // 0 = auto-fill (no explicit height)
 const canvasFlex = computed(() => '1 1 0%')
 const configFlex = computed(() => {
   if (configCollapsed.value) return '0 0 40px'
   return `0 0 ${_configWidthPx.value}px`
 })
-const aiFlex = computed(() => {
-  const heightStyle = _aiHeightPx.value > 0 ? `; min-height: 0; height: ${_aiHeightPx.value}px` : ''
-  return `0 0 ${_aiWidthPx.value}px${heightStyle}`
-})
+const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
 const aiPanel = ref(null)
 let isResizing = false
 let resizeTarget = ''
@@ -784,49 +751,11 @@ function onMouseUp() {
   }
 }
 
-// AI panel vertical resize (drag top border)
-let isAiHeightResizing = false
-let aiHeightStartY = 0
-let aiHeightStart = 0
-
-function startAiHeightResize(e) {
-  isAiHeightResizing = true
-  aiHeightStartY = e.clientY
-  const aiEl = aiPanel.value
-  aiHeightStart = aiEl
-    ? (_aiHeightPx.value > 0 ? _aiHeightPx.value : aiEl.getBoundingClientRect().height)
-    : 400
-  _aiHeightPx.value = Math.round(aiHeightStart)
-  document.body.style.cursor = 'ns-resize'
-  document.body.style.userSelect = 'none'
-  e.preventDefault()
-  e.stopPropagation()
-}
-
-function onAiHeightMouseMove(e) {
-  if (!isAiHeightResizing) return
-  const delta = e.clientY - aiHeightStartY
-  let newHeight = aiHeightStart + delta
-  newHeight = Math.max(300, Math.min(window.innerHeight - 100, Math.round(newHeight)))
-  _aiHeightPx.value = newHeight
-}
-
-function onAiHeightMouseUp() {
-  if (isAiHeightResizing) {
-    isAiHeightResizing = false
-    document.body.style.cursor = ''
-    document.body.style.userSelect = ''
-  }
-}
-
 onMounted(() => {
   document.addEventListener('mousemove', onMouseMove)
   document.addEventListener('mouseup', onMouseUp)
   loadModelList()
   loadCreationConfig()
-  document.addEventListener('mousemove', onAiHeightMouseMove)
-  document.addEventListener('mouseup', onAiHeightMouseUp)
-
   nextTick(() => {
     const rightCol = document.querySelector('.right-col')
     if (rightCol) {
@@ -839,10 +768,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('mousemove', onMouseMove)
-  document.removeEventListener('mouseup', onMouseUp)
-  document.removeEventListener('mousemove', onAiHeightMouseMove)
-  document.removeEventListener('mouseup', onAiHeightMouseUp)
-})
+  document.removeEventListener('mouseup', onMouseUp)})
 
 // ---- Methods ----
 function toggleSection(key) {
@@ -891,10 +817,7 @@ async function handleGenerate() {
     const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
     const prompt = boostText ? `${_basePrompt}；${text ? text + '。' : ''}约束：${boostText}。` : `${_basePrompt}${text ? '。' + text : ''}`
     await gen.fullGenerate([originalFile.value], prompt, { consumePoints: 2, featureName: 'ai_model', title: 'AI模特生成', n: 1 })
-    if (gen.resultImages.value.length > 0) {
-      generated.value = true
-      productImage.value = gen.resultImages.value[0].url || gen.resultImages.value[0]
-    }
+    if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
   } catch (e) {
     console.error('AI模特生成失败:', e)
     const isTimeout = e?.code === 'ECONNABORTED'
@@ -907,7 +830,7 @@ async function handleGenerate() {
 
 function clearCanvas() {
   productImage.value = ''
-  generated.value = false
+  resultImages.value = []
 }
 
 // ===== 从后台创作配置读取AI模特配置 =====
@@ -1038,6 +961,7 @@ async function loadPromptMap() {
 function clearWorkspaceImages() {
   productImage.value = ''
   originalFile.value = null
+  resultImages.value = []
   gen.reset()
 }
 </script>
@@ -1173,17 +1097,6 @@ function clearWorkspaceImages() {
 .col-divider:hover,
 .col-divider:active { background: #2563FF; }
 
-.ai-resize-handle-top {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 6px;
-  cursor: ns-resize;
-  z-index: 5;
-  background: transparent;
-  transition: background 0.2s;
-}
-.ai-resize-handle-top:hover { background: #2563FF; }
-
 .config-toggle-btn {
   position: absolute;
   top: 50%;
@@ -1214,7 +1127,7 @@ function clearWorkspaceImages() {
 .canvas-col {
   display: flex;
   flex-direction: column;
-  padding: 12px;
+  padding: 16px;
   overflow: hidden;
   background: #F7F9FC;
   min-width: 0;
@@ -1284,8 +1197,13 @@ function clearWorkspaceImages() {
 // ========== Canvas Box ==========
 .canvas-box {
   flex: 1;
+  border: 2px dashed #E8EDF5;
+  border-radius: 12px;
+  background: #fff;
   display: flex;
-  align-items: stretch;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
   min-height: 0;
   position: relative;
 }
@@ -1340,6 +1258,96 @@ function clearWorkspaceImages() {
     background: rgba(37, 99, 255, 0.02);
   }
 }
+
+.canvas-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #9CA3AF;
+  padding: 24px;
+  text-align: center;
+
+  svg {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 4px;
+    opacity: .4;
+  }
+
+  h3 {
+    font-size: 14px;
+    color: #6B7280;
+    margin-bottom: 0;
+    font-weight: 500;
+  }
+
+  p {
+    font-size: 12px;
+    color: #9CA3AF;
+  }
+}
+
+// ========== Result Grid ==========
+.result-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  align-content: start;
+  overflow: auto;
+  position: relative;
+  padding: 4px;
+
+  &.generating { opacity: 0.6; pointer-events: none; }
+}
+
+.result-card {
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #EBEDF5;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.result-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.generating-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  z-index: 10;
+}
+
+.progress-ring {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 4px solid #E5E7EB;
+  border-top-color: #2563FF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #2563FF;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
 
 .upload-placeholder {
   text-align: center;
@@ -1443,10 +1451,12 @@ function clearWorkspaceImages() {
 }
 
 .canvas-bottom-bar {
-  padding: 6px 0 0;
+  padding: 8px 0;
   font-size: 11px;
   color: #9CA3AF;
   flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
 }
 
 // ============================================================
@@ -1805,80 +1815,10 @@ function clearWorkspaceImages() {
   display: flex;
   flex-direction: column;
   background: #fff;
-  padding: 14px;
+  padding: 16px;
   overflow: hidden;
-  min-width: 200px;
+  min-width: 240px;
 }
-
-.ai-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-  flex-shrink: 0;
-}
-.ai-header h3 { font-size: 14px; font-weight: 600; margin: 0; }
-.ai-clear-btn {
-  font-size: 11px; color: #2563FF; background: none; border: none;
-  cursor: pointer; text-decoration: underline;
-}
-.ai-clear-btn:hover { opacity: 0.7; }
-
-.ai-chat {
-  background: #F7F9FC;
-  border-radius: 10px;
-  padding: 12px;
-  overflow-y: auto;
-  flex: 1;
-  margin-bottom: 8px;
-  min-height: 200px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.chat-msg {
-  display: flex;
-  gap: 8px;
-}
-.chat-msg.bot { flex-direction: row; }
-.chat-msg.user { flex-direction: row-reverse; }
-.chat-avatar {
-  width: 22px; height: 22px; border-radius: 50%;
-  background: linear-gradient(135deg, #2563FF, #4F83FF);
-  display: flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 10px; flex-shrink: 0;
-}
-.chat-bubble {
-  padding: 8px 12px; border-radius: 10px;
-  font-size: 12px; line-height: 1.5; max-width: 85%;
-}
-.chat-msg.bot .chat-bubble { background: #fff; color: #1F2937; }
-.chat-msg.user .chat-bubble { background: #EEF2FF; color: #2563FF; }
-
-.chat-input-area { display: flex; gap: 6px; flex-shrink: 0; }
-.chat-input {
-  flex: 1; padding: 8px 12px; border: 1px solid #E8EDF5; border-radius: 8px;
-  font-size: 12px; outline: none; resize: none; height: 50px; font-family: inherit;
-}
-.chat-input:focus { border-color: #2563FF; }
-
-.chat-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  margin-top: 6px;
-  flex-shrink: 0;
-}
-.chat-counter { font-size: 10px; color: #9CA3AF; }
-.chat-cost { font-size: 10px; color: #22C55E; }
-.chat-send {
-  padding: 8px 16px; background: #2563FF; color: #fff;
-  border: none; border-radius: 8px; font-size: 12px; cursor: pointer; font-weight: 500;
-  white-space: nowrap;
-}
-.chat-send:hover { opacity: 0.9; }
-.chat-send:disabled { opacity: 0.4; cursor: not-allowed; }
 
 // ===== Model select =====
 .model-select-list {
@@ -1960,7 +1900,6 @@ function clearWorkspaceImages() {
   .ai-col { flex: 0 0 50% !important; }
   .col-divider-wrapper { display: none; }
   .col-divider { display: none; }
-  .ai-resize-handle-top { display: none; }
 }
 
 @media (max-width: 768px) {
@@ -1970,7 +1909,6 @@ function clearWorkspaceImages() {
   .canvas-col { flex: 0 0 45vh !important; max-height: 45vh; }
   .config-col { flex: 0 0 auto !important; max-height: 200px; overflow-y: auto; }
   .ai-col { flex: 1 1 auto !important; min-height: 250px; }
-  .ai-resize-handle-top { display: none; }
 }
 
 /* ===== 反推提示词入口按钮 ===== */

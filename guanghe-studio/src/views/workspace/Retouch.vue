@@ -168,7 +168,7 @@
       <!-- ===== RIGHT: AI Panel (flex:1) ===== -->
       <div class="ai-col" :style="{ flex: aiFlex }" ref="aiPanel">
         <div class="ai-resize-handle" @mousedown="startAiResize"></div>
-        <div class="ai-resize-handle-top" @mousedown="startAiHeightResize"></div>
+        
         <AiAssistant
           ref="aiAssistantRef"
           :generate-fn="handleGenerate"
@@ -437,20 +437,16 @@ export default {
     // ---- Layout resize ----
     const _configWidthPx = ref(280)
     const _aiWidthPx = ref(360)
-    const _aiHeightPx = ref(0) // 0 = auto-fill (no explicit height)
-    const canvas3Flex = computed(() => '1 1 0%')
+    const aiPanel = ref(null)
+        const canvas3Flex = computed(() => '1 1 0%')
     const canvasFlex = canvas3Flex
     const configFlex = computed(() => {
       if (configCollapsed.value) return '0 0 40px'
       return `0 0 ${_configWidthPx.value}px`
     })
-    const aiFlex = computed(() => {
-      const heightStyle = _aiHeightPx.value > 0 ? `; min-height: 0; height: ${_aiHeightPx.value}px` : ''
-      return `0 0 ${_aiWidthPx.value}px${heightStyle}`
-    })
+    const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
     let isResizing = false
     let resizeTarget = ''
-    const aiPanel = ref(null)
 
     function startColResize(e, target) {
       isResizing = true
@@ -526,48 +522,11 @@ export default {
       }
     }
 
-    // AI panel vertical resize (drag top border)
-    let isAiHeightResizing = false
-    let aiHeightStartY = 0
-    let aiHeightStart = 0
-
-    function startAiHeightResize(e) {
-      isAiHeightResizing = true
-      aiHeightStartY = e.clientY
-      const aiEl = aiPanel.value
-      aiHeightStart = aiEl
-        ? (_aiHeightPx.value > 0 ? _aiHeightPx.value : aiEl.getBoundingClientRect().height)
-        : 400
-      _aiHeightPx.value = Math.round(aiHeightStart)
-      document.body.style.cursor = 'ns-resize'
-      document.body.style.userSelect = 'none'
-      e.preventDefault()
-      e.stopPropagation()
-    }
-
-    function onAiHeightMouseMove(e) {
-      if (!isAiHeightResizing) return
-      const delta = e.clientY - aiHeightStartY
-      let newHeight = aiHeightStart + delta
-      newHeight = Math.max(300, Math.min(window.innerHeight - 100, Math.round(newHeight)))
-      _aiHeightPx.value = newHeight
-    }
-
-    function onAiHeightMouseUp() {
-      if (isAiHeightResizing) {
-        isAiHeightResizing = false
-        document.body.style.cursor = ''
-        document.body.style.userSelect = ''
-      }
-    }
-
     onMounted(() => {
       document.addEventListener('mousemove', onMouseMove)
       document.addEventListener('mouseup', onMouseUp)
       document.addEventListener('mousemove', onAiMouseMove)
       document.addEventListener('mouseup', onAiMouseUp)
-      document.addEventListener('mousemove', onAiHeightMouseMove)
-      document.addEventListener('mouseup', onAiHeightMouseUp)
       document.addEventListener('click', handleClickOutside)
       loadCreationConfig()
       consumeHandoffImage()
@@ -865,7 +824,7 @@ export default {
       triggerUpload, handleFileSelect, handleDrop, clearImage, removeProductFile,
       undo, redo, reset, toggleFullscreen,
       toggleAllSections, toggleSection,
-      startColResize, startAiResize, startAiHeightResize,
+      startColResize, startAiResize,
       // canvasUI, handleCanvasExport,
       // ---- 图片接力右键菜单 ----
       handoffMenu, openHandoffMenu, hideHandoffMenu,
@@ -1331,84 +1290,6 @@ export default {
 }
 .ai-resize-handle:hover { background: #2563FF; }
 
-.ai-resize-handle-top {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 6px;
-  cursor: ns-resize;
-  z-index: 5;
-  background: transparent;
-  transition: background 0.2s;
-}
-.ai-resize-handle-top:hover { background: #2563FF; }
-
-.ai-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-  flex-shrink: 0;
-}
-.ai-header h3 { font-size: 14px; font-weight: 600; margin: 0; }
-.ai-clear-btn {
-  font-size: 11px; color: #2563FF; background: none; border: none;
-  cursor: pointer; text-decoration: underline;
-}
-.ai-clear-btn:hover { opacity: 0.7; }
-
-.ai-chat {
-  background: #F7F9FC;
-  border-radius: 10px;
-  padding: 12px;
-  overflow-y: auto;
-  flex: 1;
-  margin-bottom: 8px;
-  min-height: 200px;
-}
-
-.chat-msg {
-  margin-bottom: 10px;
-  display: flex;
-  gap: 6px;
-}
-.chat-msg.bot { flex-direction: row; }
-.chat-msg.user { flex-direction: row-reverse; }
-.chat-avatar {
-  width: 22px; height: 22px; border-radius: 50%;
-  background: #2563FF; display: flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 10px; flex-shrink: 0;
-}
-.chat-bubble {
-  padding: 8px 12px; border-radius: 10px;
-  font-size: 12px; line-height: 1.5; max-width: 85%;
-}
-.chat-msg.bot .chat-bubble { background: #fff; color: #1F2937; }
-.chat-msg.user .chat-bubble { background: #EEF2FF; color: #2563FF; }
-
-.chat-input-area { display: flex; gap: 6px; flex-shrink: 0; }
-.chat-input {
-  flex: 1; padding: 8px 12px; border: 1px solid #E8EDF5; border-radius: 8px;
-  font-size: 12px; outline: none; resize: none; height: 50px; font-family: inherit;
-}
-.chat-input:focus { border-color: #2563FF; }
-
-.chat-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  margin-top: 6px;
-  flex-shrink: 0;
-}
-.chat-counter { font-size: 10px; color: #9CA3AF; }
-.chat-cost { font-size: 10px; color: #22C55E; }
-.chat-send {
-  padding: 8px 16px; background: #2563FF; color: #fff;
-  border: none; border-radius: 8px; font-size: 12px; cursor: pointer; font-weight: 500;
-  white-space: nowrap;
-}
-.chat-send:hover { opacity: 0.9; }
-.chat-send:disabled { opacity: 0.4; cursor: not-allowed; }
-
 /* ============================================================
    Responsive
    ============================================================ */
@@ -1431,7 +1312,6 @@ export default {
   .config-col { flex: 0 0 auto !important; max-height: 200px; overflow-y: auto; }
   .ai-col { flex: 1 1 auto !important; min-height: 250px; }
   .ai-resize-handle { display: none; }
-  .ai-resize-handle-top { display: none; }
   .tool-grid { grid-template-columns: repeat(3, 1fr); }
 }
 

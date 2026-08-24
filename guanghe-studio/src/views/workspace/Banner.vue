@@ -13,29 +13,37 @@
           </template>
         </div>
 
-        <div class="canvas-dropzone"
-          @drop.prevent="handleDrop"
-        >
-          <!-- <CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" /> -->
-          <div v-if="!originalImage" class="dropzone-placeholder" @click="triggerUpload">
-            <svg class="dropzone-icon" viewBox="0 0 48 48" fill="none"><rect x="4" y="8" width="40" height="50" rx="4" stroke="#D1D5DB" stroke-width="2"/><circle cx="16" cy="20" r="4" stroke="#D1D5DB" stroke-width="2"/><polyline points="44,34 34,24 20,38" stroke="#D1D5DB" stroke-width="2" fill="none"/><polyline points="28,30 22,24 4,38" stroke="#D1D5DB" stroke-width="2" fill="none"/></svg>
-            <div class="dropzone-title">拖拽图片到画布，或从右侧上传素材</div>
-            <div class="dropzone-desc">支持 JPG / PNG / WebP，建议宽度 ≥ 1200px</div>
+        <div class="canvas-box">
+          <!-- 未生成：显示空状态 -->
+          <div v-if="resultImages.length === 0" class="canvas-placeholder">
+            <svg viewBox="0 0 48 48" fill="none">
+              <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
+              <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
+              <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <h3>Banner 生成后将显示在此处</h3>
+            <p>请在右侧上传素材并配置参数</p>
+            <div v-if="isGenerating" class="generating-overlay">
+              <div class="progress-ring">{{ genProgress }}%</div>
+              <p>{{ genStatus }}</p>
+            </div>
           </div>
-          <div v-else class="dropzone-preview">
-            <img :src="originalImage" class="preview-img" :style="{ transform: `scale(${zoom / 100})` }" />
-            <div class="preview-overlay"><button class="preview-del-btn" @click.stop="clearImage">✕</button></div>
-          </div>
-          <div class="canvas-zoom-controls" v-if="originalImage">
-            <button class="zoom-btn" @click="zoomOut">−</button>
-            <span class="zoom-value">{{ zoom }}%</span>
-            <button class="zoom-btn" @click="zoomIn">+</button>
+          <!-- 有结果图时：展示结果 -->
+          <div v-else class="result-grid" :class="{ generating: isGenerating }">
+            <div v-for="(img, idx) in resultImages" :key="'r'+idx" class="result-card">
+              <img :src="img.url || img" class="result-img" />
+            </div>
+            <div v-if="isGenerating" class="generating-overlay">
+              <div class="progress-ring">{{ genProgress }}%</div>
+              <p>{{ genStatus }}</p>
+            </div>
           </div>
         </div>
+
         <div class="canvas-tip">建议使用高质量素材，获得更佳效果</div>
 
         <!-- Templates -->
-        <div class="templates-section">
+        <!-- <div class="templates-section">
           <div class="templates-header"><span class="templates-title">热门模板</span></div>
           <div class="templates-tabs">
             <span v-for="tab in templateTabs" :key="tab" class="templates-tab" :class="{ active: activeTemplateTab === tab }" @click="activeTemplateTab = tab">{{ tab }}</span>
@@ -57,7 +65,7 @@
             <span class="templates-arrow" @click="scrollTemplates('prev')">‹</span>
             <span class="templates-arrow" @click="scrollTemplates('next')">›</span>
           </div>
-        </div>
+        </div> -->
         <div class="templates-suggest">建议尺寸：1200×300px、1920×600px、1920×1080px 等主流尺寸<span @click="refreshTemplates">🔄 换一换</span></div>
       </div>
 
@@ -119,7 +127,7 @@
               </div>
               <div class="section-body" v-show="sections.upload">
                 <div class="upload-row">
-                  <div class="upload-card" @click.stop="triggerUpload"><div class="upload-card-label">产品图<span class="req">（必传）</span></div><div class="upload-card-icon"><el-icon :size="20" color="#9CA3AF"><UploadFilled /></el-icon></div><div class="upload-card-action">↑ 上传产品图</div><div class="upload-card-hint">支持 JPG/PNG，最多10张</div></div>
+                  <div class="upload-card" @click.stop="triggerUpload"><div class="upload-card-label">产品图（可选）</div><div class="upload-card-icon"><el-icon :size="20" color="#9CA3AF"><UploadFilled /></el-icon></div><div class="upload-card-action">↑ 上传产品图</div><div class="upload-card-hint">支持 JPG/PNG，最多10张</div></div>
                   <div class="upload-card" @click.stop="triggerBgUpload"><div class="upload-card-label">背景图（可选）</div><div class="upload-card-icon"><el-icon :size="20" color="#9CA3AF"><UploadFilled /></el-icon></div><div class="upload-card-action">↑ 上传背景图</div><div class="upload-card-hint">支持 JPG/PNG，最多5张</div></div>
                   <div class="upload-card" @click.stop="triggerLogoUpload"><div class="upload-card-label">LOGO（可选）</div><div class="upload-card-icon"><el-icon :size="20" color="#9CA3AF"><UploadFilled /></el-icon></div><div class="upload-card-action">↑ 上传LOGO</div><div class="upload-card-hint">支持PNG，透明背景更佳</div></div>
                 </div>
@@ -213,32 +221,6 @@
               </div>
             </div>
 
-            <!-- 提示词增强 -->
-            <div class="config-section collapsible">
-              <div class="section-header collapsible" @click="toggleSection('promptBoost')">
-                <span class="section-label">提示词增强</span>
-                <span class="expand-text">{{ sections.promptBoost ? '收起' : '展开' }}<el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.promptBoost }"><ArrowDown /></el-icon></span>
-              </div>
-              <div class="section-body" v-show="sections.promptBoost">
-                <div class="prompt-boost-row">
-                  <label class="boost-label">产品类别</label>
-                  <PromptLibrarySelect ref="boostProductRef" category="product" v-model="boostProduct" placeholder="选择产品类别" />
-                </div>
-                <div class="prompt-boost-row">
-                  <label class="boost-label">材质</label>
-                  <PromptLibrarySelect ref="boostMaterialRef" category="material" v-model="boostMaterial" placeholder="选择材质" />
-                </div>
-              </div>
-            </div>
-
-            <div class="generate-area">
-              <button class="generate-btn" :disabled="!canGenerate" @click="handleGenerate">{{ gen.generating.value ? '生成中...' : '生成Banner（下一步）' }}</button>
-              <div class="gen-progress" v-if="gen.generating.value">
-                <el-progress :percentage="gen.progress.value" :stroke-width="6" :show-text="false" />
-                <span class="gen-status">{{ gen.statusText.value }}</span>
-              </div>
-              <div class="gen-error" v-if="gen.error.value"><el-icon color="#EF4444"><WarningFilled /></el-icon>{{ gen.error.value }}</div>
-            </div>
           </div>
         </el-scrollbar>
       </div>
@@ -248,7 +230,7 @@
       <!-- ===== AI Panel ===== -->
       <div class="ai-col" :style="{ flex: aiFlex }" ref="aiPanel">
         <div class="ai-resize-handle" @mousedown="startAiResize"></div>
-        <div class="ai-resize-handle-top" @mousedown="startAiHeightResize"></div>
+        
         <AiAssistant
           ref="aiAssistantRef"
           :generate-fn="handleGenerateFromAi"
@@ -344,7 +326,7 @@ export default {
     //   defaultName: 'banner',
     // })
     const fileInput = ref(null); const bgFileInput = ref(null); const logoFileInput = ref(null)
-    const originalImage = ref(''); const originalFile = ref(null); const bgImage = ref(''); const bgFile = ref(null); const logoImage = ref(''); const logoFile = ref(null)
+    const originalImage = ref(''); const originalFile = ref(null); const bgImage = ref(''); const bgFile = ref(null); const logoImage = ref(''); const logoFile = ref(null); const resultImages = ref([])
     const uploadedFiles = ref([]); const productFiles = ref([])
     const zoom = ref(100)
 
@@ -531,15 +513,11 @@ const genError = computed(() => gen.error.value)
     const canvasFlex = computed(() => '1 1 0%')
 const _configWidthPx = ref(340)
 const _aiWidthPx = ref(260)
-const _aiHeightPx = ref(0) // 0 = auto-fill (no explicit height)
 const configFlex = computed(() => {
   if (configCollapsed.value) return '0 0 40px'
   return `0 0 ${_configWidthPx.value}px`
 })
-const aiFlex = computed(() => {
-  const heightStyle = _aiHeightPx.value > 0 ? `; min-height: 0; height: ${_aiHeightPx.value}px` : ''
-  return `0 0 ${_aiWidthPx.value}px${heightStyle}`
-})
+const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
     let isResizing = false; let resizeTarget = ''
 
     function startColResize(e, target) { isResizing = true; resizeTarget = target; document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none'; e.preventDefault() }
@@ -567,23 +545,15 @@ const aiFlex = computed(() => {
     function onAiMouseMove(e) { if (!isAiResizing) return; const delta = aiStartX - e.clientX; let newWidth = aiStartWidth + delta; newWidth = Math.max(200, Math.min(500, newWidth)); _aiWidthPx.value = newWidth }
     function onAiMouseUp() { if (isAiResizing) { isAiResizing = false; document.body.style.cursor = ''; document.body.style.userSelect = '' } }
 
-    // AI panel vertical resize (drag top border)
-    let isAiHeightResizing = false; let aiHeightStartY = 0; let aiHeightStart = 0
-    function startAiHeightResize(e) { isAiHeightResizing = true; aiHeightStartY = e.clientY; const aiEl = aiPanel.value; aiHeightStart = aiEl ? (_aiHeightPx.value > 0 ? _aiHeightPx.value : aiEl.getBoundingClientRect().height) : 400; _aiHeightPx.value = Math.round(aiHeightStart); document.body.style.cursor = 'ns-resize'; document.body.style.userSelect = 'none'; e.preventDefault(); e.stopPropagation() }
-    function onAiHeightMouseMove(e) { if (!isAiHeightResizing) return; const delta = e.clientY - aiHeightStartY; let newHeight = aiHeightStart + delta; newHeight = Math.max(300, Math.min(window.innerHeight - 100, Math.round(newHeight))); _aiHeightPx.value = newHeight }
-    function onAiHeightMouseUp() { if (isAiHeightResizing) { isAiHeightResizing = false; document.body.style.cursor = ''; document.body.style.userSelect = '' } }
-
     onMounted(async () => {
       document.addEventListener('mousemove', onMouseMove); document.addEventListener('mouseup', onMouseUp)
       document.addEventListener('mousemove', onAiMouseMove); document.addEventListener('mouseup', onAiMouseUp)
-      document.addEventListener('mousemove', onAiHeightMouseMove); document.addEventListener('mouseup', onAiHeightMouseUp)
       loadCreationConfig()
       await Promise.allSettled([gen.loadPromptInfo(), gen.loadPixelConfigs(), gen.loadDeductTypes()])
     })
     onBeforeUnmount(() => {
       document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp)
       document.removeEventListener('mousemove', onAiMouseMove); document.removeEventListener('mouseup', onAiMouseUp)
-      document.removeEventListener('mousemove', onAiHeightMouseMove); document.removeEventListener('mouseup', onAiHeightMouseUp)
     })
 
     // ===== 从后台创作配置读取Banner设计配置 =====
@@ -674,7 +644,7 @@ const aiFlex = computed(() => {
     function handleLogoFileSelect(e) { const file = e.target.files[0]; if (file) { logoFile.value = file; const r = new FileReader(); r.onload = ev => { logoImage.value = ev.target.result }; r.readAsDataURL(file) }; logoFileInput.value.value = '' }
     function handleDrop(e) { const files = e.dataTransfer.files; if (files.length) addFiles(files) }
     function addFiles(files) { for (const f of files) { const url = URL.createObjectURL(f); uploadedFiles.value.push(url); productFiles.value.push(f); if (!originalImage.value) { originalImage.value = url; originalFile.value = f } } }
-    function clearImage() { originalImage.value = ''; originalFile.value = null; uploadedFiles.value = []; productFiles.value = [] }
+    function clearImage() { originalImage.value = ''; originalFile.value = null; uploadedFiles.value = []; productFiles.value = []; resultImages.value = [] }
     function clearWorkspaceImages() { clearImage(); gen.reset() }
     function removeProductFile(index) { uploadedFiles.value.splice(index, 1); productFiles.value.splice(index, 1); if (uploadedFiles.value.length === 0) { originalImage.value = ''; originalFile.value = null } else { originalImage.value = uploadedFiles.value[0]; originalFile.value = productFiles.value[0] } }
     function selectCanvasPreset(s) { canvasPreset.value = s.value; canvasWidth.value = s.w; canvasHeight.value = s.h }
@@ -707,6 +677,7 @@ const aiFlex = computed(() => {
         const baseText = mainTitle.value + ' ' + subTitle.value
         const fullPrompt = boostText ? `${baseText}。约束：${boostText}。` : baseText
         await gen.fullGenerate([originalFile.value], fullPrompt, extraParams)
+        if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
       } catch (e) { console.error('生成失败:', e) }
     }
 
@@ -722,6 +693,7 @@ const aiFlex = computed(() => {
         const baseText = mainTitle.value + ' ' + subTitle.value + (text ? ' ' + text : '')
         const fullPrompt = boostText ? `${baseText}。约束：${boostText}。` : baseText
         await gen.fullGenerate([originalFile.value], fullPrompt, extraParams)
+        if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
       } catch (e) {
         console.error('生成失败:', e)
         const isTimeout = e?.code === 'ECONNABORTED'
@@ -733,7 +705,7 @@ const aiFlex = computed(() => {
     }
 
     return {
-      gen, fileInput, bgFileInput, logoFileInput, originalImage, originalFile, bgImage, bgFile, logoImage, logoFile, uploadedFiles, productFiles, zoom,
+      gen, fileInput, bgFileInput, logoFileInput, originalImage, originalFile, bgImage, bgFile, logoImage, logoFile, uploadedFiles, productFiles, resultImages, zoom,
       workflowSteps, getStepClass, isStepLineDone,
       canvasPreset, canvasWidth, canvasHeight, sizeLinked, sizePresets, selectCanvasPreset, onCanvasPresetChange, onCustomSize,
       sections, allExpanded, toggleAllSections, toggleSection,
@@ -742,7 +714,7 @@ const aiFlex = computed(() => {
       language, languages,
       boostProduct, boostMaterial, boostProductRef, boostMaterialRef,
       activeTemplateTab, templateTabs, templates, selectedTemplate, filteredTemplates, selectTemplate, scrollTemplates, refreshTemplates,
-      canvasFlex, configFlex, aiFlex, aiPanel, configCollapsed, startColResize, startAiResize, startAiHeightResize,
+      canvasFlex, configFlex, aiFlex, aiPanel, configCollapsed, startColResize, startAiResize,
       triggerUpload, triggerBgUpload, triggerLogoUpload, handleFileSelect, handleBgFileSelect, handleLogoFileSelect, handleDrop, clearImage, removeProductFile,
       undo, redo, reset, zoomIn, zoomOut, toggleFullscreen, handleGenerate, canGenerate,
       // ---- AiAssistant ----
@@ -856,37 +828,111 @@ const aiFlex = computed(() => {
 .zoom-btn { width: 28px; height: 28px; border: 1px solid #E8EDF5; border-radius: 6px; background: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; color: #4B5563; }
 .zoom-btn:hover { border-color: #2563FF; color: #2563FF; }
 
-.canvas-dropzone { min-height: 390px; background: #fff; border: 2px dashed #E8EDF5; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0; cursor: pointer; transition: border-color 0.2s; overflow: hidden; position: relative; }
-.canvas-dropzone:hover { border-color: #2563FF; }
-.canvas-zoom-controls {
-  position: absolute;
-  bottom: 12px;
-  right: 12px;
+.canvas-box {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border: 1px solid #EBEDF5;
+  border-radius: 16px;
+  overflow: hidden;
+  position: relative;
+  min-height: 300px;
+}
+
+.canvas-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #9CA3AF;
+  padding: 24px;
+  text-align: center;
+
+  svg {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 4px;
+    opacity: .4;
+  }
+
+  h3 {
+    font-size: 14px;
+    color: #6B7280;
+    margin-bottom: 0;
+    font-weight: 500;
+  }
+
+  p {
+    font-size: 12px;
+    color: #9CA3AF;
+  }
+}
+
+.result-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  align-content: start;
+  overflow: auto;
+  position: relative;
+  padding: 4px;
+  width: 100%;
+
+  &.generating { opacity: 0.6; pointer-events: none; }
+}
+
+.result-card {
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #EBEDF5;
+  aspect-ratio: 16/9;
   display: flex;
   align-items: center;
-  gap: 4px;
-  background: rgba(255, 255, 255, 0.9);
-  border-radius: 8px;
-  padding: 4px 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  justify-content: center;
+}
+
+.result-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.generating-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
   z-index: 10;
 }
-.canvas-zoom-controls .zoom-value {
-  font-size: 12px;
-  color: #1F2937;
-  min-width: 40px;
-  text-align: center;
+
+.progress-ring {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 4px solid #E5E7EB;
+  border-top-color: #2563FF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #2563FF;
+  animation: spin 1s linear infinite;
 }
-.dropzone-placeholder { text-align: center; padding: 20px; }
-.dropzone-icon { width: 48px; height: 48px; color: #D1D5DB; }
-.dropzone-title { font-size: 14px; font-weight: 600; color: #1F2937; margin-top: 8px; }
-.dropzone-desc { font-size: 12px; color: #6B7280; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
 .canvas-tip { text-align: center; padding: 4px 0 12px; font-size: 12px; color: #6B7280; flex-shrink: 0; }
-.dropzone-preview { position: relative; max-width: 100%; max-height: 100%; }
-.preview-img { max-width: 100%; max-height: 280px; object-fit: contain; border-radius: 8px; }
-.preview-overlay { position: absolute; top: 8px; right: 8px; }
-.preview-del-btn { width: 28px; height: 28px; border-radius: 50%; background: rgba(0,0,0,0.5); color: #fff; border: none; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; }
-.preview-del-btn:hover { background: #EF4444; }
 
 /* Templates */
 .templates-section { padding-top: 8px; }
@@ -1021,44 +1067,9 @@ const aiFlex = computed(() => {
 .gen-error { margin-top: 8px; font-size: 13px; color: #EF4444; display: flex; align-items: center; gap: 4px; }
 
 /* AI Panel */
-.ai-col { display: flex; flex-direction: column; background: #fff; padding: 14px 12px; overflow: hidden; min-width: 200px; position: relative; }
+.ai-col { display: flex; flex-direction: column; background: #fff; padding: 16px; overflow: hidden; min-width: 240px; position: relative; }
 .ai-resize-handle { position: absolute; left: 0; top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 5; background: transparent; transition: background 0.2s; }
 .ai-resize-handle:hover { background: #2563FF; }
-
-.ai-resize-handle-top {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 6px;
-  cursor: ns-resize;
-  z-index: 5;
-  background: transparent;
-  transition: background 0.2s;
-}
-.ai-resize-handle-top:hover { background: #2563FF; }
-.ai-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-shrink: 0; gap: 8px; min-height: 24px; }
-.ai-header h3 { font-size: 14px; font-weight: 600; margin: 0; white-space: nowrap; }
-.ai-clear-btn { font-size: 11px; color: #2563FF; background: none; border: none; cursor: pointer; text-decoration: underline; white-space: nowrap; padding: 2px 4px; flex-shrink: 0; }
-.ai-clear-btn:hover { opacity: 0.7; }
-.ai-suggestions { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 10px; flex-shrink: 0; }
-.ai-sug-tag { background: #EFF4FF; color: #2563FF; font-size: 11px; padding: 4px 8px; border-radius: 12px; cursor: pointer; white-space: nowrap; }
-.ai-sug-tag:hover { background: #DCE6FF; }
-.ai-chat { background: #F7F9FC; border-radius: 10px; padding: 12px; overflow-y: auto; flex: 1; margin-bottom: 8px; min-height: 150px; }
-.chat-msg { display: flex; gap: 6px; margin-bottom: 10px; }
-.chat-msg.bot { flex-direction: row; }
-.chat-msg.user { flex-direction: row-reverse; }
-.chat-avatar { width: 22px; height: 22px; border-radius: 50%; background: #2563FF; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 10px; flex-shrink: 0; }
-.chat-bubble { padding: 8px 12px; border-radius: 10px; font-size: 12px; line-height: 1.5; max-width: 85%; }
-.chat-msg.bot .chat-bubble { background: #fff; color: #1F2937; }
-.chat-msg.user .chat-bubble { background: #EEF2FF; color: #2563FF; }
-.ai-input-area { flex-shrink: 0; }
-.ai-textarea { width: 100%; height: 60px; border: 1px solid #E8EDF5; border-radius: 8px; padding: 8px 10px; font-size: 13px; color: #1F2937; resize: none; font-family: inherit; outline: none; }
-.ai-textarea:focus { border-color: #2563FF; }
-.ai-textarea::placeholder { color: #9CA3AF; }
-.ai-input-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
-.ai-char-count { font-size: 11px; color: #6B7280; }
-.ai-send-btn { background: #2563FF; color: #fff; border: none; padding: 6px 14px; border-radius: 6px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: 500; }
-.ai-send-btn:hover { background: #1D4ED8; }
-.ai-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -1081,7 +1092,6 @@ const aiFlex = computed(() => {
   .ai-col { flex: 0 0 50% !important; }
   .col-divider { display: none; }
   .ai-resize-handle { display: none; }
-  .ai-resize-handle-top { display: none; }
   .canvas-toolbar { flex-wrap: wrap; gap: 4px; }
   .tb-center { order: 3; flex-basis: 100%; justify-content: flex-start; }
 }
@@ -1092,8 +1102,6 @@ const aiFlex = computed(() => {
   .canvas-col { flex: 0 0 45vh !important; max-height: 45vh; }
   .config-col { flex: 0 0 auto !important; max-height: 240px; overflow-y: auto; }
   .ai-col { flex: 1 1 auto !important; min-height: 260px; }
-  .ai-resize-handle { display: none; }
-  .ai-resize-handle-top { display: none; }
   .templates-grid { padding-bottom: 4px; }
   .template-card { width: 180px; min-width: 180px; }
   .template-card-preview { height: 80px; }

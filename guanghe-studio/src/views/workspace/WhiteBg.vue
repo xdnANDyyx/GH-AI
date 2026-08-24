@@ -18,8 +18,12 @@
           <!--<CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" />-->
 
           <!-- 未生成：显示空状态 -->
-          <div class="empty-state" v-if="!hasResult">
-            <el-icon :size="48" color="#9CA3AF"><Picture /></el-icon>
+          <div class="canvas-placeholder" v-if="!hasResult">
+            <svg viewBox="0 0 48 48" fill="none">
+              <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
+              <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
+              <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
             <h3>AI 白底图生成后将显示在此处</h3>
             <p>请在右侧配置生成参数并点击发送</p>
           </div>
@@ -1233,11 +1237,22 @@ function clearWorkspaceImages() {
 }
 
 .canvas-placeholder {
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   color: #9CA3AF;
-  padding: 20px;
+  padding: 24px;
+  text-align: center;
 }
-.canvas-placeholder h3 { font-size: 14px; color: #6B7280; margin-bottom: 6px; font-weight: 500; }
+.canvas-placeholder svg {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 4px;
+  opacity: .4;
+}
+.canvas-placeholder h3 { font-size: 14px; color: #6B7280; margin-bottom: 0; font-weight: 500; }
 .canvas-placeholder p { font-size: 12px; color: #9CA3AF; margin: 0; }
 
 .upload-zone {

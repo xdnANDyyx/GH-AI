@@ -19,7 +19,7 @@
         <div class="canvas-box">
           <!-- 未生成：显示空状态 -->
           <div v-if="resultImages.length === 0" class="canvas-placeholder">
-            <svg viewBox="0 0 48 48" fill="none">
+             <svg viewBox="0 0 48 48" fill="none">
               <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
               <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
               <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -306,47 +306,17 @@
         <div class="right-panel-divider" @mousedown="startRightPanelResize($event, 'ai')"></div>
 
         <!-- ===== AI Assistant Panel ===== -->
-        <div class="ai-col" :style="{ flex: aiFlex }" ref="aiPanel">
-          <div class="ai-resize-handle-top" @mousedown="startAiHeightResize"></div>
-          <div class="ai-header">
-            <span class="panel-title">AI 助手</span>
-            <span class="ai-clear" @click="clearChat">清空对话</span>
-          </div>
-          <div class="ai-body">
-            <div class="ai-chat" ref="chatRef">
-              <div v-for="(msg, i) in chatMessages" :key="i" class="ai-bubble" :class="{ user: msg.role === 'user' }">
-                <div v-if="msg.role === 'ai'" class="ai-avatar">AI</div>
-                <div class="ai-msg">{{ msg.content }}</div>
-                <div v-if="msg.role === 'user'" class="user-avatar">我</div>
-              </div>
-            </div>
-            <div class="ai-quick">
-              <span class="ai-quick-tag" v-for="t in quickTags" :key="t" @click="sendQuick(t)">{{ t }}</span>
-            </div>
-            <div class="ai-input-area">
-              <textarea
-                class="ai-textarea"
-                v-model="chatInput"
-                placeholder="请输入您的需求，描述越详细，效果越好..."
-                @keydown.enter.exact.prevent="sendMessage"
-                maxlength="2000"
-              ></textarea>
-              <div class="chat-footer">
-                <div class="chat-footer-left">
-                  <span class="char-count">{{ chatInput.length }}/2000</span>
-                </div>
-                <div class="chat-footer-right">
-                  <el-select v-model="selectedModel" size="small" class="model-select" :disabled="isGenerating">
-                    <el-option v-for="m in modelOptions" :key="m.value" :label="m.label" :value="m.value" />
-                  </el-select>
-                  <button class="chat-send" @click="sendMessage" :disabled="!chatInput.trim() || isGenerating || !originalImage">
-                    <el-icon><Promotion /></el-icon>
-                    {{ isGenerating ? '生成中...' : '发送' }}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+        <div class="ai-col" :style="{ flex: aiFlex }">
+          <AiAssistant
+            ref="aiAssistantRef"
+            :generate-fn="handleGenerate"
+            :is-generating="isGenerating"
+            :gen-status="genStatus"
+            :gen-progress="genProgress"
+            :gen-error="genError"
+            :has-image="!!originalImage"
+            :on-clear-images="clearWorkspaceImages"
+          />
         </div>
       </div>
     </div>
@@ -419,6 +389,7 @@ import { aiDialogue, reversePrompt, getPublicCreationConfigByGroup, listPromptLi
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { useWorkflowProgress } from '@/composables/useWorkflowProgress'
 import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
+import AiAssistant from '@/components/AiAssistant.vue'
 import { ElMessage } from 'element-plus'
 
 // const { canvasUI, handleCanvasExport } = useCanvasInteractions({
@@ -436,6 +407,8 @@ const resultImages = ref([])
 const isGenerating = computed(() => gen.generating.value)
 const genProgress = computed(() => gen.progress.value)
 const genStatus = computed(() => gen.statusText.value)
+const genError = computed(() => gen.error.value)
+const aiAssistantRef = ref(null)
 
 // ===== Canvas & Zoom =====
 const zoom = ref(100)
@@ -537,7 +510,6 @@ const configCollapsed = ref(false)
 // ===== Layout Resize =====
 const _configWidthPx = ref(280)
 const _aiWidthPx = ref(360)
-const _aiHeightPx = ref(0) // 0 = auto-fill (no explicit height)
 const canvasFlex = computed(() => '1 1 0%')
 const rightFlex = computed(() => {
   const configW = configCollapsed.value ? 40 : _configWidthPx.value
@@ -547,11 +519,7 @@ const configFlex = computed(() => {
   if (configCollapsed.value) return '0 0 40px'
   return `0 0 ${_configWidthPx.value}px`
 })
-const aiFlex = computed(() => {
-  const heightStyle = _aiHeightPx.value > 0 ? `; min-height: 0; height: ${_aiHeightPx.value}px` : ''
-  return `0 0 ${_aiWidthPx.value}px${heightStyle}`
-})
-const aiPanel = ref(null)
+const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
 
 let isResizing = false
 let resizeTarget = ''
@@ -722,41 +690,38 @@ const chatMessages = ref([
 ])
 const quickTags = ['如何优化我的详情页？', '如何突出产品卖点？', '设计技巧建议']
 
-async function sendMessage() {
-  if (!chatInput.value.trim()) return
-  if (isGenerating.value) return
-  const text = chatInput.value.trim()
-  chatMessages.value.push({ role: 'user', content: text })
-  chatInput.value = ''
-  nextTick(() => { if (chatRef.value) chatRef.value.scrollTop = chatRef.value.scrollHeight })
+async function handleGenerate() {
+  const text = aiAssistantRef.value?.inputText?.trim() || ''
+  if (!originalImage.value) { ElMessage.warning('请先上传产品图片'); return }
+  if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
   try {
-    const historyMessages = chatMessages.value.slice(0, -1).map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.content }))
-    const res = await aiDialogue({ messages: historyMessages, content: text, model: selectedModel.value })
-    chatMessages.value.push({ role: 'ai', content: res?.data?.reply || '已收到您的需求，请稍候。' })
-    if (productFiles.value.length && !resultImages.value.length) {
-      if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
-      try {
-        const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
-        const fullPrompt = boostText ? `${text}。约束：${boostText}。` : text
-        const extra = { consumePoints: 2, featureName: 'detail_img', title: '详情页生成', model: selectedModel.value }
-        if (effectiveOutputSize.value) extra.outputSize = effectiveOutputSize.value
-        if (genCount.value) extra.n = Number(genCount.value)
+    const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
+    const fullPrompt = boostText ? `${text}。约束：${boostText}。` : text
+    const extra = { consumePoints: 2, featureName: 'detail_img', title: '详情页生成', model: selectedModel.value }
+    if (effectiveOutputSize.value) extra.outputSize = effectiveOutputSize.value
+    if (genCount.value) extra.n = Number(genCount.value)
     else extra.n = 1
-        await gen.fullGenerate(productFiles.value, fullPrompt, extra)
-        if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
-      } catch (e) { console.error('详情图生成失败:', e) }
-    }
+    await gen.fullGenerate(productFiles.value, fullPrompt, extra)
+    if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
   } catch (e) {
-    chatMessages.value.push({ role: 'ai', content: '抱歉，AI服务暂时不可用，请稍后再试。' })
-  } finally {
+    console.error('详情图生成失败:', e)
+    const isTimeout = e?.code === 'ECONNABORTED'
+      || /timeout|超时|人数过多|繁忙|busy/i.test(e?.message || '')
+    ElMessage.error(isTimeout
+      ? '当前模型使用人数过多，可选用其他模型生图或稍后再试'
+      : '生成失败，请稍后重试')
   }
-  nextTick(() => { if (chatRef.value) chatRef.value.scrollTop = chatRef.value.scrollHeight })
 }
 
-
 function sendQuick(tag) {
-  chatInput.value = tag
-  sendMessage()
+  if (aiAssistantRef.value) aiAssistantRef.value.inputText = tag
+}
+
+function clearWorkspaceImages() {
+  originalImage.value = ''
+  productFiles.value = []
+  resultImages.value = []
+  gen.reset()
 }
 
 function clearChat() {
@@ -984,54 +949,16 @@ async function loadPromptMap() {
   }
 }
 
-// AI panel vertical resize (drag top border)
-let isAiHeightResizing = false
-let aiHeightStartY = 0
-let aiHeightStart = 0
-
-function startAiHeightResize(e) {
-  isAiHeightResizing = true
-  aiHeightStartY = e.clientY
-  const aiEl = aiPanel.value
-  aiHeightStart = aiEl
-    ? (_aiHeightPx.value > 0 ? _aiHeightPx.value : aiEl.getBoundingClientRect().height)
-    : 400
-  _aiHeightPx.value = Math.round(aiHeightStart)
-  document.body.style.cursor = 'ns-resize'
-  document.body.style.userSelect = 'none'
-  e.preventDefault()
-  e.stopPropagation()
-}
-
-function onAiHeightMouseMove(e) {
-  if (!isAiHeightResizing) return
-  const delta = e.clientY - aiHeightStartY
-  let newHeight = aiHeightStart + delta
-  newHeight = Math.max(300, Math.min(window.innerHeight - 100, Math.round(newHeight)))
-  _aiHeightPx.value = newHeight
-}
-
-function onAiHeightMouseUp() {
-  if (isAiHeightResizing) {
-    isAiHeightResizing = false
-    document.body.style.cursor = ''
-    document.body.style.userSelect = ''
-  }
-}
 
 onMounted(() => {
   loadCreationConfig()
   document.addEventListener('mousemove', onMouseMove)
   document.addEventListener('mouseup', onMouseUp)
-  document.addEventListener('mousemove', onAiHeightMouseMove)
-  document.addEventListener('mouseup', onAiHeightMouseUp)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('mousemove', onMouseMove)
   document.removeEventListener('mouseup', onMouseUp)
-  document.removeEventListener('mousemove', onAiHeightMouseMove)
-  document.removeEventListener('mouseup', onAiHeightMouseUp)
 })
 </script>
 
@@ -1165,16 +1092,6 @@ onBeforeUnmount(() => {
 .right-panel-divider:hover,
 .right-panel-divider:active { background: #2563FF; }
 
-.ai-resize-handle-top {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 6px;
-  cursor: ns-resize;
-  z-index: 5;
-  background: transparent;
-  transition: background 0.2s;
-}
-.ai-resize-handle-top:hover { background: #2563FF; }
 
 /* ===== Canvas Area ===== */
 .canvas-col {
@@ -1210,17 +1127,19 @@ onBeforeUnmount(() => {
   padding: 24px;
   text-align: center;
 }
-.canvas-placeholder .placeholder-icon {
+.canvas-placeholder svg {
   width: 48px;
   height: 48px;
-  color: #D1D5DB;
+  margin-bottom: 4px;
+  opacity: .4;
 }
-.canvas-placeholder .placeholder-title {
+.canvas-placeholder h3 {
   font-size: 14px;
-  font-weight: 500;
   color: #6B7280;
+  margin-bottom: 0;
+  font-weight: 500;
 }
-.canvas-placeholder .placeholder-desc {
+.canvas-placeholder p {
   font-size: 12px;
   color: #9CA3AF;
 }
@@ -1853,152 +1772,6 @@ onBeforeUnmount(() => {
   min-width: 240px;
 }
 
-.ai-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-  flex-shrink: 0;
-}
-.ai-clear {
-  font-size: 11px;
-  color: #2563FF;
-  cursor: pointer;
-}
-.ai-clear:hover { text-decoration: underline; }
-
-.ai-body {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.ai-chat {
-  flex: 1;
-  overflow-y: auto;
-  margin-bottom: 8px;
-  min-height: 0;
-}
-
-.ai-bubble {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.ai-bubble.user {
-  flex-direction: row-reverse;
-}
-
-.ai-avatar, .user-avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-.ai-avatar {
-  background: #2563FF;
-  color: #fff;
-}
-.user-avatar {
-  background: #9CA3AF;
-  color: #fff;
-}
-
-.ai-msg {
-  padding: 10px 14px;
-  border-radius: 12px;
-  font-size: 12px;
-  line-height: 1.6;
-  max-width: 85%;
-  word-wrap: break-word;
-}
-.ai-bubble:not(.user) .ai-msg {
-  background: #F7F9FC;
-  color: #1F2937;
-}
-.ai-bubble.user .ai-msg {
-  background: #EEF2FF;
-  color: #2563FF;
-}
-
-.ai-quick {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-.ai-quick-tag {
-  padding: 6px 10px;
-  background: #F7F9FC;
-  border-radius: 6px;
-  font-size: 11px;
-  color: #2563FF;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.ai-quick-tag:hover {
-  background: #EEF2FF;
-}
-
-.ai-input-area {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex-shrink: 0;
-}
-.ai-textarea {
-  width: 100%;
-  min-height: 60px;
-  max-height: 120px;
-  padding: 10px 12px;
-  border: 1px solid #E8EDF5;
-  border-radius: 8px;
-  font-size: 12px;
-  font-family: inherit;
-  resize: vertical;
-}
-.ai-textarea:focus {
-  outline: none;
-  border-color: #2563FF;
-}
-
-.ai-input-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.ai-char-count {
-  font-size: 10px;
-  color: #9CA3AF;
-}
-.ai-send-btn {
-  padding: 8px 14px;
-  background: #2563FF;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  font-size: 12px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  white-space: nowrap;
-}
-.ai-send-btn:hover {
-  background: #1D4ED8;
-}
-.ai-send-btn svg {
-  width: 14px;
-  height: 14px;
-}
-
 /* ===== Responsive ===== */
 @media (max-width: 1024px) {
   .steps-bar { display: none; }
@@ -2013,7 +1786,6 @@ onBeforeUnmount(() => {
   .canvas-col { flex: 0 0 45vh !important; max-height: 45vh; }
   .right-col { flex: 1 1 auto !important; min-height: 250px; }
   .right-panel-divider { display: none; }
-  .ai-resize-handle-top { display: none; }
   .config-col { max-height: 200px; overflow-y: auto; }
 }
 

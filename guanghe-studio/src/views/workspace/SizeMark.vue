@@ -15,71 +15,34 @@
 
         <!-- Canvas Area -->
         <div class="canvas-box">
-          <!-- <CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" /> -->
-          <div v-if="!originalImage" class="canvas-placeholder">
+          <!-- 未生成：显示空状态 -->
+          <div v-if="resultImages.length === 0" class="canvas-placeholder">
             <svg viewBox="0 0 48 48" fill="none">
               <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
               <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
               <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <h3>拖拽图片到画布，或从右侧上传</h3>
-            <p>支持 JPG / PNG / WebP 格式，最大 20MB</p>
-          </div>
-          <div v-else class="dim-canvas-wrapper">
-            <!-- Product image with dimension markings -->
-            <div class="dim-product" v-for="(view, vi) in productViews" :key="vi" :class="{ small: vi > 0 }">
-              <!-- Top dimension -->
-              <div class="dim-top">
-                <div class="dim-text">{{ dimWidth }}{{ unit }}</div>
-                <div class="dim-line"><div class="dim-arrow-l"></div><div class="dim-arrow-r"></div></div>
-              </div>
-              <!-- Left dimension (for first view) -->
-              <div class="dim-left" v-if="vi === 0">
-                <div class="dim-text">{{ dimHeight }}{{ unit }}</div>
-                <div class="dim-line-v"><div class="dim-arrow-t"></div><div class="dim-arrow-b"></div></div>
-              </div>
-              <!-- Right dimension (for second view) -->
-              <div class="dim-right" v-if="vi === 1">
-                <div class="dim-line-v"><div class="dim-arrow-t"></div><div class="dim-arrow-b"></div></div>
-                <div class="dim-text">{{ dimDepth }}{{ unit }}</div>
-              </div>
-              <div class="dim-img-placeholder">
-                <img :src="originalImage" v-if="vi === 0" class="dim-product-img" />
-                <template v-else>
-                  <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-                    <rect x="4" y="8" width="24" height="16" rx="2" stroke="#9CA3AF" stroke-width="1.2"/>
-                    <path d="M4 24v3M28 24v3M10 24v3M22 24v3" stroke="#9CA3AF" stroke-width="1" stroke-linecap="round"/>
-                  </svg>
-                  <div style="font-size:10px;color:#9CA3AF;margin-top:4px">{{ vi === 1 ? '侧视图' : '顶视图' }}</div>
-                </template>
-              </div>
-              </div>
-            </div>
-
-            <!-- Section: 提示词增强 -->
-            <div class="config-section collapsible">
-              <div class="section-header collapsible" @click="toggleSection('promptBoost')">
-                <span class="section-label">提示词增强</span>
-                <span class="expand-text">
-                  {{ sections.promptBoost ? '收起' : '展开' }}
-                  <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.promptBoost }"><ArrowDown /></el-icon>
-                </span>
-              </div>
-              <div class="section-body" v-show="sections.promptBoost">
-                <div class="prompt-boost-row">
-                  <label class="boost-label">产品类别</label>
-                  <PromptLibrarySelect ref="boostProductRef" category="product" v-model="boostProduct" placeholder="选择产品类别" />
-                </div>
-                <div class="prompt-boost-row">
-                  <label class="boost-label">材质</label>
-                  <PromptLibrarySelect ref="boostMaterialRef" category="material" v-model="boostMaterial" placeholder="选择材质" />
-                </div>
-              </div>
+            <h3>AI 尺寸图生成后将显示在此处</h3>
+            <p>请在右侧上传商品图并点击生成</p>
+            <div v-if="isGenerating" class="generating-overlay">
+              <div class="progress-ring">{{ genProgress }}%</div>
+              <p>{{ genStatus }}</p>
             </div>
           </div>
+          <!-- 有结果图时：展示结果 -->
+          <div v-else class="result-grid" :class="{ generating: isGenerating }">
+            <div v-for="(img, idx) in resultImages" :key="'r'+idx" class="result-card">
+              <img :src="img.url || img" class="result-img" />
+            </div>
+            <div v-if="isGenerating" class="generating-overlay">
+              <div class="progress-ring">{{ genProgress }}%</div>
+              <p>{{ genStatus }}</p>
+            </div>
+          </div>
+        </div>
 
         <div class="canvas-bottom-bar">
-          <span>提示：在左侧上传需要标注尺寸的商品图，右侧填写尺寸数据、选择模板风格。</span>
+          <span>提示：在右侧上传需要标注尺寸的商品图，填写尺寸数据、选择模板风格。</span>
         </div>
       </div>
 
@@ -289,19 +252,27 @@
               </div>
             </div>
 
-            <!-- Generate Button -->
-            <div class="generate-area">
-              <button class="gen-btn" :disabled="generating" @click="startGenerate">
-                {{ generating ? '生成中...' : '生成尺寸图' }}
-              </button>
-              <div class="gen-notice">
-                <svg viewBox="0 0 12 12" fill="none" width="12" height="12">
-                  <circle cx="6" cy="6" r="5" stroke="#22C55E" stroke-width="1.2"/>
-                  <path d="M4 6l1.5 1.5L8 4.5" stroke="#22C55E" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                生成的尺寸图均可商用，放心使用
+            <!-- Section: 提示词增强 -->
+            <!-- <div class="config-section collapsible">
+              <div class="section-header collapsible" @click="toggleSection('promptBoost')">
+                <span class="section-label">提示词增强</span>
+                <span class="expand-text">
+                  {{ sections.promptBoost ? '收起' : '展开' }}
+                  <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.promptBoost }"><ArrowDown /></el-icon>
+                </span>
               </div>
-            </div>
+              <div class="section-body" v-show="sections.promptBoost">
+                <div class="prompt-boost-row">
+                  <label class="boost-label">产品类别</label>
+                  <PromptLibrarySelect ref="boostProductRef" category="product" v-model="boostProduct" placeholder="选择产品类别" />
+                </div>
+                <div class="prompt-boost-row">
+                  <label class="boost-label">材质</label>
+                  <PromptLibrarySelect ref="boostMaterialRef" category="material" v-model="boostMaterial" placeholder="选择材质" />
+                </div>
+              </div>
+            </div> -->
+
           </div>
         </el-scrollbar>
       </div>
@@ -312,7 +283,6 @@
       <!-- ===== RIGHT: AI Panel ===== -->
       <div class="ai-col" :style="{ flex: aiFlex }" ref="aiPanel">
         <div class="ai-resize-handle" @mousedown="startAiResize"></div>
-        <div class="ai-resize-handle-top" @mousedown="startAiHeightResize"></div>
         <AiAssistant
           ref="aiAssistantRef"
           :generate-fn="handleGenerate"
@@ -407,11 +377,12 @@ export default {
     // })
     const gen = useImageGeneration('render')
     const { steps: workflowSteps, getStepClass, isStepLineDone } = useWorkflowProgress()
-  
+
     // ---- State ----
     const originalImage = ref(null)
     const originalFile = ref(null)
     const uploadedFiles = ref([])
+    const resultImages = ref([])
     const generating = ref(false)
     const zoom = ref(100)
     const unit = ref('cm')
@@ -501,19 +472,15 @@ export default {
     // ---- Layout resize ----
     const _configWidthPx = ref(280)
     const _aiWidthPx = ref(360)
-    const _aiHeightPx = ref(0) // 0 = auto-fill (no explicit height)
+    const aiPanel = ref(null)
     const canvasFlex = computed(() => '1 1 0%')
     const configFlex = computed(() => {
       if (configCollapsed.value) return '0 0 40px'
       return `0 0 ${_configWidthPx.value}px`
     })
-    const aiFlex = computed(() => {
-      const heightStyle = _aiHeightPx.value > 0 ? `; min-height: 0; height: ${_aiHeightPx.value}px` : ''
-      return `0 0 ${_aiWidthPx.value}px${heightStyle}`
-    })
+    const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
     let isResizing = false
     let resizeTarget = ''
-    const aiPanel = ref(null)
 
     function startColResize(e, target) {
       isResizing = true
@@ -623,8 +590,6 @@ export default {
       document.addEventListener('mouseup', onMouseUp)
       document.addEventListener('mousemove', onAiMouseMove)
       document.addEventListener('mouseup', onAiMouseUp)
-      document.addEventListener('mousemove', onAiHeightMouseMove)
-      document.addEventListener('mouseup', onAiHeightMouseUp)
       loadCreationConfig()
     })
 
@@ -633,8 +598,6 @@ export default {
       document.removeEventListener('mouseup', onMouseUp)
       document.removeEventListener('mousemove', onAiMouseMove)
       document.removeEventListener('mouseup', onAiMouseUp)
-      document.removeEventListener('mousemove', onAiHeightMouseMove)
-      document.removeEventListener('mouseup', onAiHeightMouseUp)
     })
 
     // ===== 从后台创作配置读取尺寸标记配置 =====
@@ -760,6 +723,7 @@ export default {
         const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
         const fullPrompt = boostText ? `${prompt}。约束：${boostText}。` : prompt
         await gen.fullGenerate([originalFile.value], fullPrompt, { consumePoints: 2, featureName: 'size_mark', title: '尺寸标记生成', n: 1 })
+        if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
       } catch (e) {
         console.error('尺寸标记生成失败:', e)
         ElMessage.error('生成失败，请稍后重试')
@@ -781,6 +745,7 @@ export default {
         const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
         const prompt = boostText ? `${basePrompt}；${text ? text + '。' : ''}约束：${boostText}。` : `${basePrompt}${text ? '。' + text : ''}`
         await gen.fullGenerate([originalFile.value], prompt, { consumePoints: 2, featureName: 'size_mark', title: '尺寸标记生成', n: 1 })
+        if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
       } catch (e) {
         console.error('尺寸标记生成失败:', e)
         const isTimeout = e?.code === 'ECONNABORTED'
@@ -892,11 +857,13 @@ export default {
     function clearWorkspaceImages() {
       originalImage.value = null
       uploadedFiles.value = []
+      resultImages.value = []
       gen.reset()
     }
 
     return {
       originalImage, uploadedFiles,
+      resultImages,
       configCollapsed,
       generating, zoom, unit,
       dimWidth, dimDepth, dimHeight,
@@ -920,7 +887,7 @@ export default {
       regenerate, downloadPng, copyLink,
       moreTemplates, startGenerate,
       applyPrompt,
-      startColResize, startAiResize, startAiHeightResize,
+      startColResize, startAiResize,
       // ---- AiAssistant ----
       isGenerating, genProgress, genStatus, genError, aiAssistantRef, handleGenerate,
       // ---- 反推提示词 ----
@@ -1161,107 +1128,59 @@ export default {
 .canvas-placeholder h3 { font-size: 14px; color: #6B7280; margin-bottom: 6px; font-weight: 500; }
 .canvas-placeholder p { font-size: 12px; color: #9CA3AF; }
 
-/* Dimension canvas */
-.dim-canvas-wrapper {
+/* Result grid */
+.result-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+  min-height: 300px;
+  padding: 8px;
+}
+.result-card {
+  border-radius: 8px;
+  overflow: hidden;
+  background: #F7F9FC;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 32px;
-  padding: 40px 50px;
-  width: 100%; height: 100%;
+  position: relative;
 }
-
-.dim-product { position: relative; }
-.dim-product .dim-img-placeholder {
-  width: 220px; height: 260px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #e8edf5, #f0f4fa);
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  color: #9CA3AF; font-size: 12px; text-align: center;
-}
-.dim-product.small .dim-img-placeholder { width: 120px; height: 140px; }
-.dim-product-img {
-  width: 100%; height: 100%;
+.result-img {
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
-  border-radius: 8px;
+  display: block;
 }
 
-/* Top dimension */
-.dim-top {
-  position: absolute; top: -32px; left: 0; right: 0;
-  display: flex; flex-direction: column; align-items: center;
+/* Generating overlay */
+.generating-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  z-index: 5;
+  border-radius: inherit;
 }
-.dim-top .dim-line {
-  width: 100%; height: 2px; background: #1F2937; position: relative;
+.progress-ring {
+  width: 64px;
+  height: 64px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #2563FF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.dim-top .dim-line::before, .dim-top .dim-line::after {
-  content: ''; position: absolute; top: -4px; width: 2px; height: 10px; background: #1F2937;
-}
-.dim-top .dim-line::before { left: 0; }
-.dim-top .dim-line::after { right: 0; }
-.dim-top .dim-arrow-l, .dim-top .dim-arrow-r {
-  position: absolute; top: -3px;
-  width: 0; height: 0;
-  border-top: 4px solid transparent; border-bottom: 4px solid transparent;
-}
-.dim-top .dim-arrow-l { left: 0; border-right: 6px solid #1F2937; }
-.dim-top .dim-arrow-r { right: 0; border-left: 6px solid #1F2937; }
-.dim-top .dim-text {
-  font-size: 13px; font-weight: 700; color: #1F2937;
-  margin-bottom: 4px; background: #fff; padding: 0 6px;
-}
-
-/* Left dimension */
-.dim-left {
-  position: absolute; top: 0; bottom: 0; left: -40px;
-  display: flex; flex-direction: row; align-items: center;
-}
-.dim-left .dim-line-v {
-  height: 100%; width: 2px; background: #1F2937; position: relative;
-}
-.dim-left .dim-line-v::before, .dim-left .dim-line-v::after {
-  content: ''; position: absolute; left: -4px; width: 10px; height: 2px; background: #1F2937;
-}
-.dim-left .dim-line-v::before { top: 0; }
-.dim-left .dim-line-v::after { bottom: 0; }
-.dim-left .dim-arrow-t, .dim-left .dim-arrow-b {
-  position: absolute; left: -3px;
-  width: 0; height: 0;
-  border-left: 4px solid transparent; border-right: 4px solid transparent;
-}
-.dim-left .dim-arrow-t { top: 0; border-bottom: 6px solid #1F2937; }
-.dim-left .dim-arrow-b { bottom: 0; border-top: 6px solid #1F2937; }
-.dim-left .dim-text {
-  font-size: 13px; font-weight: 700; color: #1F2937;
-  writing-mode: vertical-rl; text-orientation: mixed;
-  margin-right: 4px; background: #fff; padding: 4px 0; letter-spacing: 1px;
-}
-
-/* Right dimension */
-.dim-right {
-  position: absolute; top: 0; bottom: 0; right: -40px;
-  display: flex; flex-direction: row; align-items: center;
-}
-.dim-right .dim-line-v {
-  height: 100%; width: 2px; background: #1F2937; position: relative;
-}
-.dim-right .dim-line-v::before, .dim-right .dim-line-v::after {
-  content: ''; position: absolute; left: -4px; width: 10px; height: 2px; background: #1F2937;
-}
-.dim-right .dim-line-v::before { top: 0; }
-.dim-right .dim-line-v::after { bottom: 0; }
-.dim-right .dim-arrow-t, .dim-right .dim-arrow-b {
-  position: absolute; left: -3px;
-  width: 0; height: 0;
-  border-left: 4px solid transparent; border-right: 4px solid transparent;
-}
-.dim-right .dim-arrow-t { top: 0; border-bottom: 6px solid #1F2937; }
-.dim-right .dim-arrow-b { bottom: 0; border-top: 6px solid #1F2937; }
-.dim-right .dim-text {
-  font-size: 13px; font-weight: 700; color: #1F2937;
-  writing-mode: vertical-rl; text-orientation: mixed;
-  margin-left: 4px; background: #fff; padding: 4px 0; letter-spacing: 1px;
+.generating-overlay p {
+  font-size: 12px;
+  color: #6B7280;
 }
 
 .canvas-bottom-bar {
@@ -1522,60 +1441,6 @@ export default {
 }
 .ai-resize-handle:hover { background: #2563FF; }
 
-.ai-resize-handle-top {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 6px;
-  cursor: ns-resize;
-  z-index: 5;
-  background: transparent;
-  transition: background 0.2s;
-}
-.ai-resize-handle-top:hover { background: #2563FF; }
-
-.ai-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-  flex-shrink: 0;
-}
-.ai-header h3 { font-size: 14px; font-weight: 600; margin: 0; display: flex; align-items: center; }
-.ai-clear-btn {
-  font-size: 11px; color: #2563FF; background: none; border: none;
-  cursor: pointer; text-decoration: underline;
-}
-.ai-clear-btn:hover { opacity: 0.7; }
-
-.ai-chat {
-  background: #F7F9FC;
-  border-radius: 10px;
-  padding: 12px;
-  overflow-y: auto;
-  flex: 1;
-  margin-bottom: 8px;
-  min-height: 200px;
-}
-
-.chat-msg {
-  margin-bottom: 10px;
-  display: flex;
-  gap: 6px;
-}
-.chat-msg.bot { flex-direction: row; }
-.chat-msg.user { flex-direction: row-reverse; }
-.chat-avatar {
-  width: 22px; height: 22px; border-radius: 50%;
-  background: #2563FF; display: flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 10px; flex-shrink: 0;
-}
-.chat-bubble {
-  padding: 8px 12px; border-radius: 10px;
-  font-size: 12px; line-height: 1.5; max-width: 85%;
-}
-.chat-msg.bot .chat-bubble { background: #fff; color: #1F2937; }
-.chat-msg.user .chat-bubble { background: #EEF2FF; color: #2563FF; }
-
 /* Prompt suggestion */
 .prompt-suggestion { margin-bottom: 8px; flex-shrink: 0; }
 .prompt-card {
@@ -1636,7 +1501,6 @@ export default {
   .config-col { flex: 0 0 auto !important; max-height: 200px; overflow-y: auto; }
   .ai-col { flex: 1 1 auto !important; min-height: 250px; }
   .ai-resize-handle { display: none; }
-  .ai-resize-handle-top { display: none; }
   .canvas-toolbar { flex-wrap: wrap; gap: 8px; }
 }
 

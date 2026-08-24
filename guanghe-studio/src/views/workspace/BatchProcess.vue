@@ -7,7 +7,7 @@
    
       <div class="canvas-col" :style="{ flex: canvasFlex }">
         <!-- ========== Steps Bar ========== -->
-        <div class="steps-bar">
+        <!-- <div class="steps-bar">
           <div class="step-item active" @click="currentStep = 1">
             <div class="step-num">1</div>
             上传素材
@@ -27,7 +27,7 @@
             <div class="step-num">4</div>
             批量生成
           </div>
-        </div>
+        </div> -->
 
         <!-- Canvas Toolbar -->
          <!--
@@ -387,34 +387,8 @@
                 </div>
               </div>
 
-              <!-- Section: 提示词增强 -->
-              <div class="config-section collapsible">
-                <div class="section-header collapsible" @click="toggleSection('promptBoost')">
-                  <span class="section-label">提示词增强</span>
-                  <span class="expand-text">
-                    {{ sections.promptBoost ? '收起' : '展开' }}
-                    <svg :size="12" class="expand-arrow" :class="{ expanded: sections.promptBoost }" viewBox="0 0 12 12" fill="none"><path d="M3 4.5l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                  </span>
-                </div>
-                <div class="section-body" v-show="sections.promptBoost">
-                  <div class="prompt-boost-row">
-                    <label class="boost-label">产品类别</label>
-                    <PromptLibrarySelect ref="boostProductRef" category="product" v-model="boostProduct" placeholder="选择产品类别" />
-                  </div>
-                  <div class="prompt-boost-row">
-                    <label class="boost-label">材质</label>
-                    <PromptLibrarySelect ref="boostMaterialRef" category="material" v-model="boostMaterial" placeholder="选择材质" />
-                  </div>
-                </div>
-              </div>
-
               <!-- Generate Button -->
-              <div class="gen-btn-wrap">
-                <el-button type="primary" size="large" class="generate-btn" :loading="generating" :disabled="productImages.length === 0" @click="startBatchGenerate">
-                  {{ generating ? '生成中...' : '开始批量生成' }}
-                </el-button>
-                 <div class="gen-btn-sub" v-if="!generating">预计消耗 {{ estimatedCost }} 积分 | 预计时间 2-5 分钟</div> 
-              </div>
+              <!-- 生成按钮已移除，请通过AI助手发送 -->
             </div>
           </div>
         </div>
@@ -424,8 +398,8 @@
 
         <!-- ===== AI Assistant Column ===== -->
         <div class="ai-col" :style="{ flex: aiFlex }">
-          <div class="ai-resize-handle-top" @mousedown="startAiHeightResize"></div>
-          <AiAssistant ref="aiAssistantRef" :has-image="productImages.length > 0" :on-clear-images="clearWorkspaceImages" />
+          
+          <AiAssistant ref="aiAssistantRef" :generate-fn="handleGenerate" :is-generating="isGenerating" :gen-status="genStatus" :gen-progress="genProgress" :gen-error="genError" :has-image="productImages.length > 0" :on-clear-images="clearWorkspaceImages" />
         </div>
       </div>
     </div>
@@ -489,7 +463,6 @@
 defineOptions({ name: 'BatchProcessView' })
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import AiAssistant from '@/components/AiAssistant.vue'
-import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
 // import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
 // import CanvasOverlay from '@/components/CanvasOverlay.vue'
 import { useImageGeneration } from '@/composables/useImageGeneration'
@@ -502,6 +475,10 @@ import { MagicStick, DocumentCopy, UploadFilled } from '@element-plus/icons-vue'
 //   defaultName: 'batch-process',
 // })
 const gen = useImageGeneration('render')
+const isGenerating = computed(() => gen.generating.value)
+const genProgress = computed(() => gen.progress.value)
+const genStatus = computed(() => gen.statusText.value)
+const genError = computed(() => gen.error.value)
 
 // ==================== AI Assistant ====================
 const aiAssistantRef = ref(null)
@@ -777,30 +754,26 @@ const languages = [
 ]
 
 // ==================== Prompt Boost ====================
-const boostProduct = ref('')
-const boostMaterial = ref('')
-const boostProductRef = ref(null)
-const boostMaterialRef = ref(null)
+// (提示词增强已移除)
 
 // ==================== Generate ====================
 const generating = ref(false)
-const estimatedCost = computed(() => {
-  return genCount.value * 12
-})
 
-async function startBatchGenerate() {
-  if (productImages.value.length === 0) return
+async function handleGenerate() {
+  if (productImages.value.length === 0) { ElMessage.warning('请先上传产品图片'); return }
   if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
   generating.value = true
   try {
-    const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
-    const basePrompt = `批量生成电商图片，共${productImages.value.length}张，数量${genCount.value}`
-    const prompt = boostText ? `${basePrompt}。约束：${boostText}。` : basePrompt
-    await gen.fullGenerate(productImages.value, prompt, { consumePoints: 2, featureName: 'ai_assistant', title: '批量处理生成', n: genCount.value })
-    ElMessage.success('批量生成完成')
+    const text = aiAssistantRef.value?.inputText?.trim() || ''
+    const basePrompt = `批量生成电商图片，共${productImages.value.length}张，数量${genCount.value}${text ? '。' + text : ''}`
+    await gen.fullGenerate(productImages.value, basePrompt, { consumePoints: 2, featureName: 'ai_assistant', title: '批量处理生成', n: genCount.value })
   } catch (e) {
     console.error('批量生成失败:', e)
-    ElMessage.error('生成失败，请稍后重试')
+    const isTimeout = e?.code === 'ECONNABORTED'
+      || /timeout|超时|人数过多|繁忙|busy/i.test(e?.message || '')
+    ElMessage.error(isTimeout
+      ? '当前模型使用人数过多，可选用其他模型生图或稍后再试'
+      : '生成失败，请稍后重试')
   } finally {
     generating.value = false
   }
@@ -812,8 +785,7 @@ const sections = ref({
   selling: true,
   count: true,
   output: true,
-  language: true,
-  promptBoost: false
+  language: true
 })
 
 const allExpanded = computed(() => {
@@ -835,7 +807,6 @@ function toggleAllSections() {
 const configCollapsed = ref(false)
 const _configWidthPx = ref(320)
 const _aiWidthPx = ref(360)
-const _aiHeightPx = ref(0) // 0 = auto-fill (no explicit height)
 
 const canvasFlex = computed(() => '1 1 0%')
 const rightFlex = computed(() => {
@@ -846,10 +817,7 @@ const configFlex = computed(() => {
   if (configCollapsed.value) return '0 0 40px'
   return `0 0 ${_configWidthPx.value}px`
 })
-const aiFlex = computed(() => {
-  const heightStyle = _aiHeightPx.value > 0 ? `; min-height: 0; height: ${_aiHeightPx.value}px` : ''
-  return `0 0 ${_aiWidthPx.value}px${heightStyle}`
-})
+const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
 
 // ---------- Column resize logic (like WhiteBg) ----------
 let isResizing = false
@@ -904,40 +872,6 @@ function startRightPanelResize(e, target) {
   e.preventDefault()
 }
 
-// AI panel vertical resize (drag top border)
-let isAiHeightResizing = false
-let aiHeightStartY = 0
-let aiHeightStart = 0
-
-function startAiHeightResize(e) {
-  isAiHeightResizing = true
-  aiHeightStartY = e.clientY
-  const aiEl = document.querySelector('.ai-col')
-  aiHeightStart = aiEl
-    ? (_aiHeightPx.value > 0 ? _aiHeightPx.value : aiEl.getBoundingClientRect().height)
-    : 400
-  _aiHeightPx.value = Math.round(aiHeightStart)
-  document.body.style.cursor = 'ns-resize'
-  document.body.style.userSelect = 'none'
-  e.preventDefault()
-  e.stopPropagation()
-}
-
-function onAiHeightMouseMove(e) {
-  if (!isAiHeightResizing) return
-  const delta = e.clientY - aiHeightStartY
-  let newHeight = aiHeightStart + delta
-  newHeight = Math.max(300, Math.min(window.innerHeight - 100, Math.round(newHeight)))
-  _aiHeightPx.value = newHeight
-}
-
-function onAiHeightMouseUp() {
-  if (isAiHeightResizing) {
-    isAiHeightResizing = false
-    document.body.style.cursor = ''
-    document.body.style.userSelect = ''
-  }
-}
 
 // ==================== Lifecycle ====================
 onMounted(() => {
@@ -950,17 +884,11 @@ onMounted(() => {
       _configWidthPx.value = Math.round(w * 0.35)
       _aiWidthPx.value = Math.round(w * 0.55)
     }
-  })
-  document.addEventListener('mousemove', onAiHeightMouseMove)
-  document.addEventListener('mouseup', onAiHeightMouseUp)
-})
+  })})
 
 onBeforeUnmount(() => {
   document.removeEventListener('mousemove', onMouseMove)
-  document.removeEventListener('mouseup', onMouseUp)
-  document.removeEventListener('mousemove', onAiHeightMouseMove)
-  document.removeEventListener('mouseup', onAiHeightMouseUp)
-})
+  document.removeEventListener('mouseup', onMouseUp)})
 
 function clearWorkspaceImages() {
   productImages.value = []
@@ -1018,11 +946,6 @@ function clearWorkspaceImages() {
   flex: 1; height: 2px; background: #E8EDF5; min-width: 12px; margin: 0 6px;
 }
 .step-line.done { background: #22C55E; }
-
-.prompt-boost-row { margin-bottom: 10px; }
-.prompt-boost-row .boost-label {
-  display: block; font-size: 12px; color: #6B7280; margin-bottom: 4px;
-}
 
 /* ---- Three Column ---- */
 .three-col {
@@ -1094,17 +1017,6 @@ function clearWorkspaceImages() {
 }
 .right-panel-divider:hover,
 .right-panel-divider:active { background: #2563FF; }
-
-.ai-resize-handle-top {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 6px;
-  cursor: ns-resize;
-  z-index: 5;
-  background: transparent;
-  transition: background 0.2s;
-}
-.ai-resize-handle-top:hover { background: #2563FF; }
 
 /* ============================================================
    Canvas Column
@@ -1731,24 +1643,7 @@ function clearWorkspaceImages() {
   line-height: 1.5;
 }
 
-/* Generate Button - 与白底图一致 */
-.gen-btn-wrap {
-  padding: 16px 0 0;
-}
-.generate-btn {
-  width: 100%;
-  font-size: 14px;
-  font-weight: 500;
-  height: 40px;
-  border-radius: 8px;
-}
-.gen-btn-sub {
-  font-size: 11px;
-  font-weight: 400;
-  color: #9CA3AF;
-  margin-top: 6px;
-  text-align: center;
-}
+/* Generate Button 已移除 */
 
 /* ============================================================
    AI Column
