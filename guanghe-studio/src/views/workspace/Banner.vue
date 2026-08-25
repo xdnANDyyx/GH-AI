@@ -122,7 +122,7 @@
             <!-- 上传素材 -->
             <div class="config-section collapsible">
               <div class="section-header collapsible" @click="toggleSection('upload')">
-                <span class="section-label">上传素材</span>
+                <span class="section-label"><span class="required-mark">*</span>上传素材<span class="required-mark">（必填）</span></span>
                 <span class="expand-text">{{ sections.upload ? '收起' : '展开' }}<el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.upload }"><ArrowDown /></el-icon></span>
               </div>
               <div class="section-body" v-show="sections.upload">
@@ -645,7 +645,16 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
     function handleDrop(e) { const files = e.dataTransfer.files; if (files.length) addFiles(files) }
     function addFiles(files) { for (const f of files) { const url = URL.createObjectURL(f); uploadedFiles.value.push(url); productFiles.value.push(f); if (!originalImage.value) { originalImage.value = url; originalFile.value = f } } }
     function clearImage() { originalImage.value = ''; originalFile.value = null; uploadedFiles.value = []; productFiles.value = []; resultImages.value = [] }
-    function clearWorkspaceImages() { clearImage(); gen.reset() }
+    function clearWorkspaceImages() {
+      clearImage()
+      canvasPreset.value = '1200x300'; canvasWidth.value = 1200; canvasHeight.value = 300
+      activeBannerType.value = 'promo'
+      mainTitle.value = ''; subTitle.value = ''; btnText.value = ''
+      generateCount.value = 3
+      language.value = 'zh-CN'
+      selectedTemplate.value = null
+      gen.reset()
+    }
     function removeProductFile(index) { uploadedFiles.value.splice(index, 1); productFiles.value.splice(index, 1); if (uploadedFiles.value.length === 0) { originalImage.value = ''; originalFile.value = null } else { originalImage.value = uploadedFiles.value[0]; originalFile.value = productFiles.value[0] } }
     function selectCanvasPreset(s) { canvasPreset.value = s.value; canvasWidth.value = s.w; canvasHeight.value = s.h }
     function onCanvasPresetChange(val) {
@@ -971,6 +980,7 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
 .section-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; padding: 8px 16px; transition: opacity 0.2s; }
 .section-header:hover { opacity: 0.75; }
 .section-label { font-size: 13px; font-weight: 600; color: #1F2937; }
+.required-mark { color: #EF4444; margin-right: 2px; font-weight: 500; }
 .optional-label { font-weight: 400; font-size: 12px; color: #9CA3AF; }
 .expand-text { font-size: 12px; color: #9CA3AF; display: flex; align-items: center; gap: 2px; }
 .expand-arrow { transition: transform 0.25s; }

@@ -206,7 +206,7 @@
               <!-- Section: 上传素材 -->
               <div class="config-section collapsible">
                 <div class="section-header collapsible" @click="toggleSection('upload')">
-                  <span class="section-label">上传素材</span>
+                  <span class="section-label"><span class="required-mark">*</span>上传素材<span class="required-mark">（必填）</span></span>
                   <span class="expand-text">
                     {{ sections.upload ? '收起' : '展开' }}
                     <svg :size="12" class="expand-arrow" :class="{ expanded: sections.upload }" viewBox="0 0 12 12" fill="none"><path d="M3 4.5l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -892,6 +892,9 @@ onBeforeUnmount(() => {
 
 function clearWorkspaceImages() {
   productImages.value = []
+  refImages.value = []
+  outputSize.value = ''
+  language.value = 'zh-CN'
   gen.reset()
 }
 </script>
@@ -1412,6 +1415,7 @@ function clearWorkspaceImages() {
   color: #1F2937;
   transition: color 0.15s;
 }
+.required-mark { color: #EF4444; margin-right: 2px; font-weight: 500; }
 .expand-text {
   display: flex;
   align-items: center;

@@ -82,7 +82,7 @@
               <!-- Section: 上传图片 -->
               <div class="config-section collapsible">
                 <div class="section-header collapsible" @click="toggleSection('upload')">
-                  <span class="section-label">上传图片（最多10张）</span>
+                  <span class="section-label"><span class="required-mark">*</span>上传图片（最多10张）<span class="required-mark">（必填）</span></span>
                   <span class="expand-text">
                     {{ sections.upload ? '收起' : '展开' }}
                     <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.upload }"><ArrowDown /></el-icon>
@@ -762,6 +762,11 @@ export default {
 
     function clearWorkspaceImages() {
       productFiles.value = []
+      language.value = 'en-US'
+      outputSize.value = ''
+      customWidth.value = 1000
+      customHeight.value = 1000
+      generateCount.value = 1
       gen.reset()
     }
 
@@ -1237,6 +1242,7 @@ export default {
 }
 .section-header:hover { opacity: 0.75; }
 .section-label { font-size: 13px; font-weight: 500; color: #1F2937; }
+.required-mark { color: #EF4444; margin-right: 2px; font-weight: 500; }
 .expand-text {
   font-size: 11px;
   color: #9CA3AF;

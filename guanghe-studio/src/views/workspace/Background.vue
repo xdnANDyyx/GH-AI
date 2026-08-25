@@ -1,4 +1,4 @@
-﻿﻿<template>
+﻿﻿﻿﻿<template>
   <div class="workspace-page">
     <!-- Three-column layout -->
     <div class="three-col">
@@ -94,7 +94,7 @@
               <!-- 上传商品图 -->
               <div class="config-section collapsible">
                 <div class="panel-header collapsible" @click="toggleSection('upload')">
-                  <span class="section-label">上传商品图（最多10张）</span>
+                  <span class="section-label"><span class="required-mark">*</span>上传商品图（最多10张）<span class="required-mark">（必填）</span></span>
                   <span class="expand-text">
                     {{ sections.upload ? '收起' : '展开' }}
                     <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.upload }"><ArrowDown /></el-icon>
@@ -717,6 +717,13 @@ function clearWorkspaceImages() {
   productImages.value = []
   referenceImages.value = []
   productFiles.value = []
+  selectedPlatform.value = ''
+  selectedScene.value = ''
+  selectedLight.value = ''
+  selectedStyle.value = ''
+  outputSize.value = ''
+  customWidth.value = 1000
+  customHeight.value = 1000
   gen.reset()
 }
 
@@ -1526,6 +1533,7 @@ onBeforeUnmount(() => {
   font-weight: 500;
   color: #1F2937;
 }
+.required-mark { color: #EF4444; margin-right: 2px; font-weight: 500; }
 
 .expand-text {
   font-size: 11px;

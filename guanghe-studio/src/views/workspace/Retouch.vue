@@ -69,7 +69,7 @@
             <!-- Section: 上传图片 -->
             <div class="config-section collapsible">
               <div class="section-header collapsible" @click="toggleSection('upload')">
-                <span class="section-label">上传图片</span>
+                <span class="section-label"><span class="required-mark">*</span>上传图片<span class="required-mark">（必填）</span></span>
                 <span class="expand-text">
                   {{ sections.upload ? '收起' : '展开' }}
                   <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.upload }"><ArrowDown /></el-icon>
@@ -801,6 +801,9 @@ export default {
       processedImage.value = null
       productFiles.value = []
       uploadedFiles.value = []
+      outputQuality.value = 'high'
+      outputFormat.value = 'png'
+      selectedSize.value = '1:1'
       gen.reset()
     }
 
@@ -1168,6 +1171,7 @@ export default {
 }
 .section-header:hover { opacity: 0.75; }
 .section-label { font-size: 13px; font-weight: 600; color: #1F2937; }
+.required-mark { color: #EF4444; margin-right: 2px; font-weight: 500; }
 .section-arrow {
   font-size: 14px; color: #9CA3AF; transition: transform 0.25s;
   flex-shrink: 0;

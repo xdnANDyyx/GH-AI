@@ -70,7 +70,7 @@
 
             <!-- 上传产品图 -->
             <div class="config-section">
-              <div class="section-label">产品图</div>
+              <div class="section-label"><span class="required-mark">*</span>产品图<span class="required-mark">（必填）</span></div>
               <div class="section-body">
                 <div class="panel-upload-zone" @click.stop="triggerUpload" @dragover.prevent @drop.prevent="handleDrop">
                   <el-icon :size="32" color="#2563FF"><UploadFilled /></el-icon>
@@ -433,6 +433,7 @@ onMounted(async () => {
   &.no-margin { margin-bottom: 0; }
   &.ai-label { display: flex; align-items: center; gap: 6px; }
 }
+.required-mark { color: #EF4444; margin-right: 2px; font-weight: 500; }
 .ai-clear { font-size: 12px; color: var(--gh-text-placeholder); cursor: pointer; }
 .section-header.collapsible { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 4px 0; }
 .expand-text { font-size: 12px; color: #9CA3AF; display: flex; align-items: center; gap: 2px; }

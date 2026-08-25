@@ -101,7 +101,7 @@
             <!-- Section: Upload product image -->
             <div class="config-section collapsible">
               <div class="section-header collapsible" @click="toggleSection('upload')">
-                <span class="section-label">上传商品图</span>
+                <span class="section-label"><span class="required-mark">*</span>上传商品图<span class="required-mark">（必填）</span></span>
                 <span class="expand-text">
                   {{ sections.upload ? '收起' : '展开' }}
                   <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.upload }"><ArrowDown /></el-icon>
@@ -962,6 +962,13 @@ function clearWorkspaceImages() {
   productImage.value = ''
   originalFile.value = null
   resultImages.value = []
+  gender.value = '女'
+  hairstyle.value = '长发'
+  ethnicity.value = 'asian'
+  pose.value = '站立'
+  clothing.value = '商务'
+  outputSize.value = '2000'
+  customCount.value = 4
   gen.reset()
 }
 </script>
@@ -1551,6 +1558,7 @@ function clearWorkspaceImages() {
   align-items: center;
   gap: 6px;
 }
+.required-mark { color: #EF4444; margin-right: 2px; font-weight: 500; }
 
 .section-optional {
   font-size: 11px;

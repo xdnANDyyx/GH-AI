@@ -76,7 +76,7 @@
               <!-- Section: Upload -->
               <div class="config-section collapsible">
                 <div class="section-header collapsible" @click="toggleSection('upload')">
-                  <span class="section-label">上传图片</span>
+                  <span class="section-label"><span class="required-mark">*</span>上传图片<span class="required-mark">（必填）</span></span>
                   <span class="expand-text">
                     {{ sections.upload ? '收起' : '展开' }}
                     <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.upload }"><ArrowDown /></el-icon>
@@ -996,7 +996,7 @@ async function loadCreationConfig() {
     }
 
     // ---- 输出尺寸 ----
-    const sizeCfg = map.size_options
+    const sizeCfg = map.get('size_options') || map.get('size_presets') || map.get('output_sizes')
     if (sizeCfg && sizeCfg.configValue) {
       const arr = JSON.parse(sizeCfg.configValue)
       if (Array.isArray(arr) && arr.length) {
@@ -1069,6 +1069,10 @@ watch(() => [resultImages.value.length, isGenerating.value], () => {
 
 function clearWorkspaceImages() {
   originalImage.value = ''
+  outputSize.value = ''
+  customWidth.value = 1000
+  customHeight.value = 1000
+  language.value = 'zh-CN'
   gen.reset()
 }
 </script>
@@ -1649,6 +1653,7 @@ function clearWorkspaceImages() {
 }
 .section-header:hover { opacity: 0.75; }
 .section-label { font-size: 13px; font-weight: 500; color: #1F2937; }
+.required-mark { color: #EF4444; margin-right: 2px; font-weight: 500; }
 .expand-text {
   font-size: 11px;
   color: #9CA3AF;

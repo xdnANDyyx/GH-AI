@@ -196,11 +196,7 @@
                 </div>
                 <div class="section-body" v-show="sections.canvasSize">
                   <el-select v-model="outputSize" placeholder="请选择输出尺寸" style="width: 100%">
-                    <el-option label="不指定" value="" />
-                    <el-option label="1:1  (1080×1080)" value="1:1" />
-                    <el-option label="3:4  (1080×1440)" value="3:4" />
-                    <el-option label="4:3  (1440×1080)" value="4:3" />
-                    <el-option label="自定义" value="custom" />
+                    <el-option v-for="s in sizeOptions" :key="s.value" :label="s.label" :value="s.value" />
                   </el-select>
                   <!-- 自定义尺寸 -->
                   <div v-if="outputSize === 'custom'" class="custom-size-row">
@@ -220,7 +216,7 @@
               <!-- Section: 上传参考图 -->
               <div class="config-section collapsible">
                 <div class="section-header" @click="toggleSection('refUpload')">
-                  <span class="section-label">上传参考图</span>
+                  <span class="section-label"><span class="required-mark">*</span>上传参考图<span class="required-mark">（必填）</span></span>
                   <span class="expand-text">
                     {{ sections.refUpload ? '收起' : '展开' }}
                     <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.refUpload }"><ArrowDown /></el-icon>
@@ -629,6 +625,13 @@ function togglePoint(p) {
 const outputSize = ref('')
 const customWidth = ref(1080)
 const customHeight = ref(2160)
+const sizeOptions = ref([
+  { label: '不指定', value: '' },
+  { label: '1:1  (1080×1080)', value: '1:1' },
+  { label: '3:4  (1080×1440)', value: '3:4' },
+  { label: '4:3  (1440×1080)', value: '4:3' },
+  { label: '自定义', value: 'custom' }
+])
 const effectiveOutputSize = computed(() => {
   if (outputSize.value === 'custom') return `${customWidth.value}x${customHeight.value}`
   return outputSize.value
@@ -721,6 +724,13 @@ function clearWorkspaceImages() {
   originalImage.value = ''
   productFiles.value = []
   resultImages.value = []
+  selectedPlatform.value = '亚马逊'
+  language.value = 'en'
+  pageWidth.value = '970'
+  outputSize.value = ''
+  customWidth.value = 1080
+  customHeight.value = 2160
+  genCount.value = 1
   gen.reset()
 }
 
@@ -888,10 +898,17 @@ async function loadCreationConfig() {
     }
 
     // ---- 页面尺寸 ----
-    const sizeCfg = map.page_sizes
+    const sizeCfg = map.page_sizes || map.size_options || map.size_presets || map.output_sizes
     if (sizeCfg && sizeCfg.configValue) {
       const arr = JSON.parse(sizeCfg.configValue)
       if (Array.isArray(arr) && arr.length) {
+        const loaded = arr.map(s => (typeof s === 'string' ? { label: s, value: s } : s))
+        // Ensure 'custom' option is always present
+        const hasCustom = loaded.some(s => s.value === 'custom')
+        if (!hasCustom) {
+          loaded.push({ label: '自定义', value: 'custom' })
+        }
+        sizeOptions.value = [{ label: '不指定', value: '' }, ...loaded]
         // 取第一个作为默认页面宽度
         const first = arr[0]
         if (first && first.value) pageWidth.value = first.value
@@ -1419,6 +1436,7 @@ onBeforeUnmount(() => {
   font-weight: 500;
   color: #1F2937;
 }
+.required-mark { color: #EF4444; margin-right: 2px; font-weight: 500; }
 
 .section-label-group {
   display: flex;
