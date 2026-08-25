@@ -27,19 +27,11 @@
             </svg>
             <h3>AI 主图生成后将显示在此处</h3>
             <p>请在右侧配置生成参数并点击发送</p>
-            <div v-if="isGenerating" class="generating-overlay">
-              <div class="progress-ring">{{ genProgress }}%</div>
-              <p>{{ genStatus }}</p>
-            </div>
           </div>
           <!-- 有结果图时：2×2 网格展示 -->
           <div v-else class="result-grid" :class="{ generating: isGenerating }">
             <div v-for="(img, idx) in resultImages" :key="'r'+idx" class="result-card">
               <img :src="img.url || img" class="result-img" />
-            </div>
-            <div v-if="isGenerating" class="generating-overlay">
-              <div class="progress-ring">{{ genProgress }}%</div>
-              <p>{{ genStatus }}</p>
             </div>
           </div>
         </div>
@@ -248,7 +240,7 @@
                 </div>
                 <div v-show="sections.output" class="section-body">
                   <div class="gen-count-row">
-                    <span class="config-label">生成数量</span>
+                    <!-- <span class="config-label">生成数量</span> -->
                     <el-input-number v-model="generateCount" :min="1" :max="maxGenerateCount" size="small" controls-position="right" style="width: 120px" />
                   </div>
                 </div>
@@ -629,6 +621,15 @@ export default {
         if (maxCountCfg && maxCountCfg.configValue) {
           const n = Number(JSON.parse(maxCountCfg.configValue))
           if (n > 0) maxGenerateCount.value = n
+        }
+
+        // ---- 语言列表 ----
+        const langCfg = map.language_options
+        if (langCfg && langCfg.configValue) {
+          const arr = JSON.parse(langCfg.configValue)
+          if (Array.isArray(arr) && arr.length) {
+            languages.value = arr.filter(l => l.value)
+          }
         }
 
         // 加载提示词映射：value → promptText
@@ -1142,27 +1143,6 @@ export default {
   }
 }
 
-.generating-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255,255,255,.85);
-
-  .progress-ring {
-    font-size: 24px;
-    font-weight: 700;
-    color: #2563FF;
-    margin-bottom: 8px;
-  }
-
-  p {
-    font-size: 13px;
-    color: #6B7280;
-  }
-}
 
 .canvas-bottom-bar {
   padding: 6px 0;

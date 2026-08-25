@@ -156,7 +156,7 @@
           <el-table-column label="操作" width="160" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" size="small" @click="openCreationDialog(row)">编辑</el-button>
-              <el-button link type="danger" size="small" @click="handleDeleteCreation(row)">删除</el-button>
+              <!-- <el-button link type="danger" size="small" @click="handleDeleteCreation(row)">删除</el-button> -->
             </template>
           </el-table-column>
         </el-table>
@@ -465,10 +465,10 @@
               <el-button link type="danger" size="small" @click="removeOption(idx)">
                 <el-icon><Delete /></el-icon>
               </el-button>
-              <!-- 已绑定提示词内容预览：让"选显示名=选提示词"一目了然 -->
-              <div v-if="getPickerPromptText(item.value)" class="option-prompt-hint">
+              <!-- 提示词内容预览已隐藏，不在界面显示 -->
+              <!-- <div v-if="getPickerPromptText(item.value)" class="option-prompt-hint">
                 📝 {{ getPickerPromptText(item.value) }}
-              </div>
+              </div> -->
             </div>
             <el-button type="primary" plain size="small" @click="addOption">
               <el-icon><Plus /></el-icon>添加选项
@@ -504,7 +504,7 @@
         </el-form-item>
 
         <el-form-item v-else-if="creationEditorType === 'number'" label="配置值">
-          <el-input-number v-model="creationNumberValue" :controls="true" style="width: 220px" />
+          <el-input-number v-model="creationNumberValue" :min="1" :controls="true" style="width: 220px" />
         </el-form-item>
 
         <el-form-item v-else-if="creationEditorType === 'string'" label="配置值">
@@ -682,10 +682,16 @@ const promptPickerCategoryOptions = computed(() => {
     return optList.filter(o => ['opt_platform', 'opt_scene', 'opt_light', 'opt_style', 'opt_size'].includes(o.value))
   }
   if (creationForm.configGroup === 'main_image') {
-    return optList.filter(o => ['opt_platform', 'opt_size', 'opt_purpose', 'opt_selling'].includes(o.value))
+    return optList.filter(o => ['opt_platform', 'opt_size', 'opt_purpose', 'opt_selling', 'opt_language'].includes(o.value))
   }
   if (creationForm.configGroup === 'detail_img') {
-    return optList.filter(o => ['opt_platform', 'opt_size', 'opt_selling', 'opt_page'].includes(o.value))
+    return optList.filter(o => ['opt_platform', 'opt_size', 'opt_selling', 'opt_page', 'opt_language'].includes(o.value))
+  }
+  if (creationForm.configGroup === 'size_mark') {
+    return optList.filter(o => ['opt_ratio', 'opt_tool', 'opt_template', 'opt_quality', 'opt_language'].includes(o.value))
+  }
+  if (creationForm.configGroup === 'retouch') {
+    return optList.filter(o => ['opt_tool', 'opt_quality', 'opt_size'].includes(o.value))
   }
   return optList
 })
@@ -834,12 +840,23 @@ function inferPromptCategory(configKey) {
     light_options: 'opt_light',
     style_presets: 'opt_style',
     selling_options: 'opt_selling',
+    selling_points: 'opt_selling',
     purpose_options: 'opt_purpose',
+    purposes: 'opt_purpose',
     shadow_styles: 'opt_shadow',
     size_presets: 'opt_size',
     size_options: 'opt_size',
     output_sizes: 'opt_size',
-    page_sizes: 'opt_size'
+    page_sizes: 'opt_size',
+    language_options: 'opt_language',
+    content_structure: 'opt_page',
+    ratio_options: 'opt_ratio',
+    line_styles: 'opt_tool',
+    templates: 'opt_template',
+    unit_options: 'opt_quality',
+    tools: 'opt_tool',
+    quality_options: 'opt_quality',
+    format_options: 'opt_quality'
   }
   return map[configKey] || ''
 }
@@ -1003,10 +1020,11 @@ function handleOptionImageError() {
 // 仅当该配置键能反推出提示词库分类（即下拉有内容可绑）时才隐藏手动填写列，否则保留输入框作为兜底。
 const imageOptionKeys = ['shadow_styles', 'bg_styles', 'preview_styles', 'style_presets']
 const sizeOptionKeys = ['size_presets', 'size_options', 'output_sizes', 'page_sizes']
-// 列表绑定类配置：选了显示名即得 label+value（及图片），无需用户手动填这些列，仅保留下拉与图片列。
+// 列表绑定类配置：选了显示名即得 label+value（及宽高/图片），无需用户手动填这些列。
+// 只要该配置键能反推出提示词库分类（即下拉有内容可绑），就隐藏 label 和 value 列。
 const pickerBoundOptionConfig = computed(() =>
-  (imageOptionKeys.includes(creationForm.configKey) || sizeOptionKeys.includes(creationForm.configKey))
-  && !!inferPromptCategory(creationForm.configKey)
+  !!inferPromptCategory(creationForm.configKey)
+  && !['max_generate_count', 'max_selling_count', 'size_min', 'size_max'].includes(creationForm.configKey)
 )
 // 兼容旧名（图片/阴影类专用分支用），等价于 pickerBoundOptionConfig && 含图片列
 const isImageOptionConfig = computed(() =>
@@ -1035,11 +1053,12 @@ const creationOptionFields = computed(() => {
     ]
   }
   const samples = creationOptions.value.filter(i => i && typeof i === 'object')
-  const knownOrder = ['label', 'value', 'key', 'name', 'desc', 'image', 'w', 'h']
+  const knownOrder = ['label', 'value', 'name', 'desc', 'image', 'w', 'h']
+  const hiddenKeys = new Set(['key']) // key 字段不作为可编辑列显示，但仍参与序列化
   const keySet = new Set()
   samples.forEach(item => Object.keys(item).forEach(k => {
-    // 跳过内部字段（下划线前缀，如 _pickerKey），不作为可编辑列、也不参与序列化
-    if (k && !k.startsWith('_')) keySet.add(k)
+    // 跳过内部字段（下划线前缀，如 _pickerKey）和隐藏字段（如 key），不作为可编辑列
+    if (k && !k.startsWith('_') && !hiddenKeys.has(k)) keySet.add(k)
   }))
   if (keySet.size === 0) {
     return guessOptionFieldsByKey(creationForm.configKey)
@@ -1195,12 +1214,18 @@ function serializeCreationEditor() {
   const type = creationEditorType.value
   if (type === 'options') {
     const fields = activeOptionFields()
+    // 界面隐藏但仍需序列化保留的字段（如 Banner 的 key 字段）
+    const hiddenSerializeKeys = ['key']
     const items = creationOptions.value
       .map(item => {
         const obj = {}
         fields.forEach(f => {
           const v = item[f.key]
           obj[f.key] = f.type === 'number' ? Number(v || 0) : (v ?? '')
+        })
+        // 保留界面隐藏但原有数据的字段
+        hiddenSerializeKeys.forEach(hk => {
+          if (item[hk] !== undefined && item[hk] !== '') obj[hk] = item[hk]
         })
         return obj
       })
@@ -1507,6 +1532,10 @@ async function submitCreation() {
   const serialized = serializeCreationEditor()
   if (serialized === null) {
     return ElMessage.warning('请检查配置值：选项至少填写显示名和值，或切换为高级JSON模式')
+  }
+  // 数值类型配置（如生成数量上限）最小值为1，不允许设为0
+  if (creationEditorType.value === 'number' && creationNumberValue.value < 1) {
+    return ElMessage.warning('数值配置最小值为1，不允许设为0')
   }
   creationForm.configValue = serialized
   savingCreation.value = true

@@ -49,19 +49,11 @@
             </svg>
             <h3>AI 模特生成后将显示在此处</h3>
             <p>请在右侧上传商品图并点击发送</p>
-            <div v-if="isGenerating" class="generating-overlay">
-              <div class="progress-ring">{{ genProgress }}%</div>
-              <p>{{ genStatus }}</p>
-            </div>
           </div>
           <!-- 有结果图时：展示结果 -->
           <div v-else class="result-grid" :class="{ generating: isGenerating }">
             <div v-for="(img, idx) in resultImages" :key="'r'+idx" class="result-card">
               <img :src="img.url || img" class="result-img" />
-            </div>
-            <div v-if="isGenerating" class="generating-overlay">
-              <div class="progress-ring">{{ genProgress }}%</div>
-              <p>{{ genStatus }}</p>
             </div>
           </div>
         </div>
@@ -117,7 +109,7 @@
 
             <!-- Section: Select Model -->
             <div class="config-section collapsible">
-              <div class="section-header collapsible" @click="toggleSection('modelSelect')">
+              <!-- <div class="section-header collapsible" @click="toggleSection('modelSelect')">
                 <span class="section-label">选择模特</span>
                 <span class="expand-text">
                   {{ sections.modelSelect ? '收起' : '展开' }}
@@ -150,7 +142,7 @@
                   </div>
                 </div>
                 <p class="section-helper" v-if="modelList.length > 0">点击模特可自动填入配置参数，再次点击取消选择</p>
-              </div>
+              </div> -->
             </div>
 
             <!-- 1. Gender -->
@@ -353,7 +345,7 @@
             </div>
 
             <!-- 提示词增强 -->
-            <div class="config-section collapsible">
+            <!-- <div class="config-section collapsible">
               <div class="section-header collapsible" @click="toggleSection('promptBoost')">
                 <span class="section-label">提示词增强</span>
                 <span class="expand-text">
@@ -372,7 +364,7 @@
                 </div>
                 <p class="section-helper">选用的约束词会自动拼接到生图提示词中</p>
               </div>
-            </div>
+            </div> -->
 
           </div>
         </el-scrollbar>
@@ -1326,35 +1318,6 @@ function clearWorkspaceImages() {
   height: 100%;
   object-fit: contain;
 }
-
-.generating-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(255,255,255,0.8);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  z-index: 10;
-}
-
-.progress-ring {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  border: 4px solid #E5E7EB;
-  border-top-color: #2563FF;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  font-weight: 600;
-  color: #2563FF;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin { to { transform: rotate(360deg); } }
 
 .upload-placeholder {
   text-align: center;

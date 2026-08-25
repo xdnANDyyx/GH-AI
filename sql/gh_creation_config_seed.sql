@@ -77,7 +77,8 @@ INSERT INTO `gh_creation_config` (`config_group`,`config_key`,`config_name`,`con
 ('main_image','purposes','主图用途','[{"label":"主图","value":"main"},{"label":"附图","value":"sub"},{"label":"变体图","value":"variant"},{"label":"场景图","value":"scene"}]',3,'0','主图用途选择'),
 ('main_image','selling_points','核心卖点','[{"label":"高品质材料","value":"quality_material"},{"label":"耐用结实","value":"durable"},{"label":"多功能使用","value":"multi_function"},{"label":"易于安装","value":"easy_install"},{"label":"防刮耐磨","value":"scratch_resistant"},{"label":"安全环保","value":"eco_friendly"},{"label":"时尚设计","value":"fashion"},{"label":"性价比高","value":"cost_effective"}]',4,'0','核心卖点选项'),
 ('main_image','max_selling_count','最大卖点选择数','3',5,'0','最多选择卖点数量'),
-('main_image','max_generate_count','生成数量上限','5',6,'0','主图生成数量上限');
+('main_image','max_generate_count','生成数量上限','5',6,'0','主图生成数量上限'),
+('main_image','language_options','语言列表','[{"label":"中文（简体）","value":"zh-CN"},{"label":"英语（美国）","value":"en-US"},{"label":"英语（英国）","value":"en-GB"},{"label":"日语","value":"ja-JP"},{"label":"韩语","value":"ko-KR"},{"label":"德语","value":"de-DE"},{"label":"法语","value":"fr-FR"},{"label":"西班牙语","value":"es-ES"}]',7,'0','主图语言选项');
 
 -- ============================================================
 -- 7. 详情图/A+ detail_img
@@ -88,7 +89,8 @@ INSERT INTO `gh_creation_config` (`config_group`,`config_key`,`config_name`,`con
 ('detail_img','selling_points','核心卖点','[{"label":"高品质材料","value":"quality_material"},{"label":"耐用结实","value":"durable"},{"label":"多功能使用","value":"multi_function"},{"label":"易于安装","value":"easy_install"},{"label":"防刮耐磨","value":"scratch_resistant"},{"label":"安全环保","value":"eco_friendly"},{"label":"时尚设计","value":"fashion"},{"label":"性价比高","value":"cost_effective"},{"label":"智能设计","value":"smart"},{"label":"抗菌防霉","value":"antibacterial"}]',3,'0','详情图卖点'),
 ('detail_img','content_structure','内容结构模块','[{"label":"产品概览","value":"overview"},{"label":"卖点详解","value":"selling_points"},{"label":"规格参数","value":"specs"},{"label":"使用场景","value":"scenes"},{"label":"对比图","value":"comparison"},{"label":"FAQ","value":"faq"},{"label":"品牌故事","value":"brand"}]',4,'0','详情页内容模块'),
 ('detail_img','max_selling_count','建议卖点数量','5',5,'0','建议选择卖点数量'),
-('detail_img','max_generate_count','生成数量上限','5',6,'0','详情图生成数量上限');
+('detail_img','max_generate_count','生成数量上限','5',6,'0','详情图生成数量上限'),
+('detail_img','language_options','语言列表','[{"label":"中文（简体）","value":"zh-CN"},{"label":"英语（美国）","value":"en-US"},{"label":"英语（英国）","value":"en-GB"},{"label":"日语","value":"ja-JP"},{"label":"韩语","value":"ko-KR"},{"label":"德语","value":"de-DE"},{"label":"法语","value":"fr-FR"},{"label":"西班牙语","value":"es-ES"}]',7,'0','详情图语言选项');
 
 -- ============================================================
 -- 8. Banner设计 banner

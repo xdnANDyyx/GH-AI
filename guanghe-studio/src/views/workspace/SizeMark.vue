@@ -24,19 +24,11 @@
             </svg>
             <h3>AI 尺寸图生成后将显示在此处</h3>
             <p>请在右侧上传商品图并点击生成</p>
-            <div v-if="isGenerating" class="generating-overlay">
-              <div class="progress-ring">{{ genProgress }}%</div>
-              <p>{{ genStatus }}</p>
-            </div>
           </div>
           <!-- 有结果图时：展示结果 -->
           <div v-else class="result-grid" :class="{ generating: isGenerating }">
             <div v-for="(img, idx) in resultImages" :key="'r'+idx" class="result-card">
               <img :src="img.url || img" class="result-img" />
-            </div>
-            <div v-if="isGenerating" class="generating-overlay">
-              <div class="progress-ring">{{ genProgress }}%</div>
-              <p>{{ genStatus }}</p>
             </div>
           </div>
         </div>
@@ -1159,34 +1151,6 @@ export default {
   max-height: 100%;
   object-fit: contain;
   display: block;
-}
-
-/* Generating overlay */
-.generating-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(255,255,255,0.7);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  z-index: 5;
-  border-radius: inherit;
-}
-.progress-ring {
-  width: 64px;
-  height: 64px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #2563FF;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.generating-overlay p {
-  font-size: 12px;
-  color: #6B7280;
 }
 
 .canvas-bottom-bar {

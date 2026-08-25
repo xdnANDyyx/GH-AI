@@ -26,19 +26,11 @@
             </svg>
             <h3>AI 详情图生成后将显示在此处</h3>
             <p>请在右侧配置生成参数并点击发送</p>
-            <div v-if="isGenerating" class="generating-overlay">
-              <div class="progress-ring">{{ genProgress }}%</div>
-              <p>{{ genStatus }}</p>
-            </div>
           </div>
           <!-- 有结果图时：展示结果 -->
           <div v-else class="result-grid" :class="{ generating: isGenerating }">
             <div v-for="(img, idx) in resultImages" :key="'r'+idx" class="result-card">
               <img :src="img.url || img" class="result-img" />
-            </div>
-            <div v-if="isGenerating" class="generating-overlay">
-              <div class="progress-ring">{{ genProgress }}%</div>
-              <p>{{ genStatus }}</p>
             </div>
           </div>
         </div>
@@ -180,7 +172,7 @@
                       :class="{ active: activePoints.includes(p) }"
                       @click="togglePoint(p)"
                     >{{ p }}</div>
-                    <div class="tag-btn add-tag" @click="customPoint = ''; customPointDialog = true">+ 自定义卖点</div>
+                    <!-- <div class="tag-btn add-tag" @click="customPoint = ''; customPointDialog = true">+ 自定义卖点</div> -->
                   </div>
                 </div>
               </div>
@@ -289,7 +281,7 @@
                 </div>
                 <div class="section-body" v-show="sections.genCount">
                   <div class="gen-count-row">
-                    <span class="config-label">生成数量</span>
+                    <!-- <span class="config-label">生成数量</span> -->
                     <el-input-number v-model="genCount" :min="1" :max="maxGenerateCount" size="small" controls-position="right" style="width: 120px" />
                   </div>
                 </div>
@@ -929,20 +921,28 @@ async function loadCreationConfig() {
       if (n > 0) maxGenerateCount.value = n
     }
 
-    // ---- 语言列表（从通用配置加载） ----
-    try {
-      const commonRes = await getPublicCreationConfigByGroup('common')
-      const commonList = commonRes.data || commonRes.rows || []
-      const commonMap = {}
-      commonList.forEach(c => { commonMap[c.configKey] = c })
-      const langCfg = commonMap.languages
-      if (langCfg && langCfg.configValue) {
-        const items = JSON.parse(langCfg.configValue)
-        if (Array.isArray(items) && items.length) {
-          languageOptions.value = items.filter(l => l.value)
-        }
+    // ---- 语言列表（优先从 detail_img 组加载，fallback 到通用配置） ----
+    const langCfg = map.language_options
+    if (langCfg && langCfg.configValue) {
+      const items = JSON.parse(langCfg.configValue)
+      if (Array.isArray(items) && items.length) {
+        languageOptions.value = items.filter(l => l.value)
       }
-    } catch { /* use defaults */ }
+    } else {
+      try {
+        const commonRes = await getPublicCreationConfigByGroup('common')
+        const commonList = commonRes.data || commonRes.rows || []
+        const commonMap = {}
+        commonList.forEach(c => { commonMap[c.configKey] = c })
+        const commonLangCfg = commonMap.languages
+        if (commonLangCfg && commonLangCfg.configValue) {
+          const items = JSON.parse(commonLangCfg.configValue)
+          if (Array.isArray(items) && items.length) {
+            languageOptions.value = items.filter(l => l.value)
+          }
+        }
+      } catch { /* use defaults */ }
+    }
 
     // 加载提示词映射
     await loadPromptMap()
@@ -1205,33 +1205,6 @@ onBeforeUnmount(() => {
   max-height: 100%;
   object-fit: contain;
   display: block;
-}
-
-/* Generating overlay */
-.generating-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(255,255,255,0.7);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  z-index: 5;
-  border-radius: inherit;
-}
-.progress-ring {
-  width: 64px;
-  height: 64px;
-}
-.progress-ring-text {
-  font-size: 14px;
-  font-weight: 600;
-  color: #2563FF;
-}
-.generating-hint {
-  font-size: 12px;
-  color: #6B7280;
 }
 
 .canvas-bottom-bar {

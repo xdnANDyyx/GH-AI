@@ -29,19 +29,11 @@
             </svg>
             <h3>AI 背景图生成后将显示在此处</h3>
             <p>请在右侧配置生成参数并点击发送</p>
-            <div v-if="isGenerating" class="generating-overlay">
-              <div class="progress-ring">{{ genProgress }}%</div>
-              <p>{{ genStatus }}</p>
-            </div>
           </div>
           <!-- 有结果图时：2×2 网格展示 -->
           <div v-else class="result-grid" :class="{ generating: isGenerating }">
             <div v-for="(img, idx) in resultImages" :key="'r'+idx" class="result-card">
               <img :src="img.url || img" class="result-img" />
-            </div>
-            <div v-if="isGenerating" class="generating-overlay">
-              <div class="progress-ring">{{ genProgress }}%</div>
-              <p>{{ genStatus }}</p>
             </div>
           </div>
         </div>
@@ -966,11 +958,16 @@ async function loadBgConfig() {
     }
 
     // ---- 输出尺寸 ----
-    const sizeCfg = map.size_options
+    const sizeCfg = map.size_options || map.size_presets || map.output_sizes
     if (sizeCfg && sizeCfg.configValue) {
       const arr = JSON.parse(sizeCfg.configValue)
       if (Array.isArray(arr) && arr.length) {
         const loaded = arr.map(s => (typeof s === 'string' ? { label: s, value: s } : s))
+        // Ensure 'custom' option is always present
+        const hasCustom = loaded.some(s => s.value === 'custom')
+        if (!hasCustom) {
+          loaded.push({ label: '自定义', value: 'custom' })
+        }
         sizeOptions.value = [{ label: '不指定尺寸', value: '' }, ...loaded]
       }
     }
@@ -1382,28 +1379,6 @@ onBeforeUnmount(() => {
 
   &.download-btn:hover {
     color: #2563FF;
-  }
-}
-
-.generating-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255,255,255,.85);
-
-  .progress-ring {
-    font-size: 24px;
-    font-weight: 700;
-    color: #2563FF;
-    margin-bottom: 8px;
-  }
-
-  p {
-    font-size: 13px;
-    color: #6B7280;
   }
 }
 
