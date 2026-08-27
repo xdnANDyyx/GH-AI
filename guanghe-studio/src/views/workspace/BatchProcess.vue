@@ -111,8 +111,9 @@
                   <td>
                     <div class="task-name">
                       <div class="task-thumbs">
-                        <div class="task-thumb" v-for="(_, i) in task.thumbs" :key="i">
-                          <div class="img-placeholder"></div>
+                        <div class="task-thumb" v-for="(thumb, i) in task.thumbs" :key="i">
+                          <img v-if="thumb.url" :src="thumb.url" class="thumb-img" />
+                          <div v-else class="img-placeholder"></div>
                         </div>
                       </div>
                       <span class="task-name-text">{{ task.name }}</span>
@@ -134,10 +135,10 @@
                   <td><span class="cell-meta">{{ task.createdAt }}</span></td>
                   <td>
                     <div class="table-actions">
-                      <div class="table-action-icon" title="查看" v-if="task.statusClass === 'green' || task.statusClass === 'blue'" @click="viewTask(task)">
+                      <div class="table-action-icon" title="查看" v-if="task.status === 'done' || task.status === 'processing'" @click="viewTask(task)">
                         <svg viewBox="0 0 15 15" fill="none"><path d="M1.5 7.5s2.5-4.5 6-4.5 6 4.5 6 4.5-2.5 4.5-6 4.5-6-4.5-6-4.5z" stroke="currentColor" stroke-width="1.2"/><circle cx="7.5" cy="7.5" r="2" stroke="currentColor" stroke-width="1.2"/></svg>
                       </div>
-                      <div class="table-action-icon" title="下载" v-if="task.statusClass === 'green'" @click="downloadTask(task)">
+                      <div class="table-action-icon" title="下载" v-if="task.status === 'done'" @click="downloadTask(task)">
                         <svg viewBox="0 0 15 15" fill="none"><path d="M7.5 2v8M4.5 7l3 3 3-3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 11v1.5h10V11" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                       </div>
                       <div class="table-action-icon" title="删除" @click="deleteTask(task)">
@@ -285,25 +286,8 @@
                   </span>
                 </div>
                 <div class="section-body" v-show="sections.count">
-                  <div class="count-sublabel">每个产品生成的方案数</div>
-                  <div class="count-row">
-                    <div class="count-group">
-                      <button
-                        v-for="n in [1, 2, 3, 4, 5]"
-                        :key="n"
-                        class="count-btn"
-                        :class="{ active: genCount === n && !customCount }"
-                        @click="selectCount(n)"
-                      >{{ n }}套</button>
-                      <button class="count-btn" :class="{ active: customCount }" @click="customCount = true">自定义</button>
-                    </div>
-                    <div class="count-input">
-                      <input type="number" v-model.number="genCount" min="1" max="99" @focus="customCount = true" />
-                      <div class="count-input-arrows">
-                        <div class="count-input-arrow" @click="genCount = Math.min(99, genCount + 1)">▲</div>
-                        <div class="count-input-arrow" @click="genCount = Math.max(1, genCount - 1)">▼</div>
-                      </div>
-                    </div>
+                  <div class="gen-count-row">
+                    <el-input-number v-model="genCount" :min="1" :max="maxGenerateCount" size="small" controls-position="right" style="width: 120px" />
                   </div>
                 </div>
               </div>
@@ -404,6 +388,59 @@
       </div>
     </div>
 
+    <!-- 任务结果查看弹窗 -->
+    <el-dialog
+      v-model="taskDetailVisible"
+      :title="currentTaskDetail?.name || '任务详情'"
+      width="720px"
+      :close-on-click-modal="true"
+      append-to-body
+      class="task-detail-dialog"
+    >
+      <div class="task-detail-body" v-if="currentTaskDetail">
+        <!-- 任务信息 -->
+        <div class="td-info-row">
+          <div class="td-info-item"><span class="td-label">设计类型</span><span class="td-value">{{ currentTaskDetail.designType }}</span></div>
+          <div class="td-info-item"><span class="td-label">素材数量</span><span class="td-value">{{ currentTaskDetail.materialCount }}</span></div>
+          <div class="td-info-item"><span class="td-label">生成数量</span><span class="td-value">{{ currentTaskDetail.genCount }} 套</span></div>
+          <div class="td-info-item"><span class="td-label">创建时间</span><span class="td-value">{{ currentTaskDetail.createdAt }}</span></div>
+        </div>
+        <!-- 状态 -->
+        <div class="td-status-row">
+          <span class="td-label">状态：</span>
+          <span class="status-dot" :class="currentTaskDetail.statusClass">{{ currentTaskDetail.statusText }}</span>
+          <div class="progress-cell" v-if="currentTaskDetail.progress !== null" style="margin-left: 16px">
+            <div class="progress-bar"><div class="progress-fill" :class="currentTaskDetail.statusClass" :style="{ width: currentTaskDetail.progress + '%' }"></div></div>
+            <span class="progress-text">{{ currentTaskDetail.progress }}%</span>
+          </div>
+        </div>
+        <!-- 结果图片 -->
+        <div class="td-section-title" v-if="currentTaskDetail.resultImages && currentTaskDetail.resultImages.length > 0">生成结果</div>
+        <div class="td-result-grid" v-if="currentTaskDetail.resultImages && currentTaskDetail.resultImages.length > 0">
+          <div class="td-result-item" v-for="(img, i) in currentTaskDetail.resultImages" :key="i">
+            <img :src="img.url || img" class="td-result-img" @click="previewImage(img.url || img)" />
+          </div>
+        </div>
+        <div class="td-empty" v-else>
+          <p>暂无生成结果图片</p>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="taskDetailVisible = false">关闭</el-button>
+        <el-button type="primary" v-if="currentTaskDetail?.status === 'done'" @click="downloadTask(currentTaskDetail)">
+          下载全部
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 图片预览 -->
+    <el-image-viewer
+      v-if="previewVisible"
+      :url-list="[previewUrl]"
+      @close="previewVisible = false"
+      hide-on-click-modal
+    />
+
     <!-- 反推提示词模态框 -->
     <el-dialog
       v-model="reverseDialogVisible"
@@ -466,7 +503,8 @@ import AiAssistant from '@/components/AiAssistant.vue'
 // import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
 // import CanvasOverlay from '@/components/CanvasOverlay.vue'
 import { useImageGeneration } from '@/composables/useImageGeneration'
-import { ElMessage } from 'element-plus'
+import { useBatchTasks } from '@/composables/useBatchTasks'
+import { ElMessage, ElImageViewer } from 'element-plus'
 import { reversePrompt } from '@/api/customer'
 import { MagicStick, DocumentCopy, UploadFilled } from '@element-plus/icons-vue'
 
@@ -595,6 +633,7 @@ function toggleFullscreen() {
 }
 
 // ==================== Task List ====================
+const { tasks, createTask, updateTask, updateProgress, deleteTask: removeTask, clearAll } = useBatchTasks()
 const taskListExpanded = ref(true)
 const taskFilter = ref('all')
 const taskTabs = [
@@ -605,70 +644,52 @@ const taskTabs = [
   { key: 'failed', label: '生成失败' }
 ]
 
-const tasks = ref([
-  {
-    id: 1,
-    name: '北欧风格椅子详情图方案',
-    designType: '详情图 / A+',
-    materialCount: '产品图 8 张 / 参考图 6 张',
-    genCount: '3',
-    statusText: '生成中',
-    statusClass: 'blue',
-    progress: 60,
-    createdAt: '2024-06-01 14:30',
-    thumbs: [1, 2]
-  },
-  {
-    id: 2,
-    name: '现代简约沙发主图方案',
-    designType: '主图设计',
-    materialCount: '产品图 6 张 / 参考图 4 张',
-    genCount: '3',
-    statusText: '排队中',
-    statusClass: 'orange',
-    progress: null,
-    createdAt: '2024-06-01 14:25',
-    thumbs: [1, 2]
-  },
-  {
-    id: 3,
-    name: '实木餐桌场景方案',
-    designType: '主图 + 详情图',
-    materialCount: '产品图 5 张 / 参考图 5 张',
-    genCount: '3',
-    statusText: '已完成',
-    statusClass: 'green',
-    progress: 100,
-    createdAt: '2024-06-01 14:20',
-    thumbs: [1, 2]
-  }
-])
-
 const filteredTasks = computed(() => {
   if (taskFilter.value === 'all') return tasks.value
-  const map = {
-    processing: 'blue',
-    queued: 'orange',
-    done: 'green',
-    failed: 'red'
-  }
-  return tasks.value.filter(t => t.statusClass === map[taskFilter.value])
+  return tasks.value.filter(t => t.status === taskFilter.value)
 })
 
+// 任务详情弹窗
+const taskDetailVisible = ref(false)
+const currentTaskDetail = ref(null)
+// 图片预览
+const previewVisible = ref(false)
+const previewUrl = ref('')
+
 function clearTasks() {
-  tasks.value = []
+  clearAll()
 }
 
 function viewTask(task) {
-  console.log('view task:', task)
+  currentTaskDetail.value = task
+  taskDetailVisible.value = true
+}
+
+function previewImage(url) {
+  previewUrl.value = url
+  previewVisible.value = true
 }
 
 function downloadTask(task) {
-  console.log('download task:', task)
+  if (!task.resultImages || task.resultImages.length === 0) {
+    ElMessage.warning('该任务没有可下载的图片')
+    return
+  }
+  task.resultImages.forEach((img, i) => {
+    const url = img.url || img
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${task.name}_第${i + 1}张.jpg`
+    link.target = '_blank'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  })
+  ElMessage.success(`开始下载 ${task.resultImages.length} 张图片`)
 }
 
 function deleteTask(task) {
-  tasks.value = tasks.value.filter(t => t.id !== task.id)
+  removeTask(task.id)
 }
 
 // ==================== Upload ====================
@@ -720,13 +741,8 @@ function addCustomSellingPoint() {
 }
 
 // ==================== Generate Count ====================
-const genCount = ref(3)
-const customCount = ref(false)
-
-function selectCount(n) {
-  genCount.value = n
-  customCount.value = false
-}
+const maxGenerateCount = ref(5)
+const genCount = ref(1)
 
 // ==================== Output Settings ====================
 const outputFormat = ref('JPG')
@@ -759,16 +775,69 @@ const languages = [
 // ==================== Generate ====================
 const generating = ref(false)
 
+// 进度模拟定时器
+let progressTimer = null
+
+function startProgressSimulation(taskId) {
+  stopProgressSimulation()
+  let p = 5
+  progressTimer = setInterval(() => {
+    p = Math.min(90, p + Math.random() * 8 + 2)
+    updateProgress(taskId, Math.round(p))
+  }, 1500)
+}
+
+function stopProgressSimulation() {
+  if (progressTimer) {
+    clearInterval(progressTimer)
+    progressTimer = null
+  }
+}
+
 async function handleGenerate() {
   if (productImages.value.length === 0) { ElMessage.warning('请先上传产品图片'); return }
   if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
   generating.value = true
+
+  // 创建任务记录
+  const task = createTask({
+    name: `批量生成 ${productImages.value.length} 张`,
+    designType: '批量生成',
+    materialCount: `产品图 ${productImages.value.length} 张${refImages.value.length > 0 ? ' / 参考图 ' + refImages.value.length + ' 张' : ''}`,
+    genCount: genCount.value,
+    thumbs: productImages.value.slice(0, 4).map(f => {
+      if (f instanceof File) return { url: URL.createObjectURL(f) }
+      if (typeof f === 'string') return { url: f }
+      return {}
+    }),
+    prompt: aiAssistantRef.value?.inputText?.trim() || '',
+    productImages: productImages.value,
+  })
+
+  // 更新为处理中
+  updateTask(task.id, { status: 'processing', progress: 0 })
+  startProgressSimulation(task.id)
+
   try {
     const text = aiAssistantRef.value?.inputText?.trim() || ''
     const basePrompt = `批量生成电商图片，共${productImages.value.length}张，数量${genCount.value}${text ? '。' + text : ''}`
     await gen.fullGenerate(productImages.value, basePrompt, { consumePoints: 2, featureName: 'ai_assistant', title: '批量处理生成', n: genCount.value })
+
+    // 生成成功
+    stopProgressSimulation()
+    const resultImages = gen.resultImages.value.map(img => {
+      const url = img.url || img
+      return { url }
+    })
+    updateTask(task.id, {
+      status: 'done',
+      progress: 100,
+      resultImages,
+    })
   } catch (e) {
     console.error('批量生成失败:', e)
+    stopProgressSimulation()
+    updateTask(task.id, { status: 'failed' })
     const isTimeout = e?.code === 'ECONNABORTED'
       || /timeout|超时|人数过多|繁忙|busy/i.test(e?.message || '')
     ElMessage.error(isTimeout
@@ -776,6 +845,7 @@ async function handleGenerate() {
       : '生成失败，请稍后重试')
   } finally {
     generating.value = false
+    stopProgressSimulation()
   }
 }
 
@@ -888,7 +958,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('mousemove', onMouseMove)
-  document.removeEventListener('mouseup', onMouseUp)})
+  document.removeEventListener('mouseup', onMouseUp)
+  stopProgressSimulation()
+})
 
 function clearWorkspaceImages() {
   productImages.value = []
@@ -1242,6 +1314,12 @@ function clearWorkspaceImages() {
   height: 100%;
   background: linear-gradient(135deg, #e8edf5, #f0f4fa);
 }
+.task-thumb .thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
 .task-name-text {
   font-size: 12px;
   font-weight: 500;
@@ -1518,6 +1596,11 @@ function clearWorkspaceImages() {
 
 /* Count Section */
 .count-sublabel { font-size: 11px; color: #9CA3AF; margin-bottom: 10px; }
+.gen-count-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .count-row { display: flex; align-items: center; gap: 8px; }
 .count-group {
   display: flex;
@@ -1771,5 +1854,72 @@ function clearWorkspaceImages() {
   white-space: pre-wrap;
   max-height: 180px;
   overflow-y: auto;
+}
+
+/* ===== 任务详情弹窗 ===== */
+.task-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.td-info-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+.td-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.td-label {
+  font-size: 12px;
+  color: #9CA3AF;
+  font-weight: 400;
+}
+.td-value {
+  font-size: 13px;
+  color: #1F2937;
+  font-weight: 500;
+}
+.td-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.td-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1F2937;
+  margin-bottom: -4px;
+}
+.td-result-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.td-result-item {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #E8EDF5;
+  aspect-ratio: 1;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.td-result-item:hover {
+  border-color: #2563FF;
+}
+.td-result-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.td-empty {
+  text-align: center;
+  padding: 40px 0;
+  color: #9CA3AF;
+  font-size: 13px;
 }
 </style>

@@ -52,7 +52,8 @@ INSERT INTO `gh_creation_config` (`config_group`,`config_key`,`config_name`,`con
 ('retouch','quality_options','画质选项','[{"label":"标准","value":"standard"},{"label":"高清","value":"hd"},{"label":"超清","value":"ultra"}]',2,'0','输出画质选择'),
 ('retouch','format_options','输出格式','[{"label":"PNG","value":"PNG"},{"label":"JPG","value":"JPG"},{"label":"WebP","value":"WebP"}]',3,'0','输出格式选择'),
 ('retouch','default_intensity','默认精修强度','50',4,'0','默认精修强度(10-100)'),
-('retouch','max_generate_count','生成数量上限','5',5,'0','精修生成数量上限');
+('retouch','max_generate_count','生成数量上限','5',5,'0','精修生成数量上限'),
+('retouch','size_options','输出尺寸','[{"label":"1:1","value":"1:1","w":20,"h":20},{"label":"4:3","value":"4:3","w":24,"h":18},{"label":"3:4","value":"3:4","w":18,"h":24},{"label":"16:9","value":"16:9","w":28,"h":16},{"label":"9:16","value":"9:16","w":16,"h":28},{"label":"3:2","value":"3:2","w":24,"h":16},{"label":"2:3","value":"2:3","w":16,"h":24},{"label":"自定义","value":"custom","w":18,"h":18}]',6,'0','精修输出尺寸选择');
 
 -- ============================================================
 -- 5. AI模特 ai_model

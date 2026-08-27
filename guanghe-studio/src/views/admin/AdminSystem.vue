@@ -37,15 +37,15 @@
               <p class="section-desc">维护生图时可选择的提示词选项（产品类别、材质、场景、风格、卖点、镜头等）。配置后前台 AI 配置面板即时联动生效。</p>
             </div>
             <div class="filter-inline">
-
+              <el-select v-model="libraryFilters.scope" placeholder="工作台" clearable filterable style="width: 160px">
+                <el-option v-for="s in promptPickerScopeOptions.filter(o => o.value)" :key="s.value" :label="s.label" :value="s.value" />
+              </el-select>
               <el-select v-model="libraryFilters.category" placeholder="分类" clearable filterable style="width: 160px">
                 <el-option v-for="c in libraryFilterCategoryOptions" :key="c.value" :label="c.label" :value="c.value" />
               </el-select>
               <el-input v-model="libraryFilters.label" placeholder="显示名" clearable style="width: 160px" />
               <!-- <el-input v-model="libraryFilters.promptKey" placeholder="Key" clearable style="width: 180px" /> -->
-              <el-select v-model="libraryFilters.scope" placeholder="适用功能" clearable filterable style="width: 160px">
-                <el-option v-for="s in promptPickerScopeOptions.filter(o => o.value)" :key="s.value" :label="s.label" :value="s.value" />
-              </el-select>
+              
               <el-select v-model="libraryFilters.status" placeholder="状态" clearable style="width: 120px">
                 <el-option label="全部" value="" />
                 <el-option label="启用" value="0" />
@@ -57,24 +57,18 @@
           </div>
 
           <el-table v-loading="libraryLoading" :data="promptLibraryList" :header-cell-style="headerStyle">
+            <el-table-column prop="scope" label="适用功能" width="150" show-overflow-tooltip>
+              <template #default="{ row }">{{ getScopeLabel(row.scope) }}</template>
+            </el-table-column>
             <el-table-column prop="category" label="分类" width="120">
               <template #default="{ row }">{{ getCategoryLabel(row.category) }}</template>
             </el-table-column>
             <el-table-column prop="label" label="显示名" min-width="140" show-overflow-tooltip />
             <el-table-column prop="promptText" label="提示词内容" min-width="260" show-overflow-tooltip />
-            <el-table-column prop="scope" label="适用功能" width="150" show-overflow-tooltip>
-              <template #default="{ row }">{{ getScopeLabel(row.scope) }}</template>
-            </el-table-column>
-            <el-table-column prop="priority" label="优先级" width="90" />
-            <el-table-column prop="sort" label="排序" width="80" />
+            
             <el-table-column prop="status" label="状态" width="100">
               <template #default="{ row }">
                 <el-switch :model-value="row.status === '0'" @change="(value) => toggleLibraryStatus(row, value)" />
-              </template>
-            </el-table-column>
-            <el-table-column prop="isDefault" label="默认" width="80">
-              <template #default="{ row }">
-                <el-tag :type="row.isDefault === '1' ? 'warning' : 'info'" size="small">{{ row.isDefault === '1' ? '默认' : '普通' }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column prop="referenced" label="引用状态" width="100">
@@ -626,6 +620,7 @@ const unifiedCategoryOptions = [
   { value: 'opt_purpose',    label: '用途' },
   { value: 'opt_size',       label: '尺寸' },
   { value: 'opt_age',        label: '年龄' },
+  { value: 'opt_gender',     label: '性别' },
   { value: 'opt_hairstyle',  label: '发型' },
   { value: 'opt_ethnicity',  label: '人种' },
   { value: 'opt_pose',       label: '姿势' },
@@ -634,8 +629,9 @@ const unifiedCategoryOptions = [
   { value: 'opt_ratio',      label: '比例' },
   { value: 'opt_banner_type',label: 'Banner类型' },
   { value: 'opt_template',   label: 'Banner模板' },
-  { value: 'opt_page',       label: '详情页模块' },
-  { value: 'opt_quality',    label: '质量' },
+  { value: 'opt_page',       label: '内容结构' },
+  { value: 'opt_quality',    label: '画质' },
+  { value: 'opt_format',     label: '输出格式' },
   { value: 'opt_language',   label: '语言' },
   { value: 'opt_shadow',     label: '阴影' },
   { value: 'function',       label: '功能' },
@@ -691,7 +687,16 @@ const promptPickerCategoryOptions = computed(() => {
     return optList.filter(o => ['opt_ratio', 'opt_tool', 'opt_template', 'opt_quality', 'opt_language'].includes(o.value))
   }
   if (creationForm.configGroup === 'retouch') {
-    return optList.filter(o => ['opt_tool', 'opt_quality', 'opt_size'].includes(o.value))
+    return optList.filter(o => ['opt_tool', 'opt_quality', 'opt_format', 'opt_size'].includes(o.value))
+  }
+  if (creationForm.configGroup === 'ai_model') {
+    return optList.filter(o => ['opt_gender', 'opt_age', 'opt_hairstyle', 'opt_ethnicity', 'opt_pose', 'opt_clothing', 'opt_scene', 'opt_size'].includes(o.value))
+  }
+  if (creationForm.configGroup === 'banner') {
+    return optList.filter(o => ['opt_size', 'opt_banner_type', 'opt_purpose'].includes(o.value))
+  }
+  if (creationForm.configGroup === 'batch_process') {
+    return optList.filter(o => ['opt_selling', 'opt_format', 'opt_quality', 'opt_size'].includes(o.value))
   }
   return optList
 })
@@ -856,7 +861,15 @@ function inferPromptCategory(configKey) {
     unit_options: 'opt_quality',
     tools: 'opt_tool',
     quality_options: 'opt_quality',
-    format_options: 'opt_quality'
+    format_options: 'opt_format',
+    gender_options: 'opt_gender',
+    age_ranges: 'opt_age',
+    hairstyles: 'opt_hairstyle',
+    ethnicities: 'opt_ethnicity',
+    poses: 'opt_pose',
+    clothing_options: 'opt_clothing',
+    scene_options: 'opt_scene',
+    banner_types: 'opt_banner_type'
   }
   return map[configKey] || ''
 }

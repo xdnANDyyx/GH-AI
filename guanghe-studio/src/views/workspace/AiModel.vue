@@ -306,40 +306,43 @@
             <!-- 8. Output settings -->
             <div class="config-section collapsible">
               <div class="section-header collapsible" @click="toggleSection('output')">
-                <span class="section-label">输出设置</span>
+                <span class="section-label">输出尺寸</span>
                 <span class="expand-text">
                   {{ sections.output ? '收起' : '展开' }}
                   <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.output }"><ArrowDown /></el-icon>
                 </span>
               </div>
               <div v-show="sections.output" class="section-body">
-                <div class="output-row">
-                  <span class="output-label">输出尺寸</span>
-                  <el-select v-model="outputSize" style="width: 140px" size="small">
-                    <el-option v-for="s in outputSizeOptions" :key="s.value" :label="s.label" :value="s.value" />
-                  </el-select>
-                </div>
-                <div class="output-row">
-                  <span class="output-label">生成数量</span>
-                  <div class="count-group compact">
-                    <div
-                      v-for="n in maxGenerateCount"
-                      :key="n"
-                      class="count-btn"
-                      :class="{ active: !useCustomCount && presetCount === n }"
-                      @click="selectPresetCount(n)"
-                      v-show="n <= 5"
-                    >{{ n }}</div>
-                    <div
-                      class="count-btn custom-btn"
-                      :class="{ active: useCustomCount }"
-                      @click="useCustomCount = true"
-                    >自定义</div>
+                <el-select v-model="outputSize" placeholder="请选择输出尺寸" style="width: 100%" size="small">
+                  <el-option v-for="s in sizeOptions" :key="s.value" :label="s.label" :value="s.value" />
+                </el-select>
+                <!-- 自定义尺寸 -->
+                <div v-if="outputSize === 'custom'" class="custom-size-row">
+                  <div class="custom-size-input">
+                    <span>宽</span>
+                    <el-input-number v-model="customWidth" :min="64" :max="4096" :step="100" size="small" controls-position="right" />
+                  </div>
+                  <span class="custom-size-x">×</span>
+                  <div class="custom-size-input">
+                    <span>高</span>
+                    <el-input-number v-model="customHeight" :min="64" :max="4096" :step="100" size="small" controls-position="right" />
                   </div>
                 </div>
-                <div class="output-row custom-count-row" v-if="useCustomCount">
-                  <span class="output-label">自定义数量</span>
-                  <el-input-number v-model="customCount" :min="1" :max="maxGenerateCount" size="small" controls-position="right" style="width: 120px" />
+              </div>
+            </div>
+
+            <!-- 9. 生成数量 -->
+            <div class="config-section collapsible">
+              <div class="section-header collapsible" @click="toggleSection('genCount')">
+                <span class="section-label">生成数量</span>
+                <span class="expand-text">
+                  {{ sections.genCount ? '收起' : '展开' }}
+                  <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.genCount }"><ArrowDown /></el-icon>
+                </span>
+              </div>
+              <div v-show="sections.genCount" class="section-body">
+                <div class="gen-count-row">
+                  <el-input-number v-model="generateCount" :min="1" :max="maxGenerateCount" size="small" controls-position="right" style="width: 120px" />
                 </div>
               </div>
             </div>
@@ -591,7 +594,17 @@ const ethnicity = ref('asian')
 const pose = ref('站立')
 const clothing = ref('商务')
 const sceneStyle = ref('pure-bg')
-const outputSize = ref('2000')
+const outputSize = ref('')
+const customWidth = ref(1000)
+const customHeight = ref(1000)
+
+// 实际输出尺寸
+const effectiveOutputSize = computed(() => {
+  if (outputSize.value === 'custom') {
+    return `${customWidth.value}x${customHeight.value}`
+  }
+  return outputSize.value
+})
 
 // ===== 配置选项（从后台加载） =====
 const genderOptions = ref([
@@ -618,12 +631,15 @@ const sceneOptions = ref([
   { label: '商场', value: 'mall', gradient: 'linear-gradient(135deg, #fce7f3, #fbcfe8)', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><rect x="4" y="8" width="16" height="13" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M9 8V5a3 3 0 016 0v3" stroke="currentColor" stroke-width="1.5"/><path d="M4 13h16" stroke="currentColor" stroke-width="1.5"/></svg>' },
   { label: '纯色背景', value: 'pure-bg', gradient: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)', svgIcon: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.5"/></svg>' }
 ])
-const outputSizeOptions = ref([
-  { label: '2000 x 2000', value: '2000' },
-  { label: '1500 x 1500', value: '1500' },
-  { label: '1000 x 1000', value: '1000' },
+const sizeOptions = ref([
+  { label: '不指定尺寸', value: '' },
+  { label: '1:1（800×800）', value: '800:800' },
+  { label: '3:4（800×1067）', value: '800:1067' },
+  { label: '4:3（1067×800）', value: '1067:800' },
+  { label: '自定义', value: 'custom' }
 ])
-const maxGenerateCount = ref(20)
+const maxGenerateCount = ref(5)
+const generateCount = ref(1)
 const promptMap = ref({})
 
 // ===== 提示词增强（从 gh_prompt_library 拉取） =====
@@ -631,11 +647,6 @@ const boostProduct = ref('')
 const boostMaterial = ref('')
 const boostProductRef = ref(null)
 const boostMaterialRef = ref(null)
-const presetCount = ref(4)
-const useCustomCount = ref(false)
-const customCount = ref(4)
-const genCount = computed(() => useCustomCount.value ? customCount.value : presetCount.value)
-const totalPoints = computed(() => genCount.value)
 
 const sections = reactive({
   upload: true,
@@ -648,6 +659,7 @@ const sections = reactive({
   clothing: false,
   scene: false,
   output: false,
+  genCount: false,
   promptBoost: false
 })
 
@@ -774,11 +786,6 @@ function toggleAllSections() {
   Object.keys(sections).forEach(k => sections[k] = val)
 }
 
-function selectPresetCount(n) {
-  useCustomCount.value = false
-  presetCount.value = n
-}
-
 function triggerUpload() { fileInput.value?.click() }
 
 function handleDrop(e) {
@@ -807,8 +814,12 @@ async function handleGenerate() {
   try {
     const _basePrompt = `生成AI模特图，性别${gender.value}，年龄${age.value}，发型${hairstyle.value}，姿势${pose.value}，服装${clothing.value}，场景${sceneStyle.value}`
     const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
-    const prompt = boostText ? `${_basePrompt}；${text ? text + '。' : ''}约束：${boostText}。` : `${_basePrompt}${text ? '。' + text : ''}`
-    await gen.fullGenerate([originalFile.value], prompt, { consumePoints: 2, featureName: 'ai_model', title: 'AI模特生成', n: 1 })
+    const sizeText = effectiveOutputSize.value ? `输出图片尺寸为 ${effectiveOutputSize.value}，` : ''
+    const prompt = boostText ? `${_basePrompt}；${sizeText}${text ? text + '。' : ''}约束：${boostText}。` : `${_basePrompt}${sizeText ? '。' + sizeText : ''}${text ? '。' + text : ''}`
+    const extraOptions = {}
+    if (effectiveOutputSize.value) extraOptions.output_size = effectiveOutputSize.value
+    if (generateCount.value) extraOptions.n = Number(generateCount.value)
+    await gen.fullGenerate([originalFile.value], prompt, { ...extraOptions, consumePoints: 2, featureName: 'ai_model', title: 'AI模特生成' })
     if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
   } catch (e) {
     console.error('AI模特生成失败:', e)
@@ -913,11 +924,17 @@ async function loadCreationConfig() {
     }
 
     // ---- 输出尺寸 ----
-    const sizeCfg = map.output_sizes
+    const sizeCfg = map.output_sizes || map.size_options || map.size_presets
     if (sizeCfg && sizeCfg.configValue) {
       const arr = JSON.parse(sizeCfg.configValue)
       if (Array.isArray(arr) && arr.length) {
-        outputSizeOptions.value = arr.map(s => ({ label: s.label || s.value, value: (s.value || '').replace(/x.*/, '') }))
+        const loaded = arr.map(s => (typeof s === 'string' ? { label: s, value: s } : s))
+        // Ensure 'custom' option is always present
+        const hasCustom = loaded.some(s => s.value === 'custom')
+        if (!hasCustom) {
+          loaded.push({ label: '自定义', value: 'custom' })
+        }
+        sizeOptions.value = [{ label: '不指定尺寸', value: '' }, ...loaded]
       }
     }
 
@@ -959,8 +976,10 @@ function clearWorkspaceImages() {
   ethnicity.value = 'asian'
   pose.value = '站立'
   clothing.value = '商务'
-  outputSize.value = '2000'
-  customCount.value = 4
+  outputSize.value = ''
+  customWidth.value = 1000
+  customHeight.value = 1000
+  generateCount.value = 1
   gen.reset()
 }
 </script>
@@ -1757,7 +1776,39 @@ function clearWorkspaceImages() {
 }
 
 .custom-count-row {
-  margin-top: 8px;
+margin-top: 8px;
+}
+
+/* ---- 自定义尺寸（与白底图一致） ---- */
+.custom-size-row {
+display: flex;
+align-items: center;
+gap: 8px;
+margin-top: 10px;
+padding-top: 10px;
+border-top: 1px dashed #E8EDF5;
+}
+.custom-size-input {
+flex: 1;
+display: flex;
+flex-direction: column;
+gap: 4px;
+}
+.custom-size-input span {
+font-size: 11px;
+color: #6B7280;
+}
+.custom-size-x {
+color: #9CA3AF;
+font-size: 13px;
+padding-top: 14px;
+}
+
+/* ---- 生成数量（与主图设计一致） ---- */
+.gen-count-row {
+display: flex;
+align-items: center;
+gap: 8px;
 }
 
 // -- Generate button --

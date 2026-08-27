@@ -143,7 +143,12 @@ INSERT INTO `gh_prompt_library` (`category`,`prompt_key`,`label`,`prompt_text`,`
 ('opt_purpose','opt_purpose.banner.festival','节日营销','{}','banner',6,'0'),
 ('opt_purpose','opt_purpose.banner.shopImage','店铺形象展示','{}','banner',7,'0'),
 ('opt_purpose','opt_purpose.banner.other','其他','{}','banner',8,'0');
--- 10. 年龄 opt_age
+-- 10. 性别 opt_gender
+INSERT INTO `gh_prompt_library` (`category`,`prompt_key`,`label`,`prompt_text`,`scope`,`is_default`,`sort`,`status`) VALUES
+('opt_gender','opt_gender.ai_model.male','男','{}','ai_model','0',1,'0'),
+('opt_gender','opt_gender.ai_model.female','女','{}','ai_model','1',2,'0'),
+('opt_gender','opt_gender.ai_model.any','不限','{}','ai_model','0',3,'0');
+-- 11. 年龄 opt_age
 INSERT INTO `gh_prompt_library` (`category`,`prompt_key`,`label`,`prompt_text`,`scope`,`sort`,`status`) VALUES
 ('opt_age','opt_age.ai_model.青年18-25','青年(18-25)','{}','ai_model',1,'0'),
 ('opt_age','opt_age.ai_model.轻熟26-35','轻熟(26-35)','{}','ai_model',2,'0'),
@@ -229,3 +234,8 @@ INSERT INTO `gh_prompt_library` (`category`,`prompt_key`,`label`,`prompt_text`,`
 ('opt_quality','opt_quality.batch.standard','标准','{}','batch','0',1,'0'),
 ('opt_quality','opt_quality.batch.hd','高清','{}','batch','1',2,'0'),
 ('opt_quality','opt_quality.batch.ultra','超清','{}','batch','0',3,'0');
+-- 21. 输出格式 opt_format
+INSERT INTO `gh_prompt_library` (`category`,`prompt_key`,`label`,`prompt_text`,`scope`,`is_default`,`sort`,`status`) VALUES
+('opt_format','opt_format.retouch.PNG','PNG','{}','retouch','1',1,'0'),
+('opt_format','opt_format.retouch.JPG','JPG','{}','retouch','0',2,'0'),
+('opt_format','opt_format.retouch.WebP','WebP','{}','retouch','0',3,'0');

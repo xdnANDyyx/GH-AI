@@ -550,7 +550,12 @@ export default {
           const arr = JSON.parse(toolsCfg.configValue)
           if (Array.isArray(arr) && arr.length) {
             // 从后台工具列表过滤出已有的工具（保留 SVG 图标）
-            const keySet = new Set(arr.map(t => typeof t === 'string' ? t : t.value))
+            // 兼容两种 value 格式：原始值（one-click-repair）和 promptKey（opt_tool.retouch.one-click-repair）
+            const keySet = new Set(arr.map(t => {
+              const v = typeof t === 'string' ? t : t.value
+              // 提取 promptKey 最后一段作为工具 key
+              return v ? v.split('.').pop() : v
+            }))
             retouchTools.value = allRetouchTools.filter(t => keySet.has(t.key))
           }
         }
@@ -585,6 +590,20 @@ export default {
         if (maxCountCfg && maxCountCfg.configValue) {
           const n = Number(JSON.parse(maxCountCfg.configValue))
           if (n > 0) maxGenerateCount.value = n
+        }
+
+        // ---- 输出尺寸 ----
+        const sizeCfg = map.size_options || map.size_presets
+        if (sizeCfg && sizeCfg.configValue) {
+          const arr = JSON.parse(sizeCfg.configValue)
+          if (Array.isArray(arr) && arr.length) {
+            const loaded = arr.map(s => (typeof s === 'string' ? { label: s, value: s } : s))
+            const hasCustom = loaded.some(s => s.value === 'custom')
+            if (!hasCustom) {
+              loaded.push({ label: '自定义', value: 'custom', w: 18, h: 18 })
+            }
+            sizeOptions.value = loaded
+          }
         }
 
         // 加载提示词映射

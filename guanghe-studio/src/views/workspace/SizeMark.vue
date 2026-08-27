@@ -160,29 +160,29 @@
               </div>
             </div>
 
-            <!-- Section: 输出比例 -->
+            <!-- Section: 输出尺寸 -->
             <div class="config-section collapsible">
-              <div class="section-header collapsible" @click="toggleSection('ratio')">
-                <span class="section-label">输出比例</span>
+              <div class="section-header collapsible" @click="toggleSection('outputSize')">
+                <span class="section-label">输出尺寸</span>
                 <span class="expand-text">
-                  {{ sections.ratio ? '收起' : '展开' }}
-                  <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.ratio }"><ArrowDown /></el-icon>
+                  {{ sections.outputSize ? '收起' : '展开' }}
+                  <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.outputSize }"><ArrowDown /></el-icon>
                 </span>
               </div>
-              <div class="section-body" v-show="sections.ratio">
-                <el-select v-model="selectedRatio" style="width: 100%" size="small">
-                  <el-option v-for="r in ratioOptions" :key="r.value" :label="r.label" :value="r.value" />
+              <div class="section-body" v-show="sections.outputSize">
+                <el-select v-model="outputSize" placeholder="请选择输出尺寸" style="width: 100%" size="small">
+                  <el-option v-for="s in sizeOptions" :key="s.value" :label="s.label" :value="s.value" />
                 </el-select>
-                <!-- 自定义比例 -->
-                <div v-if="selectedRatio === 'custom'" class="custom-size-row">
+                <!-- 自定义尺寸 -->
+                <div v-if="outputSize === 'custom'" class="custom-size-row">
                   <div class="custom-size-input">
                     <span>宽</span>
-                    <el-input-number v-model="customRatioWidth" :min="1" :max="9999" :step="1" size="small" controls-position="right" />
+                    <el-input-number v-model="customWidth" :min="64" :max="4096" :step="100" size="small" controls-position="right" />
                   </div>
-                  <span class="custom-size-x">:</span>
+                  <span class="custom-size-x">×</span>
                   <div class="custom-size-input">
                     <span>高</span>
-                    <el-input-number v-model="customRatioHeight" :min="1" :max="9999" :step="1" size="small" controls-position="right" />
+                    <el-input-number v-model="customHeight" :min="64" :max="4096" :step="100" size="small" controls-position="right" />
                   </div>
                 </div>
               </div>
@@ -190,15 +190,15 @@
 
             <!-- Section: 模板选择 -->
             <div class="config-section collapsible">
-              <div class="section-header collapsible" @click="toggleSection('templates')">
+              <!-- <div class="section-header collapsible" @click="toggleSection('templates')">
                 <span class="section-label">模板选择</span>
                 <span class="expand-text">
                   {{ sections.templates ? '收起' : '展开' }}
                   <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.templates }"><ArrowDown /></el-icon>
                 </span>
-              </div>
+              </div> -->
               <div class="section-body" v-show="sections.templates">
-                <div class="template-grid">
+                <!-- <div class="template-grid">
                   <div class="template-item" :class="{ active: selectedTemplate === 'standard' }" @click="selectedTemplate = 'standard'">
                     <div class="tmpl-thumb">
                       <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="3" y="5" width="14" height="10" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M3 9h14M10 5v10" stroke="currentColor" stroke-width="1" stroke-dasharray="2 1"/></svg>
@@ -223,7 +223,7 @@
                     </div>
                     <div class="tmpl-name">更多模板</div>
                   </div>
-                </div>
+                </div> -->
               </div>
             </div>
 
@@ -388,13 +388,26 @@ export default {
     const lineStyle = ref('solid')
     const lineColor = ref('#1F2937')
 
-    // Output ratio
-    const ratioOptions = ref([
-      { label: '1:1', value: '1:1' },
-      { label: '4:5', value: '4:5' },
-      { label: '16:9', value: '16:9' },
+    // Output size
+    const sizeOptions = ref([
+      { label: '不指定尺寸', value: '' },
+      { label: '1:1（800×800）', value: '800:800' },
+      { label: '3:4（800×1067）', value: '800:1067' },
+      { label: '4:3（1067×800）', value: '1067:800' },
       { label: '自定义', value: 'custom' }
     ])
+    const outputSize = ref('')
+    const customWidth = ref(1000)
+    const customHeight = ref(1000)
+
+    // 实际输出尺寸
+    const effectiveOutputSize = computed(() => {
+      if (outputSize.value === 'custom') {
+        return `${customWidth.value}x${customHeight.value}`
+      }
+      return outputSize.value
+    })
+
     // 模板列表（从后台加载）
     const templateOptions = ref([
       { label: '标准尺寸图', value: 'standard' },
@@ -404,9 +417,6 @@ export default {
     ])
     // 提示词映射
     const promptMap = ref({})
-    const selectedRatio = ref('4:5')
-    const customRatioWidth = ref(4)
-    const customRatioHeight = ref(5)
 
     // Template
     const selectedTemplate = ref('standard')
@@ -438,7 +448,7 @@ export default {
       upload: true,
       size: true,
       lineStyle: true,
-      ratio: true,
+      outputSize: true,
       templates: true,
       language: true,
       promptBoost: false,
@@ -606,12 +616,17 @@ export default {
           // line_styles 是选项列表，这里不做模板替换（模板是硬编码 SVG），仅保留配置
         }
 
-        // ---- 输出比例 ----
-        const ratioCfg = map.ratio_options
-        if (ratioCfg && ratioCfg.configValue) {
-          const arr = JSON.parse(ratioCfg.configValue)
+        // ---- 输出尺寸 ----
+        const sizeCfg = map.output_sizes || map.size_options || map.size_presets
+        if (sizeCfg && sizeCfg.configValue) {
+          const arr = JSON.parse(sizeCfg.configValue)
           if (Array.isArray(arr) && arr.length) {
-            ratioOptions.value = arr.map(s => ({ label: s.label || s.value, value: s.value }))
+            const loaded = arr.map(s => (typeof s === 'string' ? { label: s, value: s } : s))
+            const hasCustom = loaded.some(s => s.value === 'custom')
+            if (!hasCustom) {
+              loaded.push({ label: '自定义', value: 'custom' })
+            }
+            sizeOptions.value = [{ label: '不指定尺寸', value: '' }, ...loaded]
           }
         }
 
@@ -734,9 +749,12 @@ export default {
       if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
       try {
         const basePrompt = `生成尺寸标记图，宽度${dimWidth.value}${unit.value}、长度${dimDepth.value}${unit.value}、高度${dimHeight.value}${unit.value}，风格简洁，适合电商平台`
+        const sizeText = effectiveOutputSize.value ? `输出图片尺寸为 ${effectiveOutputSize.value}，` : ''
         const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
-        const prompt = boostText ? `${basePrompt}；${text ? text + '。' : ''}约束：${boostText}。` : `${basePrompt}${text ? '。' + text : ''}`
-        await gen.fullGenerate([originalFile.value], prompt, { consumePoints: 2, featureName: 'size_mark', title: '尺寸标记生成', n: 1 })
+        const prompt = boostText ? `${basePrompt}；${sizeText}${text ? text + '。' : ''}约束：${boostText}。` : `${basePrompt}${sizeText ? '。' + sizeText : ''}${text ? '。' + text : ''}`
+        const extraOptions = {}
+        if (effectiveOutputSize.value) extraOptions.output_size = effectiveOutputSize.value
+        await gen.fullGenerate([originalFile.value], prompt, { ...extraOptions, consumePoints: 2, featureName: 'size_mark', title: '尺寸标记生成', n: 1 })
         if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
       } catch (e) {
         console.error('尺寸标记生成失败:', e)
@@ -850,9 +868,9 @@ export default {
       originalImage.value = null
       uploadedFiles.value = []
       resultImages.value = []
-      selectedRatio.value = '4:5'
-      customRatioWidth.value = 4
-      customRatioHeight.value = 5
+      outputSize.value = ''
+      customWidth.value = 1000
+      customHeight.value = 1000
       selectedTemplate.value = 'standard'
       language.value = 'zh-CN'
       unit.value = 'cm'
@@ -866,8 +884,7 @@ export default {
       generating, zoom, unit,
       dimWidth, dimDepth, dimHeight,
       lineStyle, lineColor,
-      ratioOptions, selectedRatio,
-      customRatioWidth, customRatioHeight,
+      sizeOptions, outputSize, customWidth, customHeight, effectiveOutputSize,
       templateOptions,
       selectedTemplate,
       language, languages,
