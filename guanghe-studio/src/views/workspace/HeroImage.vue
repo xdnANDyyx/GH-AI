@@ -155,7 +155,7 @@
               <!-- Section: 画布尺寸 -->
               <div class="config-section collapsible">
                 <div class="section-header collapsible" @click="toggleSection('size')">
-                  <span class="section-label">画布尺寸</span>
+                  <span class="section-label">输出尺寸</span>
                   <span class="expand-text">
                     {{ sections.size ? '收起' : '展开' }}
                     <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.size }"><ArrowDown /></el-icon>
@@ -749,8 +749,9 @@ export default {
         if (effectiveOutputSize.value) extra.outputSize = effectiveOutputSize.value
         if (generateCount.value) extra.n = Number(generateCount.value)
         await gen.fullGenerate(productFiles.value, text, extra)
-      } catch (e) {
-        console.error('主图生成失败:', e)
+} catch (e) {
+if (e?.message?.includes('已取消')) return
+console.error('主图生成失败:', e)
         const isTimeout = e?.code === 'ECONNABORTED'
           || /timeout|超时|人数过多|繁忙|busy/i.test(e?.message || '')
         ElMessage.error(isTimeout

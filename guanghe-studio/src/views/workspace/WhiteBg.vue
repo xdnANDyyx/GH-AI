@@ -631,8 +631,9 @@ async function handleGenerate() {
     )
     // 复位对比位置
     comparePosition.value = 50
-  } catch (e) {
-    console.error('白底图生成失败:', e)
+} catch (e) {
+if (e?.message?.includes('已取消')) return
+console.error('白底图生成失败:', e)
   }
 }
 

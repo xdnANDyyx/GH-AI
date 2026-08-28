@@ -1,4 +1,4 @@
-﻿﻿﻿﻿<template>
+﻿﻿﻿﻿﻿﻿<template>
   <div class="workspace-page">
     <!-- Three-column layout -->
     <div class="three-col">
@@ -695,9 +695,10 @@ async function handleGenerate() {
   extraParams.featureName = 'background'
   extraParams.title = '白底生成背景'
   try {
-    await gen.fullGenerate(productFiles.value, prompt, extraParams)
-  } catch (e) {
-    const isTimeout = e?.code === 'ECONNABORTED'
+await gen.fullGenerate(productFiles.value, prompt, extraParams)
+} catch (e) {
+if (e?.message?.includes('已取消')) return
+const isTimeout = e?.code === 'ECONNABORTED'
       || /timeout|超时|人数过多|繁忙|busy/i.test(e?.message || '')
     ElMessage.error(isTimeout
       ? '当前模型使用人数过多，可选用其他模型生图或稍后再试'

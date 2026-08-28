@@ -110,8 +110,8 @@
               </div>
               <div class="section-body" v-show="sections.size">
                 <div class="unit-switch-row">
-                  <button class="unit-btn" :class="{ active: unit === 'cm' }" @click="unit = 'cm'">厘米 cm</button>
-                  <button class="unit-btn" :class="{ active: unit === 'in' }" @click="unit = 'in'">英寸 in</button>
+                  <button class="unit-btn" :class="{ active: unit === 'cm' }" @click="unit = unit === 'cm' ? '' : 'cm'">厘米 cm</button>
+                  <button class="unit-btn" :class="{ active: unit === 'in' }" @click="unit = unit === 'in' ? '' : 'in'">英寸 in</button>
                 </div>
                 <div class="size-grid">
                   <div class="size-col">
@@ -144,13 +144,13 @@
               </div>
               <div class="section-body" v-show="sections.lineStyle">
                 <div class="line-options">
-                  <div class="line-opt" :class="{ active: lineStyle === 'solid' }" @click="lineStyle = 'solid'">
+                  <div class="line-opt" :class="{ active: lineStyle === 'solid' }" @click="lineStyle = lineStyle === 'solid' ? '' : 'solid'">
                     <svg viewBox="0 0 20 12"><line x1="2" y1="6" x2="18" y2="6" stroke="currentColor" stroke-width="2"/></svg>
                   </div>
-                  <div class="line-opt" :class="{ active: lineStyle === 'dashed1' }" @click="lineStyle = 'dashed1'">
+                  <div class="line-opt" :class="{ active: lineStyle === 'dashed1' }" @click="lineStyle = lineStyle === 'dashed1' ? '' : 'dashed1'">
                     <svg viewBox="0 0 20 12"><line x1="2" y1="6" x2="18" y2="6" stroke="currentColor" stroke-width="2" stroke-dasharray="4 2"/></svg>
                   </div>
-                  <div class="line-opt" :class="{ active: lineStyle === 'dashed2' }" @click="lineStyle = 'dashed2'">
+                  <div class="line-opt" :class="{ active: lineStyle === 'dashed2' }" @click="lineStyle = lineStyle === 'dashed2' ? '' : 'dashed2'">
                     <svg viewBox="0 0 20 12"><line x1="2" y1="6" x2="18" y2="6" stroke="currentColor" stroke-width="2" stroke-dasharray="2 2"/></svg>
                   </div>
                   <div class="color-swatch" :style="{ background: lineColor }">
@@ -732,6 +732,7 @@ export default {
         await gen.fullGenerate([originalFile.value], fullPrompt, { consumePoints: 2, featureName: 'size_mark', title: '尺寸标记生成', n: 1 })
         if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
       } catch (e) {
+        if (e?.message?.includes('已取消')) return
         console.error('尺寸标记生成失败:', e)
         ElMessage.error('生成失败，请稍后重试')
       } finally {
@@ -757,6 +758,7 @@ export default {
         await gen.fullGenerate([originalFile.value], prompt, { ...extraOptions, consumePoints: 2, featureName: 'size_mark', title: '尺寸标记生成', n: 1 })
         if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
       } catch (e) {
+        if (e?.message?.includes('已取消')) return
         console.error('尺寸标记生成失败:', e)
         const isTimeout = e?.code === 'ECONNABORTED'
           || /timeout|超时|人数过多|繁忙|busy/i.test(e?.message || '')

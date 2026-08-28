@@ -339,8 +339,9 @@ async function handleGenerate() {
 
     await gen.fullGenerate(productFiles, prompt.value, extraParams)
     currentStep.value = 4
-  } catch (e) {
-    console.error('生成失败:', e)
+} catch (e) {
+if (e?.message?.includes('已取消')) return
+console.error('生成失败:', e)
   }
 }
 

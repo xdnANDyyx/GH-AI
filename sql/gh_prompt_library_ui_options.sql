@@ -197,12 +197,15 @@ INSERT INTO `gh_prompt_library` (`category`,`prompt_key`,`label`,`prompt_text`,`
 ('opt_tool','opt_tool.retouch.bg-process','背景处理','{"desc":"纯色 / 自定义"}','retouch','0',7,'0'),
 ('opt_tool','opt_tool.retouch.sharpen','锐化增强','{"desc":"提升清晰度"}','retouch','0',8,'0'),
 ('opt_tool','opt_tool.retouch.denoise','降噪处理','{"desc":"减少噪点"}','retouch','0',9,'0');
--- 16. 比例 opt_ratio
+-- 16. 比例 opt_ratio（先清理旧 dimension scope 数据，防止 pk 冲突）
+DELETE FROM `gh_prompt_library` WHERE `category` = 'opt_ratio' AND `scope` = 'dimension';
 INSERT INTO `gh_prompt_library` (`category`,`prompt_key`,`label`,`prompt_text`,`scope`,`is_default`,`sort`,`status`) VALUES
 ('opt_ratio','opt_ratio.dimension.1:1','1:1','{}','dimension','0',1,'0'),
-('opt_ratio','opt_ratio.dimension.4:5','4:5','{}','dimension','1',2,'0'),
-('opt_ratio','opt_ratio.dimension.16:9','16:9','{}','dimension','0',3,'0'),
-('opt_ratio','opt_ratio.dimension.custom','自定义','{}','dimension','0',4,'0');
+('opt_ratio','opt_ratio.dimension.4:3','4:3','{}','dimension','0',2,'0'),
+('opt_ratio','opt_ratio.dimension.3:4','3:4','{}','dimension','0',3,'0'),
+('opt_ratio','opt_ratio.dimension.16:9','16:9','{}','dimension','0',4,'0'),
+('opt_ratio','opt_ratio.dimension.9:16','9:16','{}','dimension','0',5,'0'),
+('opt_ratio','opt_ratio.dimension.custom','自定义','{}','dimension','0',6,'0');
 -- 17. Banner类型 opt_banner_type
 INSERT INTO `gh_prompt_library` (`category`,`prompt_key`,`label`,`prompt_text`,`scope`,`is_default`,`sort`,`status`) VALUES
 ('opt_banner_type','opt_banner_type.banner.promo','促销活动','{"desc":"打折促销、限时优惠"}','banner','1',1,'0'),
@@ -239,3 +242,22 @@ INSERT INTO `gh_prompt_library` (`category`,`prompt_key`,`label`,`prompt_text`,`
 ('opt_format','opt_format.retouch.PNG','PNG','{}','retouch','1',1,'0'),
 ('opt_format','opt_format.retouch.JPG','JPG','{}','retouch','0',2,'0'),
 ('opt_format','opt_format.retouch.WebP','WebP','{}','retouch','0',3,'0');
+-- 22. 尺寸标记-线条样式 opt_line_style
+DELETE FROM `gh_prompt_library` WHERE `category` = 'opt_line_style';
+INSERT INTO `gh_prompt_library` (`category`,`prompt_key`,`label`,`prompt_text`,`scope`,`is_default`,`sort`,`status`) VALUES
+('opt_line_style','opt_line_style.dimension.solid','实线','{"prompt":"使用实线标注尺寸线"}','dimension','1',1,'0'),
+('opt_line_style','opt_line_style.dimension.dashed1','虚线1','{"prompt":"使用短虚线标注尺寸线"}','dimension','0',2,'0'),
+('opt_line_style','opt_line_style.dimension.dashed2','虚线2','{"prompt":"使用长虚线标注尺寸线"}','dimension','0',3,'0');
+-- 23. 尺寸标记-输出比例 opt_ratio 已在第16节统一插入（dimension scope），此处无需重复
+-- 24. 尺寸标记-单位选择 opt_unit
+DELETE FROM `gh_prompt_library` WHERE `category` = 'opt_unit';
+INSERT INTO `gh_prompt_library` (`category`,`prompt_key`,`label`,`prompt_text`,`scope`,`is_default`,`sort`,`status`) VALUES
+('opt_unit','opt_unit.dimension.cm','cm','{"prompt":"统一使用cm单位"}','dimension','1',1,'0'),
+('opt_unit','opt_unit.dimension.in','in','{"prompt":"统一使用inch单位"}','dimension','0',2,'0');
+-- 25. 尺寸标记-尺寸模板 opt_size_template
+DELETE FROM `gh_prompt_library` WHERE `category` = 'opt_size_template';
+INSERT INTO `gh_prompt_library` (`category`,`prompt_key`,`label`,`prompt_text`,`scope`,`is_default`,`sort`,`status`) VALUES
+('opt_size_template','opt_size_template.dimension.standard','标准尺寸图','{"prompt":"生成标准尺寸说明图，标注长宽高"}','dimension','1',1,'0'),
+('opt_size_template','opt_size_template.dimension.compare','多尺寸对比','{"prompt":"生成多尺寸对比图，展示不同规格差异"}','dimension','0',2,'0'),
+('opt_size_template','opt_size_template.dimension.scene','场景尺寸图','{"prompt":"生成场景尺寸图，展示产品与场景的空间关系"}','dimension','0',3,'0'),
+('opt_size_template','opt_size_template.dimension.more','更多模板','{}','dimension','0',4,'0');

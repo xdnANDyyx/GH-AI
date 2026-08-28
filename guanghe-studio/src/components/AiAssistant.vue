@@ -112,7 +112,7 @@
               </el-select>
               <el-button
                 type="primary"
-                :disabled="!inputText.trim() || isLoading || !props.hasImage"
+                :disabled="isLoading || !props.hasImage"
                 :loading="isGenerating"
                 @click="sendMessage"
                 class="send-btn"
@@ -137,6 +137,7 @@
 
 <script setup>
 import { ref, nextTick, onBeforeUnmount } from 'vue'
+import { ElMessageBox } from 'element-plus'
 
 const props = defineProps({
   collapsed: { type: Boolean, default: false },
@@ -162,13 +163,11 @@ const quickQuestions = [
   '白底图最佳输出尺寸是多少？'
 ]
 
-// ===== 模型选择（占位，后续对接真实模型） =====
-const selectedModel = ref('deepseek')
+// ===== 模型选择 =====
+const selectedModel = ref('gemini-3-pro-image')
 const modelOptions = [
-  { label: 'DeepSeek', value: 'deepseek' },
-  { label: '通义千问 Qwen', value: 'qwen-plus' },
-  { label: '智谱 GLM-4', value: 'glm-4' },
-  { label: '豆包 Doubao', value: 'doubao' }
+  { label: 'Gemini 3 Pro Image', value: 'gemini-3-pro-image' },
+  { label: 'Gemini 3.1 Flash Image', value: 'gemini-3.1-flash-image' }
 ]
 
 function scrollToBottom() {
@@ -186,10 +185,12 @@ function sendQuick(text) {
 
 async function sendMessage() {
   const text = inputText.value.trim()
-  if (!text || isLoading.value) return
+  if (isLoading.value) return
+  // 有图片即可发送，文字可为空
+  if (!props.hasImage) return
 
-  // 记录用户消息
-  messages.value.push({ role: 'user', content: text })
+  // 记录用户消息（文字为空时给默认提示）
+  messages.value.push({ role: 'user', content: text || '（直接生成，无文字描述）' })
   inputText.value = ''
   isLoading.value = true
   scrollToBottom()
@@ -205,7 +206,16 @@ async function sendMessage() {
   scrollToBottom()
 }
 
-function clearChat() {
+async function clearChat() {
+  try {
+    await ElMessageBox.confirm(
+      '对话内容及生成图片都将一并清空，是否确认删除？',
+      '清空确认',
+      { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch {
+    return // 用户点击取消
+  }
   messages.value = []
   props.onClearImages?.()
 }

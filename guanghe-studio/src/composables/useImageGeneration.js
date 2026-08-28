@@ -222,6 +222,12 @@ export function useImageGeneration(sessionType) {
 
     return new Promise((resolve, reject) => {
       const poll = async () => {
+        // 如果已被 reset（如用户点击清空对话），停止轮询
+        if (!polling.value) {
+          reject(new Error('已取消'))
+          return
+        }
+
         if (attempts >= maxAttempts) {
           polling.value = false
           statusText.value = '生成超时，请稍后在历史记录中查看'
@@ -256,8 +262,10 @@ export function useImageGeneration(sessionType) {
             return
           }
 
-          // 还在处理中，继续轮询
-          setTimeout(poll, 1500)
+          // 还在处理中，继续轮询（如果已被 reset 则不再调度）
+          if (polling.value) {
+            setTimeout(poll, 1500)
+          }
         } catch (e) {
           polling.value = false
           error.value = e.message || '查询结果失败'
@@ -369,8 +377,12 @@ export function useImageGeneration(sessionType) {
           time: new Date().toISOString()
         })
 
-        // 保存失败记录到历史（仅最后一次失败时保存）
+        // 保存失败记录到历史（仅最后一次失败时保存，用户主动取消除外）
         if (attempt === maxRetries) {
+          // 用户主动取消时不显示错误、不保存失败历史
+          if (e.message?.includes('已取消')) {
+            throw e
+          }
           error.value = e.message || '操作失败'
           try {
             const { useHistory } = await import('@/composables/useHistory')
@@ -387,12 +399,13 @@ export function useImageGeneration(sessionType) {
           } catch (e2) { console.warn('保存失败历史:', e2) }
         }
 
-        // 判断是否可重试（非积分不足、非参数错误等业务错误）
+        // 判断是否可重试（非积分不足、非参数错误、非用户主动取消等）
         const isRetryable = !(
           e.message?.includes('积分不足') ||
           e.message?.includes('参数') ||
           e.message?.includes('invalid') ||
-          e.message?.includes('余额')
+          e.message?.includes('余额') ||
+          e.message?.includes('已取消')
         )
 
         if (attempt < maxRetries && isRetryable) {

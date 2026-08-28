@@ -177,10 +177,10 @@
                 </div>
               </div>
 
-              <!-- Section: 画布尺寸 -->
+              <!-- Section: 输出尺寸 -->
               <div class="config-section collapsible">
                 <div class="section-header" @click="toggleSection('canvasSize')">
-                  <span class="section-label">尺寸</span>
+                  <span class="section-label">输出尺寸</span>
                   <span class="expand-text">
                     {{ sections.canvasSize ? '收起' : '展开' }}
                     <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.canvasSize }"><ArrowDown /></el-icon>
@@ -699,6 +699,7 @@ async function handleGenerate() {
     await gen.fullGenerate(productFiles.value, fullPrompt, extra)
     if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
   } catch (e) {
+    if (e?.message?.includes('已取消')) return
     console.error('详情图生成失败:', e)
     const isTimeout = e?.code === 'ECONNABORTED'
       || /timeout|超时|人数过多|繁忙|busy/i.test(e?.message || '')

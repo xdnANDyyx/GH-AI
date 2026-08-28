@@ -37,13 +37,13 @@
               <p class="section-desc">维护生图时可选择的提示词选项（产品类别、材质、场景、风格、卖点、镜头等）。配置后前台 AI 配置面板即时联动生效。</p>
             </div>
             <div class="filter-inline">
-              <el-select v-model="libraryFilters.scope" placeholder="工作台" clearable filterable style="width: 160px">
+              <el-select v-model="libraryFilters.scope" placeholder="工作台" clearable filterable style="width: 160px" @change="onLibraryScopeChange">
                 <el-option v-for="s in promptPickerScopeOptions.filter(o => o.value)" :key="s.value" :label="s.label" :value="s.value" />
               </el-select>
-              <el-select v-model="libraryFilters.category" placeholder="分类" clearable filterable style="width: 160px">
+              <el-select v-model="libraryFilters.category" placeholder="分类" clearable filterable style="width: 160px" @change="fetchPromptLibrary">
                 <el-option v-for="c in libraryFilterCategoryOptions" :key="c.value" :label="c.label" :value="c.value" />
               </el-select>
-              <el-input v-model="libraryFilters.label" placeholder="显示名" clearable style="width: 160px" />
+              <el-input v-model="libraryFilters.label" placeholder="显示名" clearable style="width: 160px" @keyup.enter="fetchPromptLibrary" />
               <!-- <el-input v-model="libraryFilters.promptKey" placeholder="Key" clearable style="width: 180px" /> -->
               
               <el-select v-model="libraryFilters.status" placeholder="状态" clearable style="width: 120px">
@@ -617,7 +617,7 @@ const unifiedCategoryOptions = [
   { value: 'opt_light',      label: '光线' },
   { value: 'opt_style',      label: '风格' },
   { value: 'opt_selling',    label: '卖点' },
-  { value: 'opt_purpose',    label: '用途' },
+  { value: 'opt_purpose',    label: '核心目的' },
   { value: 'opt_size',       label: '尺寸' },
   { value: 'opt_age',        label: '年龄' },
   { value: 'opt_gender',     label: '性别' },
@@ -626,7 +626,6 @@ const unifiedCategoryOptions = [
   { value: 'opt_pose',       label: '姿势' },
   { value: 'opt_clothing',   label: '服装' },
   { value: 'opt_tool',       label: '精修工具' },
-  { value: 'opt_ratio',      label: '比例' },
   { value: 'opt_banner_type',label: 'Banner类型' },
   { value: 'opt_template',   label: 'Banner模板' },
   { value: 'opt_page',       label: '内容结构' },
@@ -634,6 +633,10 @@ const unifiedCategoryOptions = [
   { value: 'opt_format',     label: '输出格式' },
   { value: 'opt_language',   label: '语言' },
   { value: 'opt_shadow',     label: '阴影' },
+  { value: 'opt_line_style',  label: '线条样式' },
+  { value: 'opt_ratio',      label: '输出比例' },
+  { value: 'opt_unit',        label: '单位选择' },
+  { value: 'opt_size_template', label: '尺寸模板' },
   { value: 'function',       label: '功能' },
   { value: 'product',        label: '产品类别' },
   { value: 'material',       label: '材质' },
@@ -684,7 +687,7 @@ const promptPickerCategoryOptions = computed(() => {
     return optList.filter(o => ['opt_platform', 'opt_size', 'opt_selling', 'opt_page', 'opt_language'].includes(o.value))
   }
   if (creationForm.configGroup === 'size_mark') {
-    return optList.filter(o => ['opt_ratio', 'opt_tool', 'opt_template', 'opt_quality', 'opt_language'].includes(o.value))
+    return optList.filter(o => ['opt_line_style', 'opt_ratio', 'opt_size_template', 'opt_unit', 'opt_language'].includes(o.value))
   }
   if (creationForm.configGroup === 'retouch') {
     return optList.filter(o => ['opt_tool', 'opt_quality', 'opt_format', 'opt_size'].includes(o.value))
@@ -696,7 +699,7 @@ const promptPickerCategoryOptions = computed(() => {
     return optList.filter(o => ['opt_size', 'opt_banner_type', 'opt_purpose'].includes(o.value))
   }
   if (creationForm.configGroup === 'batch_process') {
-    return optList.filter(o => ['opt_selling', 'opt_format', 'opt_quality', 'opt_size'].includes(o.value))
+    return optList.filter(o => ['opt_selling', 'opt_format', 'opt_quality', 'opt_size', 'opt_language'].includes(o.value))
   }
   return optList
 })
@@ -856,9 +859,9 @@ function inferPromptCategory(configKey) {
     language_options: 'opt_language',
     content_structure: 'opt_page',
     ratio_options: 'opt_ratio',
-    line_styles: 'opt_tool',
-    templates: 'opt_template',
-    unit_options: 'opt_quality',
+    line_styles: 'opt_line_style',
+    templates: 'opt_size_template',
+    unit_options: 'opt_unit',
     tools: 'opt_tool',
     quality_options: 'opt_quality',
     format_options: 'opt_format',
@@ -906,7 +909,8 @@ async function loadPromptPicker() {
       status: '0'
     })
     let rows = res.rows || []
-    // 若精确查询无结果，回退为仅按分类查询（不限 scope），避免某些分类在该工作台下没有数据时下拉为空
+    // 若精确查询无结果且有分类，回退为仅按分类查询（不限 scope），避免某些分类在该工作台下没有数据时下拉为空
+    // 注意：分类为空时不回退，否则会返回所有选项导致下拉全列出来
     if (rows.length === 0 && cat && scope) {
       res = await listAdminPromptLibrary({
         pageNum: 1,
@@ -915,6 +919,10 @@ async function loadPromptPicker() {
         status: '0'
       })
       rows = res.rows || []
+    }
+    // 若分类为空且有 scope，仅返回该 scope 下的选项（不回退为全量）
+    if (rows.length === 0 && !cat && scope) {
+      // 已在上方按 scope 查询过了，不需要额外操作
     }
     promptPickerItems.value = rows
     promptPickerLoadedKey.value = key
@@ -1214,11 +1222,14 @@ function loadCreationEditor(raw) {
     creationJsonValue.value = result.data
   }
   // 编辑回显：根据当前 configGroup / configKey 推断分类与 scope，并尝试回显已绑定项
-  promptPickerCategory.value = inferPromptCategory(creationForm.configKey)
+  const inferredCat = inferPromptCategory(creationForm.configKey)
+  // 校验推断出的分类是否在当前工作台的过滤列表中，不在则不设置（避免下拉显示不相关内容）
+  const allowedCats = promptPickerCategoryOptions.value.map(o => o.value)
+  promptPickerCategory.value = (inferredCat && allowedCats.includes(inferredCat)) ? inferredCat : ''
   promptPickerScope.value = inferPromptScope(creationForm.configGroup)
   promptPickerUserOverride.value = false
   promptPickerLoadedKey.value = ''
-  if (creationEditorType.value === 'options' && promptPickerCategory.value) {
+  if (creationEditorType.value === 'options') {
     loadPromptPicker()
   }
 }
@@ -1296,11 +1307,13 @@ function onEditorTypeChange(newType) {
       creationOptions.value.push(createEmptyOption())
     }
     // 切到选项列表时，若有可绑定的分类则同步加载并回显
-    promptPickerCategory.value = inferPromptCategory(creationForm.configKey)
+    const inferredCat = inferPromptCategory(creationForm.configKey)
+    const allowedCats = promptPickerCategoryOptions.value.map(o => o.value)
+    promptPickerCategory.value = (inferredCat && allowedCats.includes(inferredCat)) ? inferredCat : ''
     promptPickerScope.value = inferPromptScope(creationForm.configGroup)
     promptPickerUserOverride.value = false
     promptPickerLoadedKey.value = ''
-    if (promptPickerCategory.value) loadPromptPicker()
+    loadPromptPicker()
   } else if (newType === 'string_list') {
     const parsed = parseCreationValue(current || '')
     if (parsed.type === 'string_list') creationStringList.value = [...parsed.data]
@@ -1666,6 +1679,12 @@ async function handleDeleteTag(row) {
       ElMessage.error(error.message || '删除标签失败')
     }
   }
+}
+
+// 工作台选择联动：选择后重置分页并自动查询
+function onLibraryScopeChange() {
+  libraryPageNum.value = 1
+  fetchPromptLibrary()
 }
 
 async function fetchPromptLibrary() {

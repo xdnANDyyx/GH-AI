@@ -124,7 +124,8 @@ INSERT INTO `gh_creation_config` (`config_group`,`config_key`,`config_name`,`con
 ('batch_process','size_options','尺寸设置','[{"label":"2000×2000","value":"2000x2000","w":2000,"h":2000},{"label":"1500×1500","value":"1500x1500","w":1500,"h":1500},{"label":"1000×1000","value":"1000x1000","w":1000,"h":1000},{"label":"自定义","value":"custom","w":0,"h":0}]',4,'0','输出尺寸'),
 ('batch_process','max_product_images','产品图最大数量','50',5,'0','批量产品图上限'),
 ('batch_process','max_ref_images','参考图最大数量','20',6,'0','批量参考图上限'),
-('batch_process','max_generate_count','单产品最大生成数','99',7,'0','每个产品最多生成数');
+('batch_process','max_generate_count','单产品最大生成数','99',7,'0','每个产品最多生成数'),
+('batch_process','language_options','语言列表','[{"label":"中文（简体）","value":"zh-CN"},{"label":"英语（美国）","value":"en-US"},{"label":"英语（英国）","value":"en-GB"},{"label":"日语","value":"ja-JP"},{"label":"韩语","value":"ko-KR"},{"label":"德语","value":"de-DE"},{"label":"法语","value":"fr-FR"},{"label":"西班牙语","value":"es-ES"}]',8,'0','批量生成语言选项');
 
 -- ============================================================
 -- 11. 预置标签数据

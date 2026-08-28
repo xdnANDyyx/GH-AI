@@ -86,12 +86,12 @@
               <p class="entry-helper">上传参考图，AI 帮你描述想要的画面效果</p>
             </div>
 
-            <!-- 画布尺寸 -->
-            <div class="config-section collapsible">
-              <div class="section-header collapsible" @click="toggleSection('canvasSize')">
-                <span class="section-label">画布尺寸</span>
-                <span class="expand-text">{{ sections.canvasSize ? '收起' : '展开' }}<el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.canvasSize }"><ArrowDown /></el-icon></span>
-              </div>
+              <!-- 输出尺寸 -->
+              <div class="config-section collapsible">
+                <div class="section-header collapsible" @click="toggleSection('canvasSize')">
+                  <span class="section-label">输出尺寸</span>
+                  <span class="expand-text">{{ sections.canvasSize ? '收起' : '展开' }}<el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.canvasSize }"><ArrowDown /></el-icon></span>
+                </div>
               <div class="section-body" v-show="sections.canvasSize">
                 <el-select v-model="canvasPreset" style="width: 100%" @change="onCanvasPresetChange">
                   <el-option v-for="s in sizePresets" :key="s.value" :label="s.label" :value="s.value" />
@@ -141,7 +141,7 @@
               </div>
               <div class="section-body" v-show="sections.bannerType">
                 <div class="type-grid">
-                  <div v-for="t in bannerTypes" :key="t.key" class="type-btn" :class="{ active: activeBannerType === t.key }" @click="activeBannerType = t.key"><div class="type-btn-name">{{ t.name }}</div><div class="type-btn-desc">{{ t.desc }}</div></div>
+                  <div v-for="t in bannerTypes" :key="t.key" class="type-btn" :class="{ active: activeBannerType === t.key }" @click="activeBannerType = activeBannerType === t.key ? '' : t.key"><div class="type-btn-name">{{ t.name }}</div><div class="type-btn-desc">{{ t.desc }}</div></div>
                 </div>
               </div>
             </div>
@@ -323,8 +323,9 @@ export default {
     const zoom = ref(100)
 
     // Canvas size
-    const canvasPreset = ref('1200x300'); const canvasWidth = ref(1200); const canvasHeight = ref(300); const sizeLinked = ref(true)
+    const canvasPreset = ref(''); const canvasWidth = ref(1200); const canvasHeight = ref(300); const sizeLinked = ref(true)
     const sizePresets = ref([
+      { label: '不指定尺寸', value: '', w: 0, h: 0 },
       { label: '1200×300（横幅）', value: '1200x300', w: 1200, h: 300 },
       { label: '1920×600（通栏）', value: '1920x600', w: 1920, h: 600 },
       { label: '1920×1080（大屏）', value: '1920x1080', w: 1920, h: 1080 },
@@ -561,7 +562,11 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
         if (sizeCfg && sizeCfg.configValue) {
           const arr = JSON.parse(sizeCfg.configValue)
           if (Array.isArray(arr) && arr.length) {
-            sizePresets.value = arr.map(s => ({ label: s.label || s.value, value: s.value, w: s.w || 0, h: s.h || 0 }))
+            // 确保"不指定尺寸"和"自定义"选项存在
+            const loaded = arr.map(s => ({ label: s.label || s.value, value: s.value, w: s.w || 0, h: s.h || 0 }))
+            const hasCustom = loaded.some(s => s.value === 'custom')
+            if (!hasCustom) loaded.push({ label: '自定义', value: 'custom', w: 0, h: 0 })
+            sizePresets.value = [{ label: '不指定尺寸', value: '', w: 0, h: 0 }, ...loaded]
           }
         }
 
@@ -638,8 +643,8 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
     function addFiles(files) { for (const f of files) { const url = URL.createObjectURL(f); uploadedFiles.value.push(url); productFiles.value.push(f); if (!originalImage.value) { originalImage.value = url; originalFile.value = f } } }
     function clearImage() { originalImage.value = ''; originalFile.value = null; uploadedFiles.value = []; productFiles.value = []; resultImages.value = [] }
     function clearWorkspaceImages() {
-      clearImage()
-      canvasPreset.value = '1200x300'; canvasWidth.value = 1200; canvasHeight.value = 300
+clearImage()
+canvasPreset.value = ''; canvasWidth.value = 1200; canvasHeight.value = 300
       activeBannerType.value = 'promo'
       mainTitle.value = ''; subTitle.value = ''; btnText.value = ''
       generateCount.value = 3
@@ -651,7 +656,7 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
     function selectCanvasPreset(s) { canvasPreset.value = s.value; canvasWidth.value = s.w; canvasHeight.value = s.h }
     function onCanvasPresetChange(val) {
       const s = sizePresets.value.find(p => p.value === val)
-      if (s && s.value !== 'custom') { canvasWidth.value = s.w; canvasHeight.value = s.h }
+      if (s && s.value !== 'custom' && s.value !== '') { canvasWidth.value = s.w; canvasHeight.value = s.h }
     }
     function onCustomSize() { canvasPreset.value = 'custom' }
     function toggleAllSections() { const val = !allExpanded.value; Object.keys(sections).forEach(k => { sections[k] = val }) }
@@ -671,7 +676,8 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
       if (!canGenerate.value) return
       if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
       try {
-        const extraParams = { n: generateCount.value, extraOptions: { canvasWidth: canvasWidth.value, canvasHeight: canvasHeight.value, bannerType: activeBannerType.value, purposes: [...selectedPurposes.value], mainTitle: mainTitle.value, subTitle: subTitle.value, btnText: btnText.value }, consumePoints: 2, featureName: 'banner', title: 'Banner设计' }
+        const extraOptions = { canvasWidth: canvasPreset.value ? canvasWidth.value : undefined, canvasHeight: canvasPreset.value ? canvasHeight.value : undefined, bannerType: activeBannerType.value, purposes: [...selectedPurposes.value], mainTitle: mainTitle.value, subTitle: subTitle.value, btnText: btnText.value }
+        const extraParams = { n: generateCount.value, extraOptions, consumePoints: 2, featureName: 'banner', title: 'Banner设计' }
         if (bgFile.value) { const bgUrl = await gen.uploadImage(bgFile.value); extraParams.backgroundImage = bgUrl }
         if (logoFile.value) { const logoUrl = await gen.uploadImage(logoFile.value); extraParams.logoImage = logoUrl }
         const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
@@ -679,7 +685,10 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
         const fullPrompt = boostText ? `${baseText}。约束：${boostText}。` : baseText
         await gen.fullGenerate([originalFile.value], fullPrompt, extraParams)
         if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
-      } catch (e) { console.error('生成失败:', e) }
+      } catch (e) {
+        if (e?.message?.includes('已取消')) return
+        console.error('生成失败:', e)
+      }
     }
 
     async function handleGenerateFromAi() {
@@ -687,7 +696,8 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
       if (!originalFile.value) { ElMessage.warning('请先上传产品图片'); return }
       if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
       try {
-        const extraParams = { n: generateCount.value, extraOptions: { canvasWidth: canvasWidth.value, canvasHeight: canvasHeight.value, bannerType: activeBannerType.value, purposes: [...selectedPurposes.value], mainTitle: mainTitle.value, subTitle: subTitle.value, btnText: btnText.value }, consumePoints: 2, featureName: 'banner', title: 'Banner设计' }
+        const extraOptions = { canvasWidth: canvasPreset.value ? canvasWidth.value : undefined, canvasHeight: canvasPreset.value ? canvasHeight.value : undefined, bannerType: activeBannerType.value, purposes: [...selectedPurposes.value], mainTitle: mainTitle.value, subTitle: subTitle.value, btnText: btnText.value }
+        const extraParams = { n: generateCount.value, extraOptions, consumePoints: 2, featureName: 'banner', title: 'Banner设计' }
         if (bgFile.value) { const bgUrl = await gen.uploadImage(bgFile.value); extraParams.backgroundImage = bgUrl }
         if (logoFile.value) { const logoUrl = await gen.uploadImage(logoFile.value); extraParams.logoImage = logoUrl }
         const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
@@ -696,6 +706,7 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
         await gen.fullGenerate([originalFile.value], fullPrompt, extraParams)
         if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
       } catch (e) {
+        if (e?.message?.includes('已取消')) return
         console.error('生成失败:', e)
         const isTimeout = e?.code === 'ECONNABORTED'
           || /timeout|超时|人数过多|繁忙|busy/i.test(e?.message || '')

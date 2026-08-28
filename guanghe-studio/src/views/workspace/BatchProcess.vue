@@ -306,11 +306,11 @@
                     <div class="output-label">图片格式</div>
                     <div class="radio-group">
                       <button
-                        v-for="fmt in ['JPG', 'PNG', 'WebP']"
+                        v-for="fmt in formatOptions"
                         :key="fmt"
                         class="radio-btn"
                         :class="{ active: outputFormat === fmt }"
-                        @click="outputFormat = fmt"
+                        @click="outputFormat = outputFormat === fmt ? '' : fmt"
                       >{{ fmt }}</button>
                     </div>
                   </div>
@@ -323,22 +323,15 @@
                         :key="q.value"
                         class="radio-btn"
                         :class="{ active: outputQuality === q.value }"
-                        @click="outputQuality = q.value"
+                        @click="outputQuality = outputQuality === q.value ? '' : q.value"
                       >{{ q.label }}</button>
                     </div>
                   </div>
 
                   <div class="output-group">
-                    <div class="output-label">尺寸设置</div>
+                    <div class="output-label">输出尺寸</div>
                     <select class="size-select" v-model="outputSize">
-                      <option value="">平台推荐尺寸（Amazon 主图）</option>
-                      <option value="1600x1600">1600 × 1600（1:1 主图）</option>
-                      <option value="2000x2000">2000 × 2000（高清 1:1）</option>
-                      <option value="1200x1800">1200 × 1800（3:2）</option>
-                      <option value="1800x1200">1800 × 1200（3:2 横版）</option>
-                      <option value="1200x1200">1200 × 1200（1:1 标准）</option>
-                      <option value="800x800">800 × 800（小尺寸）</option>
-                      <option value="custom">自定义尺寸</option>
+                      <option v-for="s in sizeOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
                     </select>
                   </div>
 
@@ -505,7 +498,7 @@ import AiAssistant from '@/components/AiAssistant.vue'
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { useBatchTasks } from '@/composables/useBatchTasks'
 import { ElMessage, ElImageViewer } from 'element-plus'
-import { reversePrompt } from '@/api/customer'
+import { getPublicCreationConfigByGroup, reversePrompt } from '@/api/customer'
 import { MagicStick, DocumentCopy, UploadFilled } from '@element-plus/icons-vue'
 
 // const { canvasUI, handleCanvasExport } = useCanvasInteractions({
@@ -729,6 +722,9 @@ const sellingPoints = ref([
   { label: '静音减震', checked: false }
 ])
 
+// ==================== Output Settings (defaults, overridden by loadCreationConfig) ====================
+// qualityOptions 和 languages 已在上方声明，此处仅做注释说明它们会被后台配置覆盖
+
 function toggleSellingPoint(index) {
   sellingPoints.value[index].checked = !sellingPoints.value[index].checked
 }
@@ -745,20 +741,33 @@ const maxGenerateCount = ref(5)
 const genCount = ref(1)
 
 // ==================== Output Settings ====================
+const formatOptions = ref(['JPG', 'PNG', 'WebP'])
 const outputFormat = ref('JPG')
-const qualityOptions = [
+const qualityOptions = ref([
   { label: '标准', value: 'standard' },
   { label: '高清', value: 'hd' },
   { label: '超清', value: 'ultra' }
-]
+])
 const outputQuality = ref('hd')
 const outputSize = ref('')
 const customWidth = ref(1600)
 const customHeight = ref(1600)
 
+// ==================== Size Options (defaults) ====================
+const sizeOptions = ref([
+  { label: '不指定尺寸', value: '' },
+  { label: '1600 × 1600（1:1 主图）', value: '1600x1600' },
+  { label: '2000 × 2000（高清 1:1）', value: '2000x2000' },
+  { label: '1200 × 1800（3:2）', value: '1200x1800' },
+  { label: '1800 × 1200（3:2 横版）', value: '1800x1200' },
+  { label: '1200 × 1200（1:1 标准）', value: '1200x1200' },
+  { label: '800 × 800（小尺寸）', value: '800x800' },
+  { label: '自定义尺寸', value: 'custom' }
+])
+
 // ==================== Language ====================
 const language = ref('zh-CN')
-const languages = [
+const languages = ref([
   { label: '中文（简体）', value: 'zh-CN' },
   { label: '英语（美国）', value: 'en-US' },
   { label: '英语（英国）', value: 'en-GB' },
@@ -767,7 +776,7 @@ const languages = [
   { label: '德语', value: 'de-DE' },
   { label: '法语', value: 'fr-FR' },
   { label: '西班牙语', value: 'es-ES' },
-]
+])
 
 // ==================== Prompt Boost ====================
 // (提示词增强已移除)
@@ -834,8 +843,13 @@ async function handleGenerate() {
       progress: 100,
       resultImages,
     })
-  } catch (e) {
-    console.error('批量生成失败:', e)
+} catch (e) {
+if (e?.message?.includes('已取消')) {
+stopProgressSimulation()
+updateTask(task.id, { status: 'cancelled' })
+return
+}
+console.error('批量生成失败:', e)
     stopProgressSimulation()
     updateTask(task.id, { status: 'failed' })
     const isTimeout = e?.code === 'ECONNABORTED'
@@ -944,7 +958,104 @@ function startRightPanelResize(e, target) {
 
 
 // ==================== Lifecycle ====================
+// ===== 从后台创作配置读取批量生成配置 =====
+async function loadCreationConfig() {
+  try {
+    const res = await getPublicCreationConfigByGroup('batch_process')
+    const list = res.data || res.rows || []
+    const map = {}
+    list.forEach(c => { map[c.configKey] = c })
+
+    // ---- 核心卖点 ----
+    const sellingCfg = map.selling_points
+    if (sellingCfg && sellingCfg.configValue) {
+      const arr = JSON.parse(sellingCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        // 保留之前的 checked 状态，仅更新 label 列表
+        const oldMap = {}
+        sellingPoints.value.forEach(s => { oldMap[s.label] = s.checked })
+        sellingPoints.value = arr.map(s => {
+          const label = s.label || s.value
+          return { label, checked: oldMap[label] ?? false }
+        })
+      }
+    }
+
+    // ---- 图片格式 ----
+    const formatCfg = map.format_options
+    if (formatCfg && formatCfg.configValue) {
+      const arr = JSON.parse(formatCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        const fmts = arr.map(s => s.value || s.label || s)
+        formatOptions.value = fmts
+        // 如果当前选中的格式不在新列表里，选第一个
+        if (!fmts.includes(outputFormat.value)) outputFormat.value = fmts[0]
+      }
+    }
+
+    // ---- 画质选项 ----
+    const qualityCfg = map.quality_options
+    if (qualityCfg && qualityCfg.configValue) {
+      const arr = JSON.parse(qualityCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        qualityOptions.value = arr.map(s => ({ label: s.label || s.value, value: s.value }))
+        // 确保当前选中的画质仍在新列表中
+        if (!qualityOptions.value.some(q => q.value === outputQuality.value)) {
+          outputQuality.value = qualityOptions.value[0]?.value || 'hd'
+        }
+      }
+    }
+
+    // ---- 尺寸设置 ----
+    const sizeCfg = map.size_options
+    if (sizeCfg && sizeCfg.configValue) {
+      const arr = JSON.parse(sizeCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        const loaded = arr.map(s => {
+          if (typeof s === 'string') return { label: s, value: s }
+          // 兼容带 w/h 的格式
+          if (s.w && s.h) return { label: s.label || s.value, value: s.value, w: s.w, h: s.h }
+          return { label: s.label || s.value, value: s.value }
+        })
+        const hasCustom = loaded.some(s => s.value === 'custom')
+        if (!hasCustom) loaded.push({ label: '自定义尺寸', value: 'custom' })
+        sizeOptions.value = [{ label: '不指定尺寸', value: '' }, ...loaded]
+      }
+    }
+
+    // ---- 最大产品图数量 ----
+    const maxProductCfg = map.max_product_images
+    if (maxProductCfg && maxProductCfg.configValue) {
+      const n = Number(JSON.parse(maxProductCfg.configValue))
+      if (n > 0) {
+        // 更新上传上限提示文案中的数字（可选，此处仅保留配置值备用）
+      }
+    }
+
+    // ---- 最大生成数量 ----
+    const maxGenCfg = map.max_generate_count
+    if (maxGenCfg && maxGenCfg.configValue) {
+      const n = Number(JSON.parse(maxGenCfg.configValue))
+      if (n > 0) maxGenerateCount.value = n
+    }
+
+    // ---- 语言列表 ----
+    const langCfg = map.language_options
+    if (langCfg && langCfg.configValue) {
+      const arr = JSON.parse(langCfg.configValue)
+      if (Array.isArray(arr) && arr.length) {
+        languages.value = arr.filter(l => l.value)
+        // 确保当前选中的语言仍在新列表中
+        if (!languages.value.some(l => l.value === language.value)) {
+          language.value = languages.value[0]?.value || 'zh-CN'
+        }
+      }
+    }
+  } catch { /* use defaults */ }
+}
+
 onMounted(() => {
+  loadCreationConfig()
   document.addEventListener('mousemove', onMouseMove)
   document.addEventListener('mouseup', onMouseUp)
   nextTick(() => {
@@ -1184,27 +1295,30 @@ function clearWorkspaceImages() {
   min-height: 200px;
 }
 .canvas-placeholder {
-  text-align: center;
-  color: #9CA3AF;
-  padding: 20px;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+gap: 8px;
+color: #9CA3AF;
+padding: 24px;
+text-align: center;
 }
 .canvas-placeholder svg {
-  width: 64px;
-  height: 64px;
-  color: #D1D5DB;
-  margin-bottom: 12px;
+width: 48px;
+height: 48px;
+margin-bottom: 4px;
+opacity: .4;
 }
 .canvas-placeholder h3 {
-  font-size: 14px;
-  color: #1F2937;
-  margin-bottom: 6px;
-  font-weight: 600;
+font-size: 14px;
+color: #6B7280;
+margin-bottom: 0;
+font-weight: 500;
 }
 .canvas-placeholder p {
-  font-size: 12px;
-  color: #9CA3AF;
-  margin: 0;
-  line-height: 1.8;
+font-size: 12px;
+color: #9CA3AF;
 }
 
 /* Task Card */

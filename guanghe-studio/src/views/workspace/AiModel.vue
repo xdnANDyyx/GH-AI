@@ -100,10 +100,27 @@
                 </span>
               </div>
               <div v-show="sections.upload" class="section-body">
-                <el-button size="default" plain class="upload-btn-full" @click="triggerUpload">
-                  <el-icon><UploadFilled /></el-icon> 上传
-                </el-button>
-                <p class="upload-hint-text">支持 JPG/PNG，最多 10 张</p>
+                <div class="panel-upload-zone" @click.stop="triggerUpload" @dragover.prevent @drop.prevent="handleDrop">
+                  <el-icon :size="28" color="#2563FF"><UploadFilled /></el-icon>
+                  <p class="panel-upload-text">点击或拖拽图片到此处上传</p>
+                  <p class="panel-upload-hint">支持 JPG / PNG / WebP，最多 10 张</p>
+                </div>
+                <div v-if="uploadedFiles.length" class="uploaded-images-list">
+                  <div v-for="(f, i) in uploadedFiles" :key="i" class="uploaded-thumb-wrap">
+                    <div class="uploaded-thumb">
+                      <img :src="f" v-if="typeof f === 'string'" />
+                      <span v-else class="thumb-placeholder">图片</span>
+                    </div>
+                    <div class="uploaded-remove" @click.stop="removeProductFile(i)">✕</div>
+                  </div>
+                  <div
+                    v-if="uploadedFiles.length < 10"
+                    class="uploaded-thumb-wrap add"
+                    @click.stop="triggerUpload"
+                  >
+                    <div class="uploaded-thumb add-thumb">+</div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -155,11 +172,15 @@
                 </span>
               </div>
               <div v-show="sections.gender" class="section-body">
-                <el-radio-group v-model="gender" class="gender-radios">
-                  <el-radio label="男" border size="small">男</el-radio>
-                  <el-radio label="女" border size="small">女</el-radio>
-                  <el-radio label="不限" border size="small">不限</el-radio>
-                </el-radio-group>
+                <div class="tag-chips">
+                  <div
+                    v-for="g in genderOptions"
+                    :key="g.value"
+                    class="tag-chip"
+                    :class="{ active: gender === g.value }"
+                    @click="gender = gender === g.value ? '' : g.value"
+                  >{{ g.label }}</div>
+                </div>
               </div>
             </div>
 
@@ -179,7 +200,7 @@
                     :key="a"
                     class="tag-chip"
                     :class="{ active: age === a }"
-                    @click="age = a"
+                    @click="age = age === a ? '' : a"
                   >{{ a }}</div>
                 </div>
               </div>
@@ -201,7 +222,7 @@
                     :key="h"
                     class="tag-chip"
                     :class="{ active: hairstyle === h }"
-                    @click="hairstyle = h"
+                    @click="hairstyle = hairstyle === h ? '' : h"
                   >{{ h }}</div>
                 </div>
               </div>
@@ -223,7 +244,7 @@
                     :key="e.value"
                     class="ethnicity-card"
                     :class="{ active: ethnicity === e.value }"
-                    @click="ethnicity = e.value"
+                    @click="ethnicity = ethnicity === e.value ? '' : e.value"
                   >
                     <div class="ethnicity-swatch" :style="{ background: e.color }"></div>
                     <span class="ethnicity-name">{{ e.label }}</span>
@@ -248,7 +269,7 @@
                     :key="p"
                     class="tag-chip"
                     :class="{ active: pose === p }"
-                    @click="pose = p"
+                    @click="pose = pose === p ? '' : p"
                   >{{ p }}</div>
                 </div>
               </div>
@@ -270,7 +291,7 @@
                     :key="c"
                     class="tag-chip"
                     :class="{ active: clothing === c }"
-                    @click="clothing = c"
+                    @click="clothing = clothing === c ? '' : c"
                   >{{ c }}</div>
                 </div>
               </div>
@@ -292,7 +313,7 @@
                     :key="s.value"
                     class="scene-card"
                     :class="{ active: sceneStyle === s.value }"
-                    @click="sceneStyle = s.value"
+                    @click="sceneStyle = sceneStyle === s.value ? '' : s.value"
                   >
                     <div class="scene-card-thumb" :style="{ background: s.gradient }">
                       <div class="scene-thumb-icon" v-html="s.svgIcon"></div>
@@ -478,6 +499,8 @@ const configCollapsed = ref(false)
 const fileInput = ref(null)
 const productImage = ref('')
 const originalFile = ref(null)
+const uploadedFiles = ref([])
+const productFiles = ref([])
 const resultImages = ref([])
 const generating = ref(false)
 
@@ -789,27 +812,46 @@ function toggleAllSections() {
 function triggerUpload() { fileInput.value?.click() }
 
 function handleDrop(e) {
-  const file = e.dataTransfer?.files[0]
-  if (file && file.type.startsWith('image/')) {
-    readFile(file)
-  }
+  const files = e.dataTransfer?.files
+  if (files && files.length) addFiles(files)
 }
 
 function handleFile(e) {
-  const file = e.target.files[0]
-  if (file) readFile(file)
+  const files = e.target.files
+  if (files && files.length) addFiles(files)
+  fileInput.value.value = ''
 }
 
-function readFile(file) {
-  originalFile.value = file
-  const reader = new FileReader()
-  reader.onload = ev => { productImage.value = ev.target.result }
-  reader.readAsDataURL(file)
+function addFiles(files) {
+  for (const f of files) {
+    if (!f.type.startsWith('image/')) continue
+    if (uploadedFiles.value.length >= 10) {
+      ElMessage.warning('最多上传 10 张图片')
+      break
+    }
+    const url = URL.createObjectURL(f)
+    uploadedFiles.value.push(url)
+    productFiles.value.push(f)
+  }
+  // 同步第一张作为主图（用于 has-image 判断）
+  if (uploadedFiles.value.length > 0) {
+    productImage.value = uploadedFiles.value[0]
+  }
+}
+
+function removeProductFile(index) {
+  uploadedFiles.value.splice(index, 1)
+  productFiles.value.splice(index, 1)
+  if (uploadedFiles.value.length > 0) {
+    productImage.value = uploadedFiles.value[0]
+  } else {
+    productImage.value = ''
+  }
 }
 
 async function handleGenerate() {
   const text = aiAssistantRef.value?.inputText?.trim() || ''
-  if (!originalFile.value) { ElMessage.warning('请先上传产品图片'); return }
+  if (!productFiles.value.length) { ElMessage.warning('请先上传产品图片'); return }
   if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
   try {
     const _basePrompt = `生成AI模特图，性别${gender.value}，年龄${age.value}，发型${hairstyle.value}，姿势${pose.value}，服装${clothing.value}，场景${sceneStyle.value}`
@@ -819,9 +861,10 @@ async function handleGenerate() {
     const extraOptions = {}
     if (effectiveOutputSize.value) extraOptions.output_size = effectiveOutputSize.value
     if (generateCount.value) extraOptions.n = Number(generateCount.value)
-    await gen.fullGenerate([originalFile.value], prompt, { ...extraOptions, consumePoints: 2, featureName: 'ai_model', title: 'AI模特生成' })
+    await gen.fullGenerate(productFiles.value, prompt, { ...extraOptions, consumePoints: 2, featureName: 'ai_model', title: 'AI模特生成' })
     if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
   } catch (e) {
+    if (e?.message?.includes('已取消')) return
     console.error('AI模特生成失败:', e)
     const isTimeout = e?.code === 'ECONNABORTED'
       || /timeout|超时|人数过多|繁忙|busy/i.test(e?.message || '')
@@ -833,6 +876,9 @@ async function handleGenerate() {
 
 function clearCanvas() {
   productImage.value = ''
+  originalFile.value = null
+  uploadedFiles.value = []
+  productFiles.value = []
   resultImages.value = []
 }
 
@@ -970,6 +1016,8 @@ async function loadPromptMap() {
 function clearWorkspaceImages() {
   productImage.value = ''
   originalFile.value = null
+  uploadedFiles.value = []
+  productFiles.value = []
   resultImages.value = []
   gender.value = '女'
   hairstyle.value = '长发'
@@ -1580,6 +1628,47 @@ function clearWorkspaceImages() {
   color: #9CA3AF;
   margin: 8px 0 0;
 }
+
+/* ---- 上传区域（与产品精修一致） ---- */
+.panel-upload-zone {
+  border: 2px dashed #E8EDF5;
+  border-radius: 10px;
+  padding: 16px 12px;
+  text-align: center;
+  cursor: pointer;
+  background: #F7F9FC;
+  transition: all 0.2s;
+  margin: 0 16px;
+}
+.panel-upload-zone:hover { border-color: #2563FF; background: #FAFBFF; }
+.panel-upload-text { font-size: 12px; color: #6B7280; margin-top: 6px; }
+.panel-upload-hint { font-size: 10px; color: #9CA3AF; margin-top: 2px; }
+
+/* Uploaded images list */
+.uploaded-images-list {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 0 16px; margin-top: 10px;
+}
+.uploaded-thumb-wrap {
+  position: relative; width: 48px; height: 48px; border-radius: 8px;
+  overflow: hidden; border: 1px solid #E8EDF5;
+}
+.uploaded-thumb-wrap.add { border-style: dashed; cursor: pointer; }
+.uploaded-thumb {
+  width: 100%; height: 100%; display: flex; align-items: center;
+  justify-content: center; background: #F7F9FC;
+}
+.uploaded-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.uploaded-thumb.add-thumb { font-size: 18px; color: #9CA3AF; font-weight: 500; }
+.thumb-placeholder { font-size: 9px; color: #9CA3AF; }
+.uploaded-remove {
+  position: absolute; top: 2px; right: 2px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: rgba(0,0,0,0.45); color: #fff; font-size: 10px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; opacity: 0; transition: opacity 0.2s;
+}
+.uploaded-thumb-wrap:hover .uploaded-remove { opacity: 1; }
 
 // -- Gender radios --
 .gender-radios {

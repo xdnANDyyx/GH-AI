@@ -116,7 +116,7 @@
                     :key="tool.key"
                     class="tool-card"
                     :class="{ active: activeTool === tool.key }"
-                    @click="activeTool = tool.key"
+                    @click="activeTool = activeTool === tool.key ? '' : tool.key"
                   >
                     <div class="tool-icon-svg" v-html="tool.svgIcon"></div>
                     <div class="tool-name">{{ tool.name }}</div>
@@ -150,9 +150,9 @@
                     </select>
                   </div>
                   <div class="output-row">
-                    <span class="output-label">尺寸</span>
+                    <span class="output-label">输出尺寸</span>
                     <select v-model="selectedSize" class="form-select">
-                      <option v-for="s in sizeOptions" :key="s.value" :value="s.value">{{ s.label }} ({{ s.value }})</option>
+                      <option v-for="s in sizeOptions" :key="s.value" :value="s.value">{{ s.value ? s.label + ' (' + s.value + ')' : s.label }}</option>
                     </select>
                   </div>
                 </div>
@@ -360,6 +360,7 @@ export default {
     const boostMaterialRef = ref(null)
 
     const sizeOptions = ref([
+      { label: '不指定尺寸', value: '' },
       { label: '1:1', value: '1:1', w: 20, h: 20 },
       { label: '4:3', value: '4:3', w: 24, h: 18 },
       { label: '3:4', value: '3:4', w: 18, h: 24 },
@@ -369,7 +370,7 @@ export default {
       { label: '2:3', value: '2:3', w: 16, h: 24 },
       { label: '自定义', value: 'custom', w: 18, h: 18 },
     ])
-    const selectedSize = ref('1:1')
+    const selectedSize = ref('')
 
     // Prompt
     const promptTags = ref([])
@@ -602,7 +603,7 @@ export default {
             if (!hasCustom) {
               loaded.push({ label: '自定义', value: 'custom', w: 18, h: 18 })
             }
-            sizeOptions.value = loaded
+            sizeOptions.value = [{ label: '不指定尺寸', value: '' }, ...loaded]
           }
         }
 
@@ -709,8 +710,9 @@ export default {
           processed.value = true
           processedImage.value = gen.resultImages.value[0].url || gen.resultImages.value[0]
         }
-      } catch (e) {
-        console.error('精修生成失败:', e)
+} catch (e) {
+if (e?.message?.includes('已取消')) return
+console.error('精修生成失败:', e)
         const isTimeout = e?.code === 'ECONNABORTED'
           || /timeout|超时|人数过多|繁忙|busy/i.test(e?.message || '')
         ElMessage.error(isTimeout
@@ -822,7 +824,7 @@ export default {
       uploadedFiles.value = []
       outputQuality.value = 'high'
       outputFormat.value = 'png'
-      selectedSize.value = '1:1'
+      selectedSize.value = ''
       gen.reset()
     }
 
@@ -1191,6 +1193,18 @@ export default {
 .section-header:hover { opacity: 0.75; }
 .section-label { font-size: 13px; font-weight: 600; color: #1F2937; }
 .required-mark { color: #EF4444; margin-right: 2px; font-weight: 500; }
+.expand-text {
+  font-size: 11px;
+  color: #9CA3AF;
+  font-weight: 400;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.expand-arrow {
+  transition: transform 0.25s;
+}
+.expand-arrow.expanded { transform: rotate(180deg); }
 .section-arrow {
   font-size: 14px; color: #9CA3AF; transition: transform 0.25s;
   flex-shrink: 0;
