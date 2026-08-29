@@ -1,6 +1,7 @@
 package com.ruoyi.business.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ruoyi.business.domain.GhPromptLibrary;
@@ -11,6 +12,7 @@ import com.ruoyi.common.utils.StringUtils;
 import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -24,6 +26,7 @@ public class GhPromptLibraryServiceImpl extends ServiceImpl<GhPromptLibraryMappe
     @Override
     public Page<GhPromptLibrary> listLibrary(PromptLibraryQueryDTO query) {
         LambdaQueryWrapper<GhPromptLibrary> wrapper = new LambdaQueryWrapper<>();
+        wrapper.isNull(GhPromptLibrary::getDeleteAt);
         if (query != null) {
             wrapper.eq(StringUtils.isNotEmpty(query.getCategory()), GhPromptLibrary::getCategory, query.getCategory());
             wrapper.like(StringUtils.isNotEmpty(query.getPromptKey()), GhPromptLibrary::getPromptKey, query.getPromptKey());
@@ -44,6 +47,7 @@ public class GhPromptLibraryServiceImpl extends ServiceImpl<GhPromptLibraryMappe
     @Override
     public List<GhPromptLibrary> listEnabled(String category, String scope) {
         LambdaQueryWrapper<GhPromptLibrary> wrapper = new LambdaQueryWrapper<>();
+        wrapper.isNull(GhPromptLibrary::getDeleteAt);
         wrapper.eq(GhPromptLibrary::getStatus, "0");
         wrapper.eq(StringUtils.isNotEmpty(category), GhPromptLibrary::getCategory, category);
         if (StringUtils.isNotEmpty(scope)) {
@@ -55,7 +59,10 @@ public class GhPromptLibraryServiceImpl extends ServiceImpl<GhPromptLibraryMappe
 
     @Override
     public GhPromptLibrary getLibraryById(Long id) {
-        return getById(id);
+        LambdaQueryWrapper<GhPromptLibrary> wrapper = new LambdaQueryWrapper<>();
+        wrapper.isNull(GhPromptLibrary::getDeleteAt);
+        wrapper.eq(GhPromptLibrary::getId, id);
+        return getOne(wrapper);
     }
 
     @Override
@@ -82,11 +89,18 @@ public class GhPromptLibraryServiceImpl extends ServiceImpl<GhPromptLibraryMappe
     @Override
     public int updateLibrary(GhPromptLibrary library, String username) {
         library.setUpdateBy(username);
+        library.setUpdateTime(new Date());
         return updateById(library) ? 1 : 0;
     }
 
     @Override
     public int removeLibraryByIds(Long[] ids) {
-        return removeByIds(Arrays.asList(ids)) ? ids.length : 0;
+        // 逻辑删除：设置 delete_at 为当前时间，而非物理删除
+        LambdaUpdateWrapper<GhPromptLibrary> wrapper = new LambdaUpdateWrapper<>();
+        wrapper.in(GhPromptLibrary::getId, Arrays.asList(ids))
+                .isNull(GhPromptLibrary::getDeleteAt)
+                .set(GhPromptLibrary::getDeleteAt, new Date())
+                .set(GhPromptLibrary::getUpdateTime, new Date());
+        return update(wrapper) ? ids.length : 0;
     }
 }

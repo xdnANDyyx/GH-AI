@@ -3,9 +3,12 @@ package com.ruoyi.business.domain;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.ruoyi.common.core.domain.BaseEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+
+import java.util.Date;
 
 /**
  * 提示词模板 gh_prompt_template
@@ -40,4 +43,8 @@ public class GhPromptTemplate extends BaseEntity {
 
     /** 状态（0正常 1停用） */
     private String status;
+
+    /** 逻辑删除时间（NULL表示未删除） */
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date deleteAt;
 }

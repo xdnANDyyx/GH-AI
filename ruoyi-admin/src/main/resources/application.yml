@@ -315,7 +315,7 @@ vertex:
     # 生图模型 gemini-3-pro-image 只会返回图片不会返回描述文本，反推必须用支持图像理解的文本模型
     reverse-model: gemini-2.5-flash
     # 读超时（秒）
-    read-timeout: 120
+    read-timeout: 600
     # 默认宽高比（前端未传 extraOptions.aspect_ratio 时使用）
     # 注意：必须加引号！YAML 1.1 会把不加引号的 1:1 按六十进制解析成整数 61
     default-aspect-ratio: "1:1"

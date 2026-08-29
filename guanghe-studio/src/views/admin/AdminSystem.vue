@@ -284,18 +284,18 @@
             <el-option v-for="s in promptPickerScopeOptions.filter(o => o.value)" :key="s.value" :label="s.label" :value="s.value" />
           </el-select>
         </el-form-item>
-        <el-form-item label="优先级">
+        <!-- <el-form-item label="优先级">
           <el-input-number v-model="libraryForm.priority" :min="0" />
-        </el-form-item>
-        <el-form-item label="默认">
+        </el-form-item> -->
+        <!-- <el-form-item label="默认">
           <el-select v-model="libraryForm.isDefault" style="width: 160px">
             <el-option label="否" value="0" />
             <el-option label="是" value="1" />
           </el-select>
-        </el-form-item>
-        <el-form-item label="排序">
+        </el-form-item> -->
+        <!-- <el-form-item label="排序">
           <el-input-number v-model="libraryForm.sort" :min="0" />
-        </el-form-item>
+        </el-form-item> -->
         <el-form-item label="状态">
           <el-select v-model="libraryForm.status" style="width: 160px">
             <el-option label="启用" value="0" />
@@ -412,8 +412,9 @@
 
               <template v-for="field in creationOptionFields" :key="field.key">
                 <!-- 列表绑定类配置（图片/阴影/尺寸）：选显示名即由下拉自动填好 label、value（及宽/高），
-                     无需再手动填写这些列，故隐藏它们；图片列（仅图片/阴影类有）保留供上传/填写。 -->
-                <template v-if="!(pickerBoundOptionConfig && (field.key === 'label' || field.key === 'value' || field.key === 'w' || field.key === 'h'))">
+                     无需再手动填写这些列，故隐藏它们；图片列（仅图片/阴影类有）保留供上传/填写。
+                     但如果有未匹配到提示词库的项（如旧数据或提示词库缺失某选项），则保留 label/value 列显示。 -->
+                <template v-if="!((pickerBoundOptionConfig && !hasUnboundOptions) && (field.key === 'label' || field.key === 'value' || field.key === 'w' || field.key === 'h'))">
                   <el-input-number
                     v-if="field.type === 'number'"
                     v-model="item[field.key]"
@@ -468,8 +469,9 @@
               <el-icon><Plus /></el-icon>添加选项
             </el-button>
             <div class="option-tip">
-              <template v-if="isImageOptionConfig">从提示词库选择显示名即自动填好名称与值（无需手动填），再为每项上传或填写图片即可。</template>
-              <template v-else-if="pickerBoundOptionConfig">从提示词库选择显示名即自动填好名称与值（含尺寸），后续的值/宽/高无需手动填写。</template>
+              <template v-if="isImageOptionConfig && !hasUnboundOptions">从提示词库选择显示名即自动填好名称与值（无需手动填），再为每项上传或填写图片即可。</template>
+              <template v-else-if="pickerBoundOptionConfig && !hasUnboundOptions">从提示词库选择显示名即自动填好名称与值（含尺寸），后续的值/宽/高无需手动填写。</template>
+              <template v-else-if="hasUnboundOptions">⚠️ 部分选项未能匹配到提示词库，已保留手动填写列。请从下拉选择以绑定提示词库，或直接在下方输入框中编辑值。</template>
               <template v-else>每项至少填写"显示名"和"值"。可点上方"从提示词库选择"直接绑定已建好的显示名（值自动填为其提示词Key）。尺寸类配置可填宽/高；图片字段可填公网链接或上传到服务器。</template>
             </div>
           </div>
@@ -934,13 +936,44 @@ async function loadPromptPicker() {
   }
 }
 
+// 规范化字符串用于模糊比较：去除所有空格（含全角空格），转小写
+function normalizeForMatch(s) {
+  return String(s || '').replace(/\s+/g, '').toLowerCase()
+}
+
 // 已绑定的选项行回显选中态：若行 value 命中提示词库某个 promptKey，则下拉回显该显示名
+// 若 value 无法精确匹配 promptKey，则回退通过 label 匹配提示词库的 label 来回显（支持模糊匹配，忽略空格差异）
 function syncPickerSelection() {
-  const keys = new Set(promptPickerItems.value.map(p => p.promptKey))
+  const keyMap = new Map(promptPickerItems.value.map(p => [p.promptKey, p]))
+  // 精确 label 映射
+  const labelMap = new Map(promptPickerItems.value.map(p => [p.label, p]))
+  // 模糊 label 映射（去除空格后比较，解决 "800×800" vs "800 × 800" 的差异）
+  const fuzzyLabelMap = new Map(promptPickerItems.value.map(p => [normalizeForMatch(p.label), p]))
   creationOptions.value.forEach(item => {
     if (item._pickerKey === undefined) item._pickerKey = ''
-    if (item.value && keys.has(item.value)) item._pickerKey = item.value
-    else if (!keys.has(item._pickerKey)) item._pickerKey = ''
+    // 1. 精确匹配 value → promptKey
+    if (item.value && keyMap.has(item.value)) {
+      item._pickerKey = item.value
+    }
+    // 2. 精确匹配 label
+    else if (item.label && labelMap.has(item.label)) {
+      const matched = labelMap.get(item.label)
+      item._pickerKey = matched.promptKey
+    }
+    // 3. 模糊匹配 label（忽略空格差异）
+    else if (item.label) {
+      const fuzzy = normalizeForMatch(item.label)
+      if (fuzzy && fuzzyLabelMap.has(fuzzy)) {
+        const matched = fuzzyLabelMap.get(fuzzy)
+        item._pickerKey = matched.promptKey
+      } else if (!keyMap.has(item._pickerKey)) {
+        item._pickerKey = ''
+      }
+    }
+    // 4. 都不匹配，清空回显
+    else if (!keyMap.has(item._pickerKey)) {
+      item._pickerKey = ''
+    }
   })
 }
 
@@ -1047,6 +1080,13 @@ const pickerBoundOptionConfig = computed(() =>
   !!inferPromptCategory(creationForm.configKey)
   && !['max_generate_count', 'max_selling_count', 'size_min', 'size_max'].includes(creationForm.configKey)
 )
+// 是否所有选项项都已匹配到提示词库（如果有未匹配的项，保留 label/value 列显示，避免用户看不到旧数据）
+const hasUnboundOptions = computed(() => {
+  if (!pickerBoundOptionConfig.value || creationEditorType.value !== 'options') return false
+  if (promptPickerItems.value.length === 0) return false
+  const pickerKeys = new Set(promptPickerItems.value.map(p => p.promptKey))
+  return creationOptions.value.some(item => !item._pickerKey || !pickerKeys.has(item._pickerKey))
+})
 // 兼容旧名（图片/阴影类专用分支用），等价于 pickerBoundOptionConfig && 含图片列
 const isImageOptionConfig = computed(() =>
   imageOptionKeys.includes(creationForm.configKey) && !!inferPromptCategory(creationForm.configKey)

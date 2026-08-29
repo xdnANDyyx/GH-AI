@@ -14,16 +14,18 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="createTime"    column="create_time"    />
         <result property="updateBy"      column="update_by"      />
         <result property="updateTime"    column="update_time"    />
+        <result property="deleteAt"     column="delete_at"      />
     </resultMap>
     
     <sql id="selectConfigVo">
-        select config_id, config_name, config_key, config_value, config_type, create_by, create_time, update_by, update_time, remark 
+        select config_id, config_name, config_key, config_value, config_type, create_by, create_time, update_by, update_time, remark, delete_at
 		from sys_config
     </sql>
     
     <!-- 查询条件 -->
 	<sql id="sqlwhereSearch">
 		<where>
+			and delete_at is null
 			<if test="configId !=null">
 				and config_id = #{configId}
 			</if>
@@ -41,6 +43,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="selectConfigList" parameterType="SysConfig" resultMap="SysConfigResult">
         <include refid="selectConfigVo"/>
         <where>
+			and delete_at is null
 			<if test="configName != null and configName != ''">
 				AND config_name like concat('%', #{configName}, '%')
 			</if>
@@ -61,12 +64,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     
     <select id="selectConfigById" parameterType="Long" resultMap="SysConfigResult">
         <include refid="selectConfigVo"/>
-        where config_id = #{configId}
+        where config_id = #{configId} and delete_at is null
     </select>
 	
     <select id="checkConfigKeyUnique" parameterType="String" resultMap="SysConfigResult">
         <include refid="selectConfigVo"/>
-        where config_key = #{configKey} limit 1
+        where config_key = #{configKey} and delete_at is null limit 1
     </select>
     
     <insert id="insertConfig" parameterType="SysConfig">
@@ -100,18 +103,19 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="remark != null">remark = #{remark},</if>
  			update_time = sysdate()
         </set>
-        where config_id = #{configId}
+        where config_id = #{configId} and delete_at is null
     </update>
 	
-    <delete id="deleteConfigById" parameterType="Long">
-        delete from sys_config where config_id = #{configId}
-    </delete>
+    <!-- 逻辑删除：将 delete_at 设为当前时间，而非物理删除 -->
+    <update id="deleteConfigById" parameterType="Long">
+        update sys_config set delete_at = sysdate(), update_time = sysdate() where config_id = #{configId} and delete_at is null
+    </update>
     
-    <delete id="deleteConfigByIds" parameterType="Long">
-        delete from sys_config where config_id in 
+    <update id="deleteConfigByIds" parameterType="Long">
+        update sys_config set delete_at = sysdate(), update_time = sysdate() where delete_at is null and config_id in 
         <foreach item="configId" collection="array" open="(" separator="," close=")">
         	#{configId}
         </foreach>
-    </delete>
+    </update>
     
 </mapper>

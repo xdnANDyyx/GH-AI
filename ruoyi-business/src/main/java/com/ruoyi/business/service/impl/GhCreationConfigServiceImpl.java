@@ -1,6 +1,7 @@
 package com.ruoyi.business.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ruoyi.business.domain.GhCreationConfig;
@@ -11,6 +12,7 @@ import com.ruoyi.common.utils.StringUtils;
 import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -24,6 +26,7 @@ public class GhCreationConfigServiceImpl extends ServiceImpl<GhCreationConfigMap
     @Override
     public Page<GhCreationConfig> listConfig(CreationConfigQueryDTO query) {
         LambdaQueryWrapper<GhCreationConfig> wrapper = new LambdaQueryWrapper<>();
+        wrapper.isNull(GhCreationConfig::getDeleteAt);
         if (query != null) {
             wrapper.eq(StringUtils.isNotEmpty(query.getConfigGroup()), GhCreationConfig::getConfigGroup, query.getConfigGroup());
             wrapper.like(StringUtils.isNotEmpty(query.getConfigKey()), GhCreationConfig::getConfigKey, query.getConfigKey());
@@ -38,6 +41,7 @@ public class GhCreationConfigServiceImpl extends ServiceImpl<GhCreationConfigMap
     @Override
     public GhCreationConfig getByGroupKey(String configGroup, String configKey) {
         LambdaQueryWrapper<GhCreationConfig> wrapper = new LambdaQueryWrapper<>();
+        wrapper.isNull(GhCreationConfig::getDeleteAt);
         wrapper.eq(GhCreationConfig::getConfigGroup, configGroup);
         wrapper.eq(GhCreationConfig::getConfigKey, configKey);
         return getOne(wrapper);
@@ -46,6 +50,7 @@ public class GhCreationConfigServiceImpl extends ServiceImpl<GhCreationConfigMap
     @Override
     public List<GhCreationConfig> listByGroup(String configGroup) {
         LambdaQueryWrapper<GhCreationConfig> wrapper = new LambdaQueryWrapper<>();
+        wrapper.isNull(GhCreationConfig::getDeleteAt);
         wrapper.eq(GhCreationConfig::getConfigGroup, configGroup);
         wrapper.eq(GhCreationConfig::getStatus, "0");
         wrapper.orderByAsc(GhCreationConfig::getSort);
@@ -61,12 +66,19 @@ public class GhCreationConfigServiceImpl extends ServiceImpl<GhCreationConfigMap
     @Override
     public int updateConfig(GhCreationConfig config, String username) {
         config.setUpdateBy(username);
+        config.setUpdateTime(new Date());
         return updateById(config) ? 1 : 0;
     }
 
     @Override
     public int removeConfigByIds(Long[] ids) {
-        return removeByIds(Arrays.asList(ids)) ? ids.length : 0;
+        // 逻辑删除：设置 delete_at 为当前时间，而非物理删除
+        LambdaUpdateWrapper<GhCreationConfig> wrapper = new LambdaUpdateWrapper<>();
+        wrapper.in(GhCreationConfig::getId, Arrays.asList(ids))
+                .isNull(GhCreationConfig::getDeleteAt)
+                .set(GhCreationConfig::getDeleteAt, new Date())
+                .set(GhCreationConfig::getUpdateTime, new Date());
+        return update(wrapper) ? ids.length : 0;
     }
 
     @Override
@@ -75,6 +87,7 @@ public class GhCreationConfigServiceImpl extends ServiceImpl<GhCreationConfigMap
         config.setId(id);
         config.setStatus(status);
         config.setUpdateBy(username);
+        config.setUpdateTime(new Date());
         return updateById(config) ? 1 : 0;
     }
 }

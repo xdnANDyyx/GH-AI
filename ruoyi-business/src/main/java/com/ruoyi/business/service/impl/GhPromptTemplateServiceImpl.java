@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -26,6 +27,7 @@ public class GhPromptTemplateServiceImpl extends ServiceImpl<GhPromptTemplateMap
     @Override
     public Page<GhPromptTemplate> listTemplate(PromptTemplateQueryDTO query) {
         LambdaQueryWrapper<GhPromptTemplate> wrapper = new LambdaQueryWrapper<>();
+        wrapper.isNull(GhPromptTemplate::getDeleteAt);
         if (query != null) {
             wrapper.eq(StringUtils.isNotEmpty(query.getModule()), GhPromptTemplate::getModule, query.getModule());
             wrapper.like(StringUtils.isNotEmpty(query.getName()), GhPromptTemplate::getName, query.getName());
@@ -39,7 +41,10 @@ public class GhPromptTemplateServiceImpl extends ServiceImpl<GhPromptTemplateMap
 
     @Override
     public GhPromptTemplate getTemplateById(Long id) {
-        return getById(id);
+        LambdaQueryWrapper<GhPromptTemplate> wrapper = new LambdaQueryWrapper<>();
+        wrapper.isNull(GhPromptTemplate::getDeleteAt);
+        wrapper.eq(GhPromptTemplate::getId, id);
+        return getOne(wrapper);
     }
 
     @Override
@@ -54,12 +59,19 @@ public class GhPromptTemplateServiceImpl extends ServiceImpl<GhPromptTemplateMap
     @Override
     public int updateTemplate(GhPromptTemplate template, String username) {
         template.setUpdateBy(username);
+        template.setUpdateTime(new Date());
         return updateById(template) ? 1 : 0;
     }
 
     @Override
     public int removeTemplateByIds(Long[] ids) {
-        return removeByIds(Arrays.asList(ids)) ? ids.length : 0;
+        // 逻辑删除：设置 delete_at 为当前时间，而非物理删除
+        LambdaUpdateWrapper<GhPromptTemplate> wrapper = new LambdaUpdateWrapper<>();
+        wrapper.in(GhPromptTemplate::getId, Arrays.asList(ids))
+                .isNull(GhPromptTemplate::getDeleteAt)
+                .set(GhPromptTemplate::getDeleteAt, new Date())
+                .set(GhPromptTemplate::getUpdateTime, new Date());
+        return update(wrapper) ? ids.length : 0;
     }
 
     @Override
@@ -75,8 +87,10 @@ public class GhPromptTemplateServiceImpl extends ServiceImpl<GhPromptTemplateMap
         LambdaUpdateWrapper<GhPromptTemplate> clearWrapper = new LambdaUpdateWrapper<>();
         clearWrapper.eq(GhPromptTemplate::getModule, target.getModule())
                 .ne(GhPromptTemplate::getId, id)
+                .isNull(GhPromptTemplate::getDeleteAt)
                 .set(GhPromptTemplate::getIsDefault, "0")
-                .set(GhPromptTemplate::getUpdateBy, username);
+                .set(GhPromptTemplate::getUpdateBy, username)
+                .set(GhPromptTemplate::getUpdateTime, new Date());
         update(clearWrapper);
 
         // 3. 将目标模板设为默认
@@ -84,6 +98,7 @@ public class GhPromptTemplateServiceImpl extends ServiceImpl<GhPromptTemplateMap
         update.setId(id);
         update.setIsDefault("1");
         update.setUpdateBy(username);
+        update.setUpdateTime(new Date());
         return updateById(update) ? 1 : 0;
     }
 }

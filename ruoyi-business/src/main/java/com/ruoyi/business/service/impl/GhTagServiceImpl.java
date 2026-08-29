@@ -1,6 +1,7 @@
 package com.ruoyi.business.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ruoyi.business.domain.GhTag;
@@ -11,6 +12,7 @@ import com.ruoyi.common.utils.StringUtils;
 import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -24,6 +26,7 @@ public class GhTagServiceImpl extends ServiceImpl<GhTagMapper, GhTag> implements
     @Override
     public Page<GhTag> listTag(TagQueryDTO query) {
         LambdaQueryWrapper<GhTag> wrapper = new LambdaQueryWrapper<>();
+        wrapper.isNull(GhTag::getDeleteAt);
         if (query != null) {
             wrapper.like(StringUtils.isNotEmpty(query.getTagName()), GhTag::getTagName, query.getTagName());
             wrapper.eq(StringUtils.isNotEmpty(query.getTagType()), GhTag::getTagType, query.getTagType());
@@ -38,6 +41,7 @@ public class GhTagServiceImpl extends ServiceImpl<GhTagMapper, GhTag> implements
     @Override
     public List<GhTag> listByType(String tagType) {
         LambdaQueryWrapper<GhTag> wrapper = new LambdaQueryWrapper<>();
+        wrapper.isNull(GhTag::getDeleteAt);
         wrapper.eq(GhTag::getTagType, tagType);
         wrapper.eq(GhTag::getStatus, "0");
         wrapper.orderByAsc(GhTag::getSort);
@@ -53,11 +57,18 @@ public class GhTagServiceImpl extends ServiceImpl<GhTagMapper, GhTag> implements
     @Override
     public int updateTag(GhTag tag, String username) {
         tag.setUpdateBy(username);
+        tag.setUpdateTime(new Date());
         return updateById(tag) ? 1 : 0;
     }
 
     @Override
     public int removeTagByIds(Long[] ids) {
-        return removeByIds(Arrays.asList(ids)) ? ids.length : 0;
+        // 逻辑删除：设置 delete_at 为当前时间，而非物理删除
+        LambdaUpdateWrapper<GhTag> wrapper = new LambdaUpdateWrapper<>();
+        wrapper.in(GhTag::getId, Arrays.asList(ids))
+                .isNull(GhTag::getDeleteAt)
+                .set(GhTag::getDeleteAt, new Date())
+                .set(GhTag::getUpdateTime, new Date());
+        return update(wrapper) ? ids.length : 0;
     }
 }

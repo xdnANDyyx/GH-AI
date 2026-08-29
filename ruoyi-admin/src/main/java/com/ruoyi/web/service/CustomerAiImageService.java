@@ -11,6 +11,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -23,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import javax.imageio.ImageIO;
 
 /**
  * AI 图片生成服务
@@ -45,8 +49,8 @@ public class CustomerAiImageService {
     @Value("${vertex.ai.model:gemini-3-pro-image}")
     private String vertexModel;
 
-    @Value("${vertex.ai.read-timeout:120}")
-    private int vertexReadTimeout;
+@Value("${vertex.ai.read-timeout:600}")
+private int vertexReadTimeout;
 
     @Value("${vertex.ai.credentials-path:}")
     private String credentialsPath;
@@ -891,7 +895,7 @@ public class CustomerAiImageService {
             String base64Part = imageUrl.substring(imageUrl.indexOf(",") + 1);
             byte[] bytes = Base64.getDecoder().decode(base64Part);
             validateImageBytes(bytes, imageUrl);
-            return bytes;
+            return compressImage(bytes);
         }
 
         // 2. 本地 /profile/ 路径直读磁盘，避免回环 HTTP 请求
@@ -900,10 +904,11 @@ public class CustomerAiImageService {
             File file = new File(localPath);
             if (file.exists() && file.isFile()) {
                 try (FileInputStream fis = new FileInputStream(file)) {
-                    byte[] bytes = fis.readAllBytes();
-                    validateImageBytes(bytes, imageUrl);
-                    log.info("参考图片从本地磁盘读取成功: {} ({})", localPath, bytes.length);
-                    return bytes;
+                byte[] bytes = fis.readAllBytes();
+                validateImageBytes(bytes, imageUrl);
+                bytes = compressImage(bytes);
+                log.info("参考图片从本地磁盘读取成功: {} (压缩后 {})", localPath, bytes.length);
+                return bytes;
                 } catch (IOException e) {
                     throw new RuntimeException("读取本地参考图片失败: " + localPath + ", 原因: " + e.getMessage(), e);
                 }
@@ -933,12 +938,95 @@ public class CustomerAiImageService {
 
             byte[] bytes = response.body();
             validateImageBytes(bytes, normalizedUrl);
-            return bytes;
+            return compressImage(bytes);
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
             log.error("下载图片异常: {}", imageUrl, e);
             throw new RuntimeException("下载图片失败: " + e.getMessage(), e);
+        }
+    }
+
+    /** 7MB 阈值，超过此大小才压缩 */
+    private static final int MAX_IMAGE_BYTES = 7 * 1024 * 1024; // 7,340,032 bytes
+
+    /**
+     * 压缩图片：仅当图片超过 7MB 时才压缩，通过逐步缩小尺寸使其压缩到 7MB 以内。
+     * 如果图片未超过 7MB，则原样返回。
+     * 压缩失败时降级返回原始字节，不影响主流程。
+     */
+    private byte[] compressImage(byte[] originalBytes) {
+        if (originalBytes == null || originalBytes.length == 0) {
+            return originalBytes;
+        }
+        // 未超过 7MB，无需压缩
+        if (originalBytes.length <= MAX_IMAGE_BYTES) {
+            log.info("图片 {} bytes 未超过 7MB 阈值，跳过压缩", originalBytes.length);
+            return originalBytes;
+        }
+        try {
+            java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(originalBytes);
+            BufferedImage original = ImageIO.read(bais);
+            if (original == null) {
+                log.warn("压缩图片: ImageIO.read 返回 null，无法识别图片格式，跳过压缩");
+                return originalBytes;
+            }
+
+            String mimeType = detectMimeType(originalBytes);
+            String formatName;
+            if ("image/png".equals(mimeType)) {
+                formatName = "png";
+            } else if ("image/gif".equals(mimeType)) {
+                formatName = "png"; // GIF 转为 PNG 传给 Vertex AI
+            } else {
+                formatName = "jpg"; // JPEG / WebP / 其他都输出为 JPEG
+            }
+
+            int origWidth = original.getWidth();
+            int origHeight = original.getHeight();
+            byte[] compressed = null;
+
+            // 逐步降低缩放比例，直到压缩后 <= 7MB 或缩到最小比例 0.1
+            for (double scale = 0.9; scale >= 0.1; scale -= 0.1) {
+                int newWidth = Math.max(1, (int) (origWidth * scale));
+                int newHeight = Math.max(1, (int) (origHeight * scale));
+
+                BufferedImage scaled = new BufferedImage(newWidth, newHeight, BufferedImage.TYPE_INT_RGB);
+                Graphics2D g = scaled.createGraphics();
+                g.drawImage(original, 0, 0, newWidth, newHeight, null);
+                g.dispose();
+
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                ImageIO.write(scaled, formatName, baos);
+                compressed = baos.toByteArray();
+
+                log.info("图片压缩尝试 scale={}: {} bytes -> {} bytes ({}x{} -> {}x{})",
+                        scale, originalBytes.length, compressed.length,
+                        origWidth, origHeight, newWidth, newHeight);
+
+                if (compressed.length <= MAX_IMAGE_BYTES) {
+                    break;
+                }
+            }
+
+            // 如果所有比例都无法压到 7MB 以内，取最后一次（最小尺寸）的结果
+            if (compressed == null || compressed.length == 0) {
+                log.warn("压缩图片: 所有缩放比例均失败，使用原始图片");
+                return originalBytes;
+            }
+
+            if (compressed.length >= originalBytes.length) {
+                log.warn("压缩图片: 压缩后 {} bytes 反而比原始 {} bytes 大，使用原始图片",
+                        compressed.length, originalBytes.length);
+                return originalBytes;
+            }
+
+            log.info("图片压缩完成: 原始 {} bytes -> 压缩后 {} bytes ({}x{} -> 最终格式: {})",
+                    originalBytes.length, compressed.length, origWidth, origHeight, formatName);
+            return compressed;
+        } catch (Exception e) {
+            log.warn("压缩图片失败，使用原始图片: {}", e.getMessage());
+            return originalBytes;
         }
     }
 
