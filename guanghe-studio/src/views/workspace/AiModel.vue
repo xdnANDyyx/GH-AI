@@ -48,7 +48,7 @@
               <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             <h3>AI 模特生成后将显示在此处</h3>
-            <p>请在右侧上传商品图并点击发送</p>
+            <p>请在右侧配置生成参数并点击发送</p>
           </div>
           <!-- 有结果图时：展示结果 -->
           <div v-else class="result-grid" :class="{ generating: isGenerating }">
@@ -59,7 +59,7 @@
         </div>
 
         <div class="canvas-bottom-bar">
-          <span>提示：在右侧上传商品图，在AI助手中输入需求后点击发送即可生成。</span>
+          <span>请在右侧配置生成参数并点击发送</span>
         </div>
       </div>
 
@@ -431,7 +431,7 @@
           <template v-else>
             <el-icon :size="36" color="#9CA3AF"><UploadFilled /></el-icon>
             <p class="rp-upload-text">点击或拖拽图片到此处</p>
-            <p class="rp-upload-hint">支持 JPG/PNG/WebP，最多 20MB</p>
+            <p class="rp-upload-hint">支持 JPG/PNG/WebP，单张最大 7MB</p>
           </template>
           <button v-if="reverseImagePreview" class="rp-clear-btn" @click.stop="clearReverseImage">✕</button>
         </div>
@@ -542,7 +542,7 @@ function handleReverseDrop(e) {
 }
 
 const REVERSE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-const REVERSE_MAX_SIZE = 20 * 1024 * 1024
+const REVERSE_MAX_SIZE = 7 * 1024 * 1024
 
 function handleReverseFile(file) {
   if (!REVERSE_ALLOWED_TYPES.includes(file.type)) {
@@ -550,7 +550,7 @@ function handleReverseFile(file) {
     return
   }
   if (file.size > REVERSE_MAX_SIZE) {
-    ElMessage.error('图片大小不能超过 20MB')
+    ElMessage.error('图片大小不能超过 7MB')
     return
   }
   reverseImageFile.value = file
@@ -1571,6 +1571,9 @@ function clearWorkspaceImages() {
 }
 
 .section-header.collapsible {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   cursor: pointer;
   user-select: none;
   padding: 10px 16px;

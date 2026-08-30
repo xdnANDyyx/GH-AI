@@ -51,6 +51,11 @@
                 <el-option label="启用" value="0" />
                 <el-option label="停用" value="1" />
               </el-select>
+              <el-select v-model="libraryFilters.referenced" placeholder="引用状态" clearable style="width: 130px">
+                <el-option label="全部" value="" />
+                <el-option label="已引用" value="1" />
+                <el-option label="未引用" value="0" />
+              </el-select>
               <el-button @click="fetchPromptLibrary">查询</el-button>
               <el-button type="primary" @click="openLibraryDialog()">新增选项</el-button>
             </div>
@@ -138,9 +143,9 @@
             <template #default="{ row }">{{ getGroupLabel(row.configGroup) }}</template>
           </el-table-column>
           <el-table-column prop="configName" label="配置名称" min-width="180" />
-          <el-table-column prop="configValue" label="配置值" min-width="280" show-overflow-tooltip>
+          <!-- <el-table-column prop="configValue" label="配置值" min-width="280" show-overflow-tooltip>
             <template #default="{ row }">{{ formatConfigValue(row.configValue) }}</template>
-          </el-table-column>
+          </el-table-column> -->
           <el-table-column prop="sort" label="排序" width="90" />
           <el-table-column prop="status" label="状态" width="110">
             <template #default="{ row }">
@@ -370,7 +375,7 @@
               >
                 <el-option v-for="c in promptPickerCategoryOptions" :key="c.value" :label="c.label" :value="c.value" />
               </el-select>
-              <el-select
+              <!-- <el-select
                 v-model="promptPickerScope"
                 placeholder="适用功能"
                 filterable
@@ -380,7 +385,7 @@
                 @change="onPickerCategoryManualChange"
               >
                 <el-option v-for="s in promptPickerScopeOptions" :key="s.value" :label="s.label" :value="s.value" />
-              </el-select>
+              </el-select> -->
               <el-button link type="primary" size="small" :loading="promptPickerLoading" @click="loadPromptPicker">刷新</el-button>
               <span class="option-picker-bar-hint">选中显示名即等于选中其对应提示词，值自动填为提示词Key。</span>
             </div>
@@ -414,7 +419,7 @@
                 <!-- 列表绑定类配置（图片/阴影/尺寸）：选显示名即由下拉自动填好 label、value（及宽/高），
                      无需再手动填写这些列，故隐藏它们；图片列（仅图片/阴影类有）保留供上传/填写。
                      但如果有未匹配到提示词库的项（如旧数据或提示词库缺失某选项），则保留 label/value 列显示。 -->
-                <template v-if="!((pickerBoundOptionConfig && !hasUnboundOptions) && (field.key === 'label' || field.key === 'value' || field.key === 'w' || field.key === 'h'))">
+                <template v-if="!(hideLabelValueColumns && (field.key === 'label' || field.key === 'value' || field.key === 'w' || field.key === 'h'))">
                   <el-input-number
                     v-if="field.type === 'number'"
                     v-model="item[field.key]"
@@ -469,9 +474,8 @@
               <el-icon><Plus /></el-icon>添加选项
             </el-button>
             <div class="option-tip">
-              <template v-if="isImageOptionConfig && !hasUnboundOptions">从提示词库选择显示名即自动填好名称与值（无需手动填），再为每项上传或填写图片即可。</template>
-              <template v-else-if="pickerBoundOptionConfig && !hasUnboundOptions">从提示词库选择显示名即自动填好名称与值（含尺寸），后续的值/宽/高无需手动填写。</template>
-              <template v-else-if="hasUnboundOptions">⚠️ 部分选项未能匹配到提示词库，已保留手动填写列。请从下拉选择以绑定提示词库，或直接在下方输入框中编辑值。</template>
+              <template v-if="isImageOptionConfig">从提示词库选择显示名即自动填好名称与值（无需手动填），再为每项上传或填写图片即可。</template>
+              <template v-else-if="pickerBoundOptionConfig">从提示词库选择显示名即自动填好名称与值（含尺寸），后续的值/宽/高无需手动填写。</template>
               <template v-else>每项至少填写"显示名"和"值"。可点上方"从提示词库选择"直接绑定已建好的显示名（值自动填为其提示词Key）。尺寸类配置可填宽/高；图片字段可填公网链接或上传到服务器。</template>
             </div>
           </div>
@@ -609,7 +613,7 @@ const libraryLoading = ref(false)
 const savingLibrary = ref(false)
 const libraryDialogVisible = ref(false)
 const promptLibraryList = ref([])
-const libraryFilters = reactive({ category: '', label: '', promptKey: '', scope: '', status: '' })
+const libraryFilters = reactive({ category: '', label: '', promptKey: '', scope: '', status: '', referenced: '' })
 // 存储被创作配置引用的 promptKeys
 const referencedPromptKeys = ref(new Set())
 // ===== 统一分类选项（提示词配置过滤 + 创作配置绑定共用一套值） =====
@@ -636,10 +640,10 @@ const unifiedCategoryOptions = [
   { value: 'opt_language',   label: '语言' },
   { value: 'opt_shadow',     label: '阴影' },
   { value: 'opt_line_style',  label: '线条样式' },
-  { value: 'opt_ratio',      label: '输出比例' },
+  { value: 'opt_ratio',      label: '尺寸' },
   { value: 'opt_unit',        label: '单位选择' },
-  { value: 'opt_size_template', label: '尺寸模板' },
-  { value: 'function',       label: '功能' },
+ // { value: 'opt_size_template', label: '尺寸模板' },
+  { value: 'function',       label: '约束' },
   { value: 'product',        label: '产品类别' },
   { value: 'material',       label: '材质' },
   { value: 'camera',         label: '镜头/角度' },
@@ -650,7 +654,7 @@ const unifiedCategoryOptions = [
 
 // 兼容旧值 → 新值的映射（数据迁移用，将无 opt_ 前缀的分类值转为带 opt_ 的统一值）
 const legacyCategoryMap = {
-  function:    'opt_platform',   // "功能" → 归入"平台"（前台统一 scope=platform）
+  function:    'opt_platform',   // "约束" → 归入"平台"（前台统一 scope=platform）
   platform:    'opt_platform',
   product:     'opt_platform',
   material:    'opt_platform',
@@ -670,8 +674,51 @@ const legacyCategoryMap = {
 // 废弃：promptPickerCategoryOptions（已合并到 unifiedCategoryOptions）
 // const promptPickerCategoryOptions = [...]
 
-// 提示词配置过滤用（全量分类，管理员可见所有分类）
-const libraryFilterCategoryOptions = unifiedCategoryOptions
+// 提示词配置过滤用：根据选中的工作台(scope)联动显示相关分类
+// scope → configGroup 映射，复用 promptPickerCategoryOptions 的过滤逻辑
+const scopeToConfigGroupMap = {
+  white_bg: 'white_bg',
+  change_bg: 'bg_generation',
+  ai_model: 'ai_model',
+  main_image: 'main_image',
+  detail: 'detail_img',
+  dimension: 'size_mark',
+  retouch: 'retouch',
+  banner: 'banner',
+  batch: 'batch_process'
+}
+const libraryFilterCategoryOptions = computed(() => {
+  // 未选择工作台时显示全量分类
+  if (!libraryFilters.scope) return unifiedCategoryOptions
+  const configGroup = scopeToConfigGroupMap[libraryFilters.scope]
+  if (!configGroup) return unifiedCategoryOptions
+  const optList = unifiedCategoryOptions.filter(o => o.value.startsWith('opt_'))
+  let allowed = []
+  if (configGroup === 'white_bg') {
+    allowed = ['opt_shadow', 'opt_size']
+  } else if (configGroup === 'bg_generation') {
+    allowed = ['opt_platform', 'opt_scene', 'opt_light', 'opt_style', 'opt_size']
+  } else if (configGroup === 'main_image') {
+    allowed = ['opt_platform', 'opt_size', 'opt_purpose', 'opt_selling', 'opt_language']
+  } else if (configGroup === 'detail_img') {
+    allowed = ['opt_platform', 'opt_size', 'opt_selling', 'opt_page', 'opt_language']
+  } else if (configGroup === 'size_mark') {
+    allowed = ['opt_line_style', 'opt_size', 'opt_size_template', 'opt_unit', 'opt_language']
+  } else if (configGroup === 'retouch') {
+    allowed = ['opt_tool', 'opt_quality', 'opt_format', 'opt_size']
+  } else if (configGroup === 'ai_model') {
+    allowed = ['opt_gender', 'opt_age', 'opt_hairstyle', 'opt_ethnicity', 'opt_pose', 'opt_clothing', 'opt_scene', 'opt_size']
+  } else if (configGroup === 'banner') {
+    allowed = ['opt_size', 'opt_banner_type', 'opt_purpose', 'opt_language']
+  } else if (configGroup === 'batch_process') {
+    allowed = ['opt_selling', 'opt_format', 'opt_quality', 'opt_size', 'opt_language']
+  }
+  // "约束"分类（function）始终出现在各工作台的联动分类列表中
+  const functionOption = unifiedCategoryOptions.find(o => o.value === 'function')
+  const filtered = optList.filter(o => allowed.includes(o.value))
+  if (functionOption) filtered.push(functionOption)
+  return filtered
+})
 
 // 创作配置绑定用（从统一列表中只取 opt_ 开头的 UI 选项库分类；AI白底图仅显示阴影+尺寸；白底图生成背景仅显示平台/场景/光线/风格/尺寸；主图设计仅显示平台/尺寸/用途/卖点；详情图/A+仅显示平台/尺寸/卖点/详情页模块）
 const promptPickerCategoryOptions = computed(() => {
@@ -689,7 +736,7 @@ const promptPickerCategoryOptions = computed(() => {
     return optList.filter(o => ['opt_platform', 'opt_size', 'opt_selling', 'opt_page', 'opt_language'].includes(o.value))
   }
   if (creationForm.configGroup === 'size_mark') {
-    return optList.filter(o => ['opt_line_style', 'opt_ratio', 'opt_size_template', 'opt_unit', 'opt_language'].includes(o.value))
+    return optList.filter(o => ['opt_line_style', 'opt_size', 'opt_size_template', 'opt_unit', 'opt_language'].includes(o.value))
   }
   if (creationForm.configGroup === 'retouch') {
     return optList.filter(o => ['opt_tool', 'opt_quality', 'opt_format', 'opt_size'].includes(o.value))
@@ -698,7 +745,7 @@ const promptPickerCategoryOptions = computed(() => {
     return optList.filter(o => ['opt_gender', 'opt_age', 'opt_hairstyle', 'opt_ethnicity', 'opt_pose', 'opt_clothing', 'opt_scene', 'opt_size'].includes(o.value))
   }
   if (creationForm.configGroup === 'banner') {
-    return optList.filter(o => ['opt_size', 'opt_banner_type', 'opt_purpose'].includes(o.value))
+    return optList.filter(o => ['opt_size', 'opt_banner_type', 'opt_purpose', 'opt_language'].includes(o.value))
   }
   if (creationForm.configGroup === 'batch_process') {
     return optList.filter(o => ['opt_selling', 'opt_format', 'opt_quality', 'opt_size', 'opt_language'].includes(o.value))
@@ -715,7 +762,7 @@ const creationGroupOptions = [
   { value: 'main_image', label: '主图设计', desc: '平台、画布尺寸、用途', icon: '📸' },
   { value: 'detail_img', label: '详情图/A+', desc: '页面尺寸、卖点、结构', icon: '📄' },
   { value: 'banner', label: 'Banner设计', desc: '画布尺寸、类型、目的', icon: '🎯' },
-  { value: 'size_mark', label: '尺寸标记', desc: '线条样式、输出比例', icon: '📏' },
+  { value: 'size_mark', label: '尺寸标记', desc: '线条样式、尺寸', icon: '📏' },
   { value: 'batch_process', label: '批量生成', desc: '卖点、输出设置', icon: '⚡' }
 ]
 
@@ -860,7 +907,7 @@ function inferPromptCategory(configKey) {
     page_sizes: 'opt_size',
     language_options: 'opt_language',
     content_structure: 'opt_page',
-    ratio_options: 'opt_ratio',
+    ratio_options: 'opt_size',
     line_styles: 'opt_line_style',
     templates: 'opt_size_template',
     unit_options: 'opt_unit',
@@ -1080,13 +1127,9 @@ const pickerBoundOptionConfig = computed(() =>
   !!inferPromptCategory(creationForm.configKey)
   && !['max_generate_count', 'max_selling_count', 'size_min', 'size_max'].includes(creationForm.configKey)
 )
-// 是否所有选项项都已匹配到提示词库（如果有未匹配的项，保留 label/value 列显示，避免用户看不到旧数据）
-const hasUnboundOptions = computed(() => {
-  if (!pickerBoundOptionConfig.value || creationEditorType.value !== 'options') return false
-  if (promptPickerItems.value.length === 0) return false
-  const pickerKeys = new Set(promptPickerItems.value.map(p => p.promptKey))
-  return creationOptions.value.some(item => !item._pickerKey || !pickerKeys.has(item._pickerKey))
-})
+// 绑定类配置一律隐藏 label/value/w/h 列，不保留"未匹配时回显"的逻辑
+// （新增选项和已有选项都只通过提示词库下拉选择，不需要手动填写这两列）
+const hideLabelValueColumns = computed(() => pickerBoundOptionConfig.value)
 // 兼容旧名（图片/阴影类专用分支用），等价于 pickerBoundOptionConfig && 含图片列
 const isImageOptionConfig = computed(() =>
   imageOptionKeys.includes(creationForm.configKey) && !!inferPromptCategory(creationForm.configKey)
@@ -1721,8 +1764,9 @@ async function handleDeleteTag(row) {
   }
 }
 
-// 工作台选择联动：选择后重置分页并自动查询
+// 工作台选择联动：选择后清空分类（避免选中不属于新工作台的分类），重置分页并自动查询
 function onLibraryScopeChange() {
+  libraryFilters.category = ''
   libraryPageNum.value = 1
   fetchPromptLibrary()
 }
@@ -1739,11 +1783,18 @@ async function fetchPromptLibrary() {
       scope: libraryFilters.scope || undefined,
       status: libraryFilters.status || undefined
     })
-    promptLibraryList.value = res.rows || []
-    libraryTotal.value = res.total || 0
-
-    // 收集被创作配置引用的 promptKeys
+    // 先收集引用关系，确保引用状态筛选能正确生效
     await collectReferencedPromptKeys()
+
+    // 引用状态筛选（前端二次过滤，因为引用状态是前端计算的）
+    let rows = res.rows || []
+    if (libraryFilters.referenced === '1') {
+      rows = rows.filter(row => referencedPromptKeys.value.has(row.promptKey))
+    } else if (libraryFilters.referenced === '0') {
+      rows = rows.filter(row => !referencedPromptKeys.value.has(row.promptKey))
+    }
+    promptLibraryList.value = rows
+    libraryTotal.value = rows.length
   } catch (error) {
     ElMessage.error(error.message || '获取提示词选项库失败')
   } finally {

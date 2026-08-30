@@ -47,7 +47,7 @@ export function useBatchTasks() {
       designType: data.designType || '批量生成',
       materialCount: data.materialCount || '',
       genCount: data.genCount || 1,
-      status: 'queued',          // queued | processing | done | failed
+      status: 'queued',          // queued | processing | done | failed | cancelled
       statusText: '排队中',
       statusClass: 'orange',
       progress: null,
@@ -74,10 +74,11 @@ export function useBatchTasks() {
       // 自动维护 statusText / statusClass / progress
       if (patch.status) {
         const statusMap = {
-          queued:    { statusText: '排队中',  statusClass: 'orange', progress: null },
-          processing:{ statusText: '生成中',  statusClass: 'blue',   progress: patch.progress ?? t.progress ?? 0 },
-          done:      { statusText: '已完成',  statusClass: 'green',  progress: 100 },
-          failed:    { statusText: '生成失败', statusClass: 'red',    progress: null },
+          queued:     { statusText: '排队中',  statusClass: 'orange', progress: null },
+          processing: { statusText: '生成中',  statusClass: 'blue',   progress: patch.progress ?? t.progress ?? 0 },
+          done:       { statusText: '已完成',  statusClass: 'green',  progress: 100 },
+          failed:     { statusText: '生成失败', statusClass: 'red',    progress: null },
+          cancelled:  { statusText: '已取消',  statusClass: 'gray',   progress: null },
         }
         const meta = statusMap[patch.status]
         if (meta) {

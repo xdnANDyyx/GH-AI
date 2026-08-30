@@ -86,7 +86,7 @@
                   <div class="panel-upload-zone" @click.stop="triggerUpload" @dragover.prevent @drop.prevent="handleDrop">
                     <el-icon :size="28" color="#2563FF"><UploadFilled /></el-icon>
                     <p class="panel-upload-text">点击或拖拽图片到此处上传</p>
-                    <p class="panel-upload-hint">支持 JPG/PNG/WebP，最多 20MB</p>
+                    <p class="panel-upload-hint">支持 JPG/PNG/WebP，单张最大 7MB</p>
                   </div>
                   <div v-if="originalFile" class="uploaded-file-info">
                     <div class="file-preview">
@@ -254,7 +254,7 @@
           <template v-else>
             <el-icon :size="36" color="#9CA3AF"><UploadFilled /></el-icon>
             <p class="rp-upload-text">点击或拖拽图片到此处</p>
-            <p class="rp-upload-hint">支持 JPG/PNG/WebP，最多 20MB</p>
+            <p class="rp-upload-hint">支持 JPG/PNG/WebP，单张最大 7MB</p>
           </template>
           <button v-if="reverseImagePreview" class="rp-clear-btn" @click.stop="clearReverseImage">✕</button>
         </div>
@@ -548,7 +548,7 @@ function handleFileSelect(e) {
 
 // ===== 文件校验 =====
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB
+const MAX_FILE_SIZE = 7 * 1024 * 1024 // 7MB
 
 function validateAndRead(file) {
   // 格式校验
@@ -558,7 +558,7 @@ function validateAndRead(file) {
   }
   // 大小校验
   if (file.size > MAX_FILE_SIZE) {
-    ElMessage.error('图片大小不能超过 20MB')
+    ElMessage.error('图片大小不能超过 7MB')
     return
   }
   readFile(file)
@@ -679,7 +679,7 @@ function handleReverseDrop(e) {
 }
 
 const REVERSE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-const REVERSE_MAX_SIZE = 20 * 1024 * 1024
+const REVERSE_MAX_SIZE = 7 * 1024 * 1024
 
 function handleReverseFile(file) {
   if (!REVERSE_ALLOWED_TYPES.includes(file.type)) {
@@ -687,7 +687,7 @@ function handleReverseFile(file) {
     return
   }
   if (file.size > REVERSE_MAX_SIZE) {
-    ElMessage.error('图片大小不能超过 20MB')
+    ElMessage.error('图片大小不能超过 7MB')
     return
   }
   reverseImageFile.value = file
@@ -1069,12 +1069,13 @@ watch(() => [resultImages.value.length, isGenerating.value], () => {
 })
 
 function clearWorkspaceImages() {
-  originalImage.value = ''
-  outputSize.value = ''
-  customWidth.value = 1000
-  customHeight.value = 1000
-  language.value = 'zh-CN'
-  gen.reset()
+originalImage.value = ''
+originalFile.value = null
+outputSize.value = ''
+customWidth.value = 1000
+customHeight.value = 1000
+language.value = 'zh-CN'
+gen.reset()
 }
 </script>
 

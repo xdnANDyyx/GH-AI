@@ -15,7 +15,7 @@ INSERT INTO `gh_creation_config` (`config_group`,`config_key`,`config_name`,`con
 ('common','max_generate_count','单次最大生成数量','10',2,'0','限制单次生图最大数量'),
 ('common','default_generate_count','默认生成数量','3',3,'0','默认生图数量'),
 ('common','supported_formats','支持的图片格式','["JPG","PNG","WebP"]',4,'0','上传支持的格式'),
-('common','max_upload_size','单张最大上传(MB)','20',5,'0','单张图片大小限制'),
+('common','max_upload_size','单张最大上传(MB)','7',5,'0','单张图片大小限制'),
 ('common','max_product_images','产品图最大数量','10',6,'0','产品图上传上限'),
 ('common','max_ref_images','参考图最大数量','10',7,'0','参考图上传上限');
 
@@ -102,17 +102,19 @@ INSERT INTO `gh_creation_config` (`config_group`,`config_key`,`config_name`,`con
 ('banner','purposes','核心目的','[{"key":"sales","label":"提升销量/促销转化"},{"key":"newProduct","label":"新品推广"},{"key":"branding","label":"品牌宣传/提升认知"},{"key":"traffic","label":"活动宣传/引流"},{"key":"clearance","label":"清仓/库存处理"},{"key":"festival","label":"节日营销"},{"key":"shopImage","label":"店铺形象展示"},{"key":"other","label":"其他"}]',3,'0','Banner核心目的(可多选)'),
 ('banner','max_generate_count','生成数量上限','10',4,'0','Banner生成数量上限'),
 ('banner','title_max_length','主标题最大长度','30',5,'0','主标题字数限制'),
-('banner','subtitle_max_length','副标题最大长度','50',6,'0','副标题字数限制');
+('banner','subtitle_max_length','副标题最大长度','50',6,'0','副标题字数限制'),
+('banner','language_options','语言列表','[{"label":"中文（简体）","value":"zh-CN"},{"label":"英语（美国）","value":"en-US"},{"label":"英语（英国）","value":"en-GB"},{"label":"日语","value":"ja-JP"},{"label":"韩语","value":"ko-KR"},{"label":"德语","value":"de-DE"},{"label":"法语","value":"fr-FR"},{"label":"西班牙语","value":"es-ES"}]',7,'0','Banner语言选项');
 
 -- ============================================================
 -- 9. 尺寸标记 size_mark
 -- ============================================================
 INSERT INTO `gh_creation_config` (`config_group`,`config_key`,`config_name`,`config_value`,`sort`,`status`,`remark`) VALUES
 ('size_mark','line_styles','线条样式','[{"label":"实线","value":"solid"},{"label":"虚线1","value":"dashed1"},{"label":"虚线2","value":"dashed2"}]',1,'0','尺寸线样式'),
-('size_mark','ratio_options','输出比例','[{"label":"1:1","value":"1:1"},{"label":"4:3","value":"4:3"},{"label":"3:4","value":"3:4"},{"label":"16:9","value":"16:9"},{"label":"9:16","value":"9:16"},{"label":"自定义","value":"custom"}]',2,'0','输出比例选择'),
+('size_mark','ratio_options','尺寸','[{"label":"1:1","value":"1:1"},{"label":"4:3","value":"4:3"},{"label":"3:4","value":"3:4"},{"label":"16:9","value":"16:9"},{"label":"9:16","value":"9:16"},{"label":"自定义","value":"custom"}]',2,'0','尺寸选择'),
 ('size_mark','templates','模板选择','[{"label":"标准尺寸图","value":"standard"},{"label":"多尺寸对比","value":"compare"},{"label":"场景尺寸图","value":"scene"},{"label":"更多模板","value":"more"}]',3,'0','尺寸标记模板'),
 ('size_mark','unit_options','单位选择','[{"label":"cm","value":"cm"},{"label":"in","value":"in"}]',4,'0','尺寸单位'),
-('size_mark','max_product_images','产品图最大数量','10',5,'0','尺寸标记产品图上限');
+('size_mark','max_product_images','产品图最大数量','10',5,'0','尺寸标记产品图上限'),
+('size_mark','language_options','语言列表','[{"label":"中文（简体）","value":"zh-CN"},{"label":"英语（美国）","value":"en-US"},{"label":"英语（英国）","value":"en-GB"},{"label":"日语","value":"ja-JP"},{"label":"韩语","value":"ko-KR"},{"label":"德语","value":"de-DE"},{"label":"法语","value":"fr-FR"},{"label":"西班牙语","value":"es-ES"}]',6,'0','尺寸标记语言选项');
 
 -- ============================================================
 -- 10. 批量生成 batch_process
@@ -122,8 +124,8 @@ INSERT INTO `gh_creation_config` (`config_group`,`config_key`,`config_name`,`con
 ('batch_process','format_options','图片格式','[{"label":"JPG","value":"JPG"},{"label":"PNG","value":"PNG"},{"label":"WebP","value":"WebP"}]',2,'0','输出格式'),
 ('batch_process','quality_options','画质选项','[{"label":"标准","value":"standard"},{"label":"高清","value":"hd"},{"label":"超清","value":"ultra"}]',3,'0','输出画质'),
 ('batch_process','size_options','尺寸设置','[{"label":"2000×2000","value":"2000x2000","w":2000,"h":2000},{"label":"1500×1500","value":"1500x1500","w":1500,"h":1500},{"label":"1000×1000","value":"1000x1000","w":1000,"h":1000},{"label":"自定义","value":"custom","w":0,"h":0}]',4,'0','输出尺寸'),
-('batch_process','max_product_images','产品图最大数量','50',5,'0','批量产品图上限'),
-('batch_process','max_ref_images','参考图最大数量','20',6,'0','批量参考图上限'),
+('batch_process','max_product_images','产品图最大数量','10',5,'0','批量产品图上限'),
+('batch_process','max_ref_images','参考图最大数量','10',6,'0','批量参考图上限'),
 ('batch_process','max_generate_count','单产品最大生成数','99',7,'0','每个产品最多生成数'),
 ('batch_process','language_options','语言列表','[{"label":"中文（简体）","value":"zh-CN"},{"label":"英语（美国）","value":"en-US"},{"label":"英语（英国）","value":"en-GB"},{"label":"日语","value":"ja-JP"},{"label":"韩语","value":"ko-KR"},{"label":"德语","value":"de-DE"},{"label":"法语","value":"fr-FR"},{"label":"西班牙语","value":"es-ES"}]',8,'0','批量生成语言选项');
 

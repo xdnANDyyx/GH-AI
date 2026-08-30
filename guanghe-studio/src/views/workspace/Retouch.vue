@@ -26,7 +26,7 @@
               <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             <h3>AI 精修结果生成后将显示在此处</h3>
-            <p>请在右侧上传图片并点击发送</p>
+            <p>请在右侧配置生成参数并点击发送</p>
           </div>
           <!-- 已生成：显示结果图 -->
           <div v-else class="result-view">
@@ -221,7 +221,7 @@
           <template v-else>
             <el-icon :size="36" color="#9CA3AF"><UploadFilled /></el-icon>
             <p class="rp-upload-text">点击或拖拽图片到此处</p>
-            <p class="rp-upload-hint">支持 JPG/PNG/WebP，最多 20MB</p>
+            <p class="rp-upload-hint">支持 JPG/PNG/WebP，单张最大 7MB</p>
           </template>
           <button v-if="reverseImagePreview" class="rp-clear-btn" @click.stop="clearReverseImage">✕</button>
         </div>
@@ -730,7 +730,7 @@ console.error('精修生成失败:', e)
     const REVERSE_DEFAULT_PROMPT = `请对原图进行逆向视觉解构，推测其生成逻辑与核心构成元素。请以结构化、专业的中文提示词格式输出，需涵盖：结构布局与质感；关键细节；技术参数与视角。 输出结果应具有高度可复用性，能直接用于引导图像生成。`
     const reversePromptInput = ref(REVERSE_DEFAULT_PROMPT)
     const REVERSE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-    const REVERSE_MAX_SIZE = 20 * 1024 * 1024
+    const REVERSE_MAX_SIZE = 7 * 1024 * 1024
 
     function openReversePromptDialog() {
       reverseDialogVisible.value = true
@@ -759,8 +759,8 @@ console.error('精修生成失败:', e)
         ElMessage.error('仅支持 JPG / PNG / WebP 格式的图片')
         return
       }
-      if (file.size > REVERSE_MAX_SIZE) {
-        ElMessage.error('图片大小不能超过 20MB')
+if (file.size > REVERSE_MAX_SIZE) {
+    ElMessage.error('图片大小不能超过 7MB')
         return
       }
       reverseImageFile.value = file
@@ -859,6 +859,7 @@ console.error('精修生成失败:', e)
       clearReverseImage, submitReversePrompt, copyResult,
       // ---- AiAssistant ----
       isGenerating, genProgress, genStatus, genError, aiAssistantRef, handleGenerate,
+      clearWorkspaceImages,
     }
   }
 }

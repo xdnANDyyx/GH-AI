@@ -23,7 +23,7 @@
               <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             <h3>AI 尺寸图生成后将显示在此处</h3>
-            <p>请在右侧上传商品图并点击生成</p>
+            <p>请在右侧配置生成参数并点击发送</p>
           </div>
           <!-- 有结果图时：展示结果 -->
           <div v-else class="result-grid" :class="{ generating: isGenerating }">
@@ -78,7 +78,7 @@
                 <div class="panel-upload-zone" @click.stop="triggerUpload" @dragover.prevent @drop.prevent="handleDrop">
                   <el-icon :size="28" color="#2563FF"><UploadFilled /></el-icon>
                   <p class="panel-upload-text">点击或拖拽图片到此处上传</p>
-                  <p class="panel-upload-hint">支持 JPG / PNG / WEBP，最大 20MB</p>
+                  <p class="panel-upload-hint">支持 JPG / PNG / WEBP，单张最大 7MB</p>
                 </div>
                 <div v-if="uploadedFiles.length" class="uploaded-images-list">
                   <div v-for="(f, i) in uploadedFiles" :key="i" class="uploaded-thumb-wrap">
@@ -307,7 +307,7 @@
           <template v-else>
             <el-icon :size="36" color="#9CA3AF"><UploadFilled /></el-icon>
             <p class="rp-upload-text">点击或拖拽图片到此处</p>
-            <p class="rp-upload-hint">支持 JPG/PNG/WebP，最多 20MB</p>
+            <p class="rp-upload-hint">支持 JPG/PNG/WebP，单张最大 7MB</p>
           </template>
           <button v-if="reverseImagePreview" class="rp-clear-btn" @click.stop="clearReverseImage">✕</button>
         </div>
@@ -639,17 +639,26 @@ export default {
           }
         }
 
-        // ---- 语言列表（从通用配置加载） ----
+        // ---- 语言列表（优先从尺寸标记配置加载，回退到通用配置） ----
         try {
-          const commonRes = await getPublicCreationConfigByGroup('common')
-          const commonList = commonRes.data || commonRes.rows || []
-          const commonMap = {}
-          commonList.forEach(c => { commonMap[c.configKey] = c })
-          const langCfg = commonMap.languages
+          const langCfg = map.language_options
           if (langCfg && langCfg.configValue) {
             const items = JSON.parse(langCfg.configValue)
             if (Array.isArray(items) && items.length) {
               languages.value = items.filter(l => l.value)
+            }
+          } else {
+            // 回退到通用配置
+            const commonRes = await getPublicCreationConfigByGroup('common')
+            const commonList = commonRes.data || commonRes.rows || []
+            const commonMap = {}
+            commonList.forEach(c => { commonMap[c.configKey] = c })
+            const commonLangCfg = commonMap.languages
+            if (commonLangCfg && commonLangCfg.configValue) {
+              const items = JSON.parse(commonLangCfg.configValue)
+              if (Array.isArray(items) && items.length) {
+                languages.value = items.filter(l => l.value)
+              }
             }
           }
         } catch { /* use defaults */ }
@@ -807,15 +816,15 @@ export default {
     }
 
     const REVERSE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-    const REVERSE_MAX_SIZE = 20 * 1024 * 1024
+    const REVERSE_MAX_SIZE = 7 * 1024 * 1024
 
     function handleReverseFile(file) {
       if (!REVERSE_ALLOWED_TYPES.includes(file.type)) {
         ElMessage.error('仅支持 JPG / PNG / WebP 格式的图片')
         return
       }
-      if (file.size > REVERSE_MAX_SIZE) {
-        ElMessage.error('图片大小不能超过 20MB')
+if (file.size > REVERSE_MAX_SIZE) {
+    ElMessage.error('图片大小不能超过 7MB')
         return
       }
       reverseImageFile.value = file
@@ -907,6 +916,7 @@ export default {
       startColResize, startAiResize,
       // ---- AiAssistant ----
       isGenerating, genProgress, genStatus, genError, aiAssistantRef, handleGenerate,
+      clearWorkspaceImages,
       // ---- 反推提示词 ----
       reverseDialogVisible, reverseImageFile, reverseImagePreview, reverseResult, reverseLoading,
       reversePromptInput, openReversePromptDialog, triggerReverseUpload, handleReverseDrop,

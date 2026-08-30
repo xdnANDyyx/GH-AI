@@ -52,18 +52,33 @@
         </div>
           -->
         <!-- Canvas Area -->
-        <div class="canvas-box"
-        >
+        <div class="canvas-box">
           <!-- <CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" /> -->
-          <div class="canvas-placeholder">
+          <!-- 未生成：显示空状态 -->
+          <div v-if="resultImages.length === 0" class="canvas-placeholder">
             <svg viewBox="0 0 64 64" fill="none">
               <rect x="8" y="12" width="48" height="40" rx="4" stroke="#D1D5DB" stroke-width="2"/>
               <circle cx="24" cy="26" r="5" stroke="#D1D5DB" stroke-width="1.5"/>
               <path d="M8 44l16-14 10 10 10-14 12 12" stroke="#D1D5DB" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <h3>拖拽图片到画布，或从右侧上传素材</h3>
-            <p>支持 JPG / PNG / WebP，建议尺寸 ≥ 1200px</p>
-            <p>建议使用高质量素材，获得更佳生成效果</p>
+            <h3>AI 批量处理结果生成后将显示在此处</h3>
+            <p>请在右侧配置生成参数并点击发送</p>
+          </div>
+          <!-- 有结果图时：网格展示 -->
+          <div v-else class="canvas-result-grid">
+            <div
+              v-for="(img, i) in resultImages"
+              :key="i"
+              class="canvas-result-item"
+              @click="previewImage(img.url || img)"
+            >
+              <img :src="img.url || img" class="canvas-result-img" />
+            </div>
+          </div>
+          <!-- 生成中：显示进度 -->
+          <div v-if="isGenerating" class="canvas-loading">
+            <div class="loading-spinner"></div>
+            <p>{{ genStatus || '生成中...' }}</p>
           </div>
         </div>
 
@@ -220,7 +235,7 @@
                     <div class="upload-zone" @click="triggerProductUpload">
                       <svg viewBox="0 0 28 28" fill="none"><path d="M14 7v10M10 11l4-4 4 4" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 18v4a2 2 0 002 2h12a2 2 0 002-2v-4" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                       <div class="upload-text">点击上传产品图</div>
-                      <div class="upload-hint">支持 JPG / PNG / WebP，最多 50 张</div>
+                      <div class="upload-hint">支持 JPG / PNG / WebP，最多 10 张</div>
                     </div>
                     <div class="upload-count">
                       <span class="upload-count-text">已上传 <strong>{{ productImages.length }}</strong> / 50</span>
@@ -235,7 +250,7 @@
                     <div class="upload-zone" @click="triggerRefUpload">
                       <svg viewBox="0 0 28 28" fill="none"><path d="M14 7v10M10 11l4-4 4 4" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 18v4a2 2 0 002 2h12a2 2 0 002-2v-4" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                       <div class="upload-text">点击上传参考图</div>
-                      <div class="upload-hint">支持 JPG / PNG / WebP，最多 20 张</div>
+                      <div class="upload-hint">支持 JPG / PNG / WebP，最多 10 张</div>
                     </div>
                     <div class="upload-count">
                       <span class="upload-count-text">已上传 <strong>{{ refImages.length }}</strong> / 20</span>
@@ -450,7 +465,7 @@
           <template v-else>
             <el-icon :size="36" color="#9CA3AF"><UploadFilled /></el-icon>
             <p class="rp-upload-text">点击或拖拽图片到此处</p>
-            <p class="rp-upload-hint">支持 JPG/PNG/WebP，最多 20MB</p>
+            <p class="rp-upload-hint">支持 JPG/PNG/WebP，单张最大 7MB</p>
           </template>
           <button v-if="reverseImagePreview" class="rp-clear-btn" @click.stop="clearReverseImage">✕</button>
         </div>
@@ -510,6 +525,10 @@ const isGenerating = computed(() => gen.generating.value)
 const genProgress = computed(() => gen.progress.value)
 const genStatus = computed(() => gen.statusText.value)
 const genError = computed(() => gen.error.value)
+const resultImages = computed(() => gen.resultImages.value.map(img => {
+  const url = img.url || img
+  return { url }
+}))
 
 // ==================== AI Assistant ====================
 const aiAssistantRef = ref(null)
@@ -546,7 +565,7 @@ function handleReverseDrop(e) {
 }
 
 const REVERSE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-const REVERSE_MAX_SIZE = 20 * 1024 * 1024
+const REVERSE_MAX_SIZE = 7 * 1024 * 1024
 
 function handleReverseFile(file) {
   if (!REVERSE_ALLOWED_TYPES.includes(file.type)) {
@@ -554,7 +573,7 @@ function handleReverseFile(file) {
     return
   }
   if (file.size > REVERSE_MAX_SIZE) {
-    ElMessage.error('图片大小不能超过 20MB')
+    ElMessage.error('图片大小不能超过 7MB')
     return
   }
   reverseImageFile.value = file
@@ -699,11 +718,11 @@ function triggerRefUpload() {
 }
 function handleProductUpload(e) {
   const files = Array.from(e.target.files || [])
-  productImages.value = [...productImages.value, ...files].slice(0, 50)
+  productImages.value = [...productImages.value, ...files].slice(0, 10)
 }
 function handleRefUpload(e) {
   const files = Array.from(e.target.files || [])
-  refImages.value = [...refImages.value, ...files].slice(0, 20)
+  refImages.value = [...refImages.value, ...files].slice(0, 10)
 }
 
 // ==================== Selling Points ====================
@@ -851,12 +870,33 @@ return
 }
 console.error('批量生成失败:', e)
     stopProgressSimulation()
-    updateTask(task.id, { status: 'failed' })
-    const isTimeout = e?.code === 'ECONNABORTED'
-      || /timeout|超时|人数过多|繁忙|busy/i.test(e?.message || '')
-    ElMessage.error(isTimeout
-      ? '当前模型使用人数过多，可选用其他模型生图或稍后再试'
-      : '生成失败，请稍后重试')
+    // 即使 fullGenerate 抛出了异常，但如果已经拿到了结果图片，说明生成本身是成功的
+    // （常见于 fullGenerate 内部重试逻辑中，图片已返回但后续重试抛错的场景）
+    if (gen.resultImages.value && gen.resultImages.value.length > 0) {
+      const resultImages = gen.resultImages.value.map(img => {
+        const url = img.url || img
+        return { url }
+      })
+      updateTask(task.id, {
+        status: 'done',
+        progress: 100,
+        resultImages,
+      })
+    } else {
+      updateTask(task.id, { status: 'failed' })
+      const isTimeout = e?.code === 'ECONNABORTED'
+        || /timeout|超时|人数过多|繁忙|busy|timed out/i.test(e?.message || '')
+      const errorMsg = e?.message || ''
+      if (isTimeout) {
+        ElMessage.error('生成超时，当前模型处理时间较长，请稍后重试或减少图片数量')
+      } else if (/network|网络|ECONNREFUSED|ERR_NETWORK/i.test(errorMsg)) {
+        ElMessage.error('网络连接异常，请检查网络后重试')
+      } else if (errorMsg) {
+        ElMessage.error('生成失败：' + errorMsg)
+      } else {
+        ElMessage.error('生成失败，请稍后重试')
+      }
+    }
   } finally {
     generating.value = false
     stopProgressSimulation()
@@ -1284,15 +1324,16 @@ function clearWorkspaceImages() {
 
 /* Canvas Box */
 .canvas-box {
-  flex: 1;
-  border: 2px dashed #E8EDF5;
-  border-radius: 12px;
-  background: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  min-height: 200px;
+flex: 1;
+border: 2px dashed #E8EDF5;
+border-radius: 12px;
+background: #fff;
+display: flex;
+align-items: center;
+justify-content: center;
+overflow: hidden;
+min-height: 200px;
+position: relative;
 }
 .canvas-placeholder {
 display: flex;
@@ -1319,6 +1360,67 @@ font-weight: 500;
 .canvas-placeholder p {
 font-size: 12px;
 color: #9CA3AF;
+}
+
+/* Canvas Result Grid */
+.canvas-result-grid {
+display: grid;
+grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+gap: 10px;
+padding: 12px;
+width: 100%;
+height: 100%;
+overflow-y: auto;
+align-content: start;
+}
+.canvas-result-item {
+border-radius: 8px;
+overflow: hidden;
+border: 1px solid #E8EDF5;
+aspect-ratio: 1;
+cursor: pointer;
+transition: border-color 0.2s, transform 0.15s;
+}
+.canvas-result-item:hover {
+border-color: #2563FF;
+transform: scale(1.02);
+}
+.canvas-result-img {
+width: 100%;
+height: 100%;
+object-fit: cover;
+display: block;
+}
+
+/* Canvas Loading Overlay */
+.canvas-loading {
+position: absolute;
+top: 0;
+left: 0;
+right: 0;
+bottom: 0;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+gap: 12px;
+background: rgba(255, 255, 255, 0.85);
+z-index: 10;
+}
+.loading-spinner {
+width: 36px;
+height: 36px;
+border: 3px solid #E8EDF5;
+border-top-color: #2563FF;
+border-radius: 50%;
+animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+to { transform: rotate(360deg); }
+}
+.canvas-loading p {
+font-size: 13px;
+color: #6B7280;
 }
 
 /* Task Card */
@@ -1461,6 +1563,7 @@ color: #9CA3AF;
 .status-dot.orange { color: #F59E0B; }
 .status-dot.green { color: #22C55E; }
 .status-dot.red { color: #EF4444; }
+.status-dot.gray { color: #9CA3AF; }
 
 .progress-cell {
   display: flex;
@@ -1479,6 +1582,7 @@ color: #9CA3AF;
 .progress-fill.blue { background: #2563FF; }
 .progress-fill.green { background: #22C55E; }
 .progress-fill.orange { background: #F59E0B; }
+.progress-fill.gray { background: #9CA3AF; }
 .progress-text {
   font-size: 12px;
   color: #6B7280;

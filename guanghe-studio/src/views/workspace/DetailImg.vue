@@ -329,7 +329,7 @@
           <template v-else>
             <el-icon :size="36" color="#9CA3AF"><UploadFilled /></el-icon>
             <p class="rp-upload-text">点击或拖拽图片到此处</p>
-            <p class="rp-upload-hint">支持 JPG/PNG/WebP，最多 20MB</p>
+            <p class="rp-upload-hint">支持 JPG/PNG/WebP，单张最大 7MB</p>
           </template>
           <button v-if="reverseImagePreview" class="rp-clear-btn" @click.stop="clearReverseImage">✕</button>
         </div>
@@ -749,7 +749,7 @@ const reverseResult = ref('')
 const reverseLoading = ref(false)
 
 const REVERSE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-const REVERSE_MAX_SIZE = 20 * 1024 * 1024
+const REVERSE_MAX_SIZE = 7 * 1024 * 1024
 
 function openReversePromptDialog() {
   reverseDialogVisible.value = true
@@ -779,7 +779,7 @@ function handleReverseFile(file) {
     return
   }
   if (file.size > REVERSE_MAX_SIZE) {
-    ElMessage.error('图片大小不能超过 20MB')
+    ElMessage.error('图片大小不能超过 7MB')
     return
   }
   reverseImageFile.value = file

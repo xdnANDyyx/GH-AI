@@ -19,8 +19,8 @@
             <!-- 无图片时显示上传占位 -->
             <div class="upload-placeholder" v-if="!originalImage">
               <el-icon :size="48" color="#9CA3AF"><Picture /></el-icon>
-              <p class="upload-main-text">拖拽图片到画布，或从右侧上传</p>
-              <p class="upload-sub-text">支持 JPG / PNG 格式，最多 20MB</p>
+              <p class="upload-main-text">请在右侧配置生成参数并点击发送</p>
+              <p class="upload-sub-text">支持 JPG / PNG 格式，单张最大 7MB</p>
             </div>
             <!-- 有原图但还没生成结果 -->
             <div class="upload-preview" v-else-if="!resultImages.length">
@@ -75,7 +75,7 @@
                 <div class="panel-upload-zone" @click.stop="triggerUpload" @dragover.prevent @drop.prevent="handleDrop">
                   <el-icon :size="32" color="#2563FF"><UploadFilled /></el-icon>
                   <p class="panel-upload-text">点击或拖拽图片到此处上传</p>
-                  <p class="panel-upload-hint">支持 JPG/PNG，最多 20MB</p>
+                  <p class="panel-upload-hint">支持 JPG/PNG，单张最大 7MB</p>
                 </div>
               </div>
             </div>

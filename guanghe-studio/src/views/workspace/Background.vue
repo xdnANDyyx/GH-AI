@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿<template>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<template>
   <div class="workspace-page">
     <!-- Three-column layout -->
     <div class="three-col">
@@ -21,7 +21,7 @@
         <div class="canvas-box">
           <!-- <CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" /> -->
           <!-- 未生成：显示空状态 -->
-          <div v-if="resultImages.length === 0" class="canvas-placeholder">
+          <div v-if="resultImages.length === 0 && !isGenerating" class="canvas-placeholder">
             <svg viewBox="0 0 48 48" fill="none">
               <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
               <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
@@ -31,10 +31,21 @@
             <p>请在右侧配置生成参数并点击发送</p>
           </div>
           <!-- 有结果图时：2×2 网格展示 -->
-          <div v-else class="result-grid" :class="{ generating: isGenerating }">
+          <div v-else-if="resultImages.length > 0" class="result-grid" :class="{ generating: isGenerating }">
             <div v-for="(img, idx) in resultImages" :key="'r'+idx" class="result-card">
               <img :src="img.url || img" class="result-img" />
             </div>
+          </div>
+          <!-- 生成中：显示 loading 覆盖层 -->
+          <div v-if="isGenerating" class="canvas-loading">
+            <div class="loading-spinner"></div>
+            <p>{{ genStatus || '生成中...' }}</p>
+          </div>
+          <!-- 生成失败：显示错误提示 -->
+          <div v-if="genError && !isGenerating" class="canvas-error">
+            <el-icon :size="36" color="#EF4444"><WarningFilled /></el-icon>
+            <p class="error-text">{{ genError }}</p>
+            <p class="error-hint">请检查配置后重试</p>
           </div>
         </div>
 
@@ -334,7 +345,7 @@
           <template v-else>
             <el-icon :size="36" color="#9CA3AF"><UploadFilled /></el-icon>
             <p class="rp-upload-text">点击或拖拽图片到此处</p>
-            <p class="rp-upload-hint">支持 JPG/PNG/WebP，最多 20MB</p>
+            <p class="rp-upload-hint">支持 JPG/PNG/WebP，单张最大 7MB</p>
           </template>
           <button v-if="reverseImagePreview" class="rp-clear-btn" @click.stop="clearReverseImage">✕</button>
         </div>
@@ -399,7 +410,7 @@ import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
 import AiAssistant from '@/components/AiAssistant.vue'
 import { favoriteMaterial, cancelFavoriteMaterial, getPublicCreationConfigByGroup, listPromptLibraryBatch, reversePrompt } from '@/api/customer'
 import { urlToFile } from '@/utils/image'
-import { ArrowLeft, ArrowRight, ArrowDown, UploadFilled, Promotion, MagicStick, DocumentCopy } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, ArrowDown, UploadFilled, Promotion, MagicStick, DocumentCopy, WarningFilled } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const gen = useImageGeneration('render')
@@ -480,6 +491,7 @@ let isResizing = false
 let resizeTarget = ''
 
 const productFiles = ref([])
+const referenceFiles = ref([])
 
 const aiInput = ref('')
 const aiMessages = ref([])
@@ -663,46 +675,57 @@ async function handleGenerate() {
   }
   const text = aiAssistantRef.value?.inputText?.trim() || ''
 
-  // 拼提示词：用户输入 + 选中标签对应的提示词库 prompt_text + 提示词增强约束词
-  const tagPrompts = [
-    promptMap.value[selectedPlatform.value],
-    promptMap.value[selectedScene.value],
-    promptMap.value[selectedLight.value],
-    promptMap.value[selectedStyle.value]
-  ].filter(Boolean).join('；')
-  const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
-  const parts = [text, tagPrompts, boostText ? `约束：${boostText}` : ''].filter(Boolean)
-  const prompt = parts.join('；')
+  // 提前设置生成状态，让用户立即看到反馈
+  gen.generating.value = true
+  gen.error.value = ''
+  gen.statusText.value = '正在准备生成...'
+  gen.progress.value = 0
 
-  const extraParams = { n: genMaxCount.value }
-  // 创作配置均为可选项：未选择的不发对应参数给 AI
-  if (selectedPlatform.value) extraParams.platform = selectedPlatform.value
-  if (selectedScene.value) extraParams.scene = selectedScene.value
-  if (selectedLight.value) extraParams.light = selectedLight.value
-  if (selectedStyle.value) extraParams.style = selectedStyle.value
-  if (effectiveOutputSize.value) extraParams.outputSize = effectiveOutputSize.value
-  // 生图模型（占位，后续对接真实模型）
-  if (selectedModel.value) extraParams.model = selectedModel.value
-  if (referenceFiles.value.length) {
-    extraParams.referenceImages = await gen.uploadImages(referenceFiles.value)
-  }
-  // 每次发送都扣积分
-  if (!(await gen.checkPoints(2))) {
-    ElMessage.warning('积分不足，请先充值')
-    return
-  }
-  extraParams.consumePoints = 2
-  extraParams.featureName = 'background'
-  extraParams.title = '白底生成背景'
   try {
-await gen.fullGenerate(productFiles.value, prompt, extraParams)
-} catch (e) {
-if (e?.message?.includes('已取消')) return
-const isTimeout = e?.code === 'ECONNABORTED'
+    // 拼提示词：用户输入 + 选中标签对应的提示词库 prompt_text + 提示词增强约束词
+    const tagPrompts = [
+      promptMap.value[selectedPlatform.value],
+      promptMap.value[selectedScene.value],
+      promptMap.value[selectedLight.value],
+      promptMap.value[selectedStyle.value]
+    ].filter(Boolean).join('；')
+    const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
+    const parts = [text, tagPrompts, boostText ? `约束：${boostText}` : ''].filter(Boolean)
+    const prompt = parts.join('；')
+
+    const extraParams = { n: genMaxCount.value }
+    // 创作配置均为可选项：未选择的不发对应参数给 AI
+    if (selectedPlatform.value) extraParams.platform = selectedPlatform.value
+    if (selectedScene.value) extraParams.scene = selectedScene.value
+    if (selectedLight.value) extraParams.light = selectedLight.value
+    if (selectedStyle.value) extraParams.style = selectedStyle.value
+    if (effectiveOutputSize.value) extraParams.outputSize = effectiveOutputSize.value
+    // 生图模型（占位，后续对接真实模型）
+    if (selectedModel.value) extraParams.model = selectedModel.value
+    if (referenceFiles.value.length) {
+      gen.statusText.value = '正在上传参考图...'
+      extraParams.referenceImages = await gen.uploadImages(referenceFiles.value)
+    }
+    // 每次发送都扣积分
+    if (!(await gen.checkPoints(2))) {
+      ElMessage.warning('积分不足，请先充值')
+      gen.generating.value = false
+      gen.statusText.value = ''
+      return
+    }
+    extraParams.consumePoints = 2
+    extraParams.featureName = 'background'
+    extraParams.title = '白底生成背景'
+    await gen.fullGenerate(productFiles.value, prompt, extraParams)
+  } catch (e) {
+    if (e?.message?.includes('已取消')) return
+    const isTimeout = e?.code === 'ECONNABORTED'
       || /timeout|超时|人数过多|繁忙|busy/i.test(e?.message || '')
     ElMessage.error(isTimeout
       ? '当前模型使用人数过多，可选用其他模型生图或稍后再试'
       : '生成失败，请稍后重试')
+  } finally {
+    gen.generating.value = false
   }
 }
 
@@ -710,6 +733,7 @@ function clearWorkspaceImages() {
   productImages.value = []
   referenceImages.value = []
   productFiles.value = []
+  referenceFiles.value = []
   selectedPlatform.value = ''
   selectedScene.value = ''
   selectedLight.value = ''
@@ -725,6 +749,8 @@ function clearChat() {
   aiInput.value = ''
   productImages.value = []
   referenceImages.value = []
+  productFiles.value = []
+  referenceFiles.value = []
   gen.reset()
 }
 
@@ -1009,7 +1035,7 @@ function handleReverseDrop(e) {
 }
 
 const REVERSE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-const REVERSE_MAX_SIZE = 20 * 1024 * 1024
+const REVERSE_MAX_SIZE = 7 * 1024 * 1024
 
 function handleReverseFile(file) {
   if (!REVERSE_ALLOWED_TYPES.includes(file.type)) {
@@ -1017,7 +1043,7 @@ function handleReverseFile(file) {
     return
   }
   if (file.size > REVERSE_MAX_SIZE) {
-    ElMessage.error('图片大小不能超过 20MB')
+    ElMessage.error('图片大小不能超过 7MB')
     return
   }
   reverseImageFile.value = file
@@ -1251,6 +1277,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   min-height: 0;
   overflow: hidden;
+  position: relative;
 }
 
 .canvas-placeholder {
@@ -1258,24 +1285,84 @@ onBeforeUnmount(() => {
   color: #9CA3AF;
   padding: 20px;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 
   svg {
     width: 48px;
     height: 48px;
-    margin-bottom: 12px;
+    margin-bottom: 4px;
     opacity: .4;
   }
 
   h3 {
     font-size: 14px;
     color: #6B7280;
-    margin-bottom: 6px;
+    margin-bottom: 0;
     font-weight: 500;
   }
 
   p {
     font-size: 12px;
     color: #9CA3AF;
+    margin: 0;
+  }
+}
+
+/* Canvas Loading Overlay */
+.canvas-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.85);
+  z-index: 10;
+}
+.loading-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #E8EDF5;
+  border-top-color: #2563FF;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.canvas-loading p {
+  font-size: 13px;
+  color: #6B7280;
+}
+
+/* Canvas Error Display */
+.canvas-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  text-align: center;
+
+  .error-text {
+    font-size: 14px;
+    color: #EF4444;
+    font-weight: 500;
+    margin: 0;
+  }
+  .error-hint {
+    font-size: 12px;
+    color: #9CA3AF;
+    margin: 0;
   }
 }
 

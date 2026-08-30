@@ -195,21 +195,26 @@ async function sendMessage() {
   isLoading.value = true
   scrollToBottom()
 
-  // 直接触发生成白底图（不走 deepseek 对话，仅生图）
+  // 直接触发生成（不走 deepseek 对话，仅生图）
   if (props.generateFn) {
-    props.generateFn().catch(e => {
-      console.error('白底图生成触发失败:', e)
-    })
+    try {
+      await props.generateFn()
+    } catch (e) {
+      console.error('生成触发失败:', e)
+    } finally {
+      isLoading.value = false
+      scrollToBottom()
+    }
+  } else {
+    isLoading.value = false
+    scrollToBottom()
   }
-
-  isLoading.value = false
-  scrollToBottom()
 }
 
 async function clearChat() {
   try {
     await ElMessageBox.confirm(
-      '对话内容及生成图片都将一并清空，是否确认删除？',
+      '对话内容及生成图片都将一并清空，是否确认清空？',
       '清空确认',
       { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' }
     )
