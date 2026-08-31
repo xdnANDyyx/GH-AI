@@ -17,21 +17,31 @@
 
         <!-- Canvas Display -->
         <div class="canvas-box">
-          <!-- 未生成：显示空状态 -->
-          <div v-if="resultImages.length === 0" class="canvas-placeholder">
+          <!-- 有结果图时显示在画布中 -->
+          <div v-if="resultImages.length > 0" class="canvas-result" :class="{ generating: isGenerating }">
+            <el-image
+              v-for="(img, i) in resultImages"
+              :key="i"
+              :src="img.url || img"
+              :preview-src-list="resultImages.map(r => r.url || r)"
+              :initial-index="i"
+              fit="contain"
+              class="result-img"
+            />
+          </div>
+          <!-- 加载中 -->
+          <div v-else-if="isGenerating" class="canvas-loading">
+            <p>{{ genStatus || '正在生成...' }}</p>
+          </div>
+          <!-- 空状态占位符 -->
+          <div v-else class="canvas-placeholder">
              <svg viewBox="0 0 48 48" fill="none">
               <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
               <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
               <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <h3>AI 详情图生成后将显示在此处</h3>
-            <p>请在右侧配置生成参数并点击发送</p>
-          </div>
-          <!-- 有结果图时：展示结果 -->
-          <div v-else class="result-grid" :class="{ generating: isGenerating }">
-            <div v-for="(img, idx) in resultImages" :key="'r'+idx" class="result-card">
-              <img :src="img.url || img" class="result-img" />
-            </div>
+            <h3>上传产品图并配置参数后生成</h3>
+            <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
           </div>
         </div>
 
@@ -232,6 +242,39 @@
                       <div class="upload-card-hint">支持 PNG，透明背景更佳</div>
                     </div>
                   </div>
+
+                  <!-- 产品图预览 -->
+                  <div v-if="productFiles.length" class="uploaded-images-list">
+                    <div v-for="(f, i) in productFiles" :key="'p'+i" class="uploaded-thumb-wrap">
+                      <div class="uploaded-thumb">
+                        <img :src="getObjectUrl(f)" />
+                      </div>
+                      <div class="uploaded-remove" @click.stop="removeProductFile(i)">✕</div>
+                    </div>
+                    <div
+                      v-if="productFiles.length < 10"
+                      class="uploaded-thumb-wrap add"
+                      @click.stop="triggerUpload"
+                    >
+                      <div class="uploaded-thumb add-thumb">+</div>
+                    </div>
+                  </div>
+
+                  <!-- 参考图预览 -->
+                  <div v-if="refFiles.length" class="uploaded-images-list">
+                    <div v-for="(f, i) in refFiles" :key="'r'+i" class="uploaded-thumb-wrap">
+                      <div class="uploaded-thumb">
+                        <img :src="getObjectUrl(f)" />
+                      </div>
+                      <div class="uploaded-remove" @click.stop="removeRefFile(i)">✕</div>
+                    </div>
+                  </div>
+
+                  <!-- LOGO 预览 -->
+                  <div v-if="logoImage" class="ref-preview-row">
+                    <img :src="logoImage" class="ref-thumb" />
+                    <button class="ref-remove" @click.stop="logoImage = ''; logoFile = null">×</button>
+                  </div>
                 </div>
               </div>
 
@@ -370,6 +413,7 @@
 <script setup>
 defineOptions({ name: 'DetailImgView' })
 import { ref, reactive, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { compressImage } from '@/utils/compress'
 import { ArrowDown, ArrowLeft, ArrowRight, UploadFilled, DocumentCopy, Promotion } from '@element-plus/icons-vue'
 // import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
 // import CanvasOverlay from '@/components/CanvasOverlay.vue'
@@ -390,6 +434,9 @@ const { steps: workflowSteps, getStepClass, isStepLineDone } = useWorkflowProgre
 const productFiles = ref([])
 const originalImage = ref('')
 const resultImages = ref([])
+const refFiles = ref([])
+const logoImage = ref('')
+const logoFile = ref(null)
 
 // Generation state from composable
 const isGenerating = computed(() => gen.generating.value)
@@ -409,6 +456,15 @@ function clearCanvas() { /* TODO */ }
 function toggleFullscreen() { /* TODO */ }
 
 // ===== File Upload =====
+function getObjectUrl(file) {
+  return file instanceof File ? URL.createObjectURL(file) : file
+}
+function removeProductFile(index) {
+  productFiles.value.splice(index, 1)
+}
+function removeRefFile(index) {
+  refFiles.value.splice(index, 1)
+}
 const fileInputRef = ref(null)
 const refInputRef = ref(null)
 const logoInputRef = ref(null)
@@ -425,13 +481,16 @@ function onFileChange(e) {
   e.target.value = ''
 }
 function onRefFileChange(e) {
-  const files = e.target.files
-  console.log('Ref files:', files)
+  const files = Array.from(e.target.files || [])
+  if (!files.length) return
+  refFiles.value = [...refFiles.value, ...files].slice(0, 5)
   e.target.value = ''
 }
 function onLogoFileChange(e) {
   const file = e.target.files?.[0]
-  console.log('Logo file:', file)
+  if (!file) return
+  logoFile.value = file
+  logoImage.value = URL.createObjectURL(file)
   e.target.value = ''
 }
 function handleDrop(e) {
@@ -685,19 +744,26 @@ const chatMessages = ref([
 ])
 const quickTags = ['如何优化我的详情页？', '如何突出产品卖点？', '设计技巧建议']
 
-async function handleGenerate() {
+async function handleGenerate(opts = {}) {
   const text = aiAssistantRef.value?.inputText?.trim() || ''
   if (!originalImage.value) { ElMessage.warning('请先上传产品图片'); return }
   if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
   try {
     const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
     const fullPrompt = boostText ? `${text}。约束：${boostText}。` : text
-    const extra = { consumePoints: 2, featureName: 'detail_img', title: '详情页生成', model: selectedModel.value }
+    const extra = { consumePoints: 2, featureName: 'detail_img', title: '详情页生成', model: opts.model || selectedModel.value }
     if (effectiveOutputSize.value) extra.outputSize = effectiveOutputSize.value
     if (genCount.value) extra.n = Number(genCount.value)
     else extra.n = 1
+    // 上传参考图并传给后端
+    if (refFiles.value.length) {
+      extra.referenceImages = await gen.uploadImages(refFiles.value)
+    }
     await gen.fullGenerate(productFiles.value, fullPrompt, extra)
-    if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
+    if (gen.resultImages.value.length > 0) {
+      resultImages.value = gen.resultImages.value
+      aiAssistantRef.value?.addResultImages(gen.resultImages.value)
+    }
   } catch (e) {
     if (e?.message?.includes('已取消')) return
     console.error('详情图生成失败:', e)
@@ -716,6 +782,9 @@ function sendQuick(tag) {
 function clearWorkspaceImages() {
   originalImage.value = ''
   productFiles.value = []
+  refFiles.value = []
+  logoImage.value = ''
+  logoFile.value = null
   resultImages.value = []
   selectedPlatform.value = '亚马逊'
   language.value = 'en'
@@ -735,10 +804,6 @@ function clearChat() {
   gen.reset()
 }
 
-function getObjectUrl(file) {
-  return URL.createObjectURL(file)
-}
-
 // ===== 反推提示词 =====
 const REVERSE_DEFAULT_PROMPT = '请对原图进行逆向视觉解构，推测其生成逻辑与核心构成元素。请以结构化、专业的中文提示词格式输出，需涵盖：结构布局与质感；关键细节；技术参数与视角。输出结果应具有高度可复用性，能直接用于引导图像生成。'
 const reverseDialogVisible = ref(false)
@@ -749,7 +814,7 @@ const reverseResult = ref('')
 const reverseLoading = ref(false)
 
 const REVERSE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-const REVERSE_MAX_SIZE = 7 * 1024 * 1024
+const REVERSE_MAX_SIZE = 1.5 * 1024 * 1024
 
 function openReversePromptDialog() {
   reverseDialogVisible.value = true
@@ -773,20 +838,20 @@ function handleReverseDrop(e) {
   if (file) handleReverseFile(file)
 }
 
-function handleReverseFile(file) {
+async function handleReverseFile(file) {
   if (!REVERSE_ALLOWED_TYPES.includes(file.type)) {
     ElMessage.error('仅支持 JPG / PNG / WebP 格式的图片')
     return
   }
-  if (file.size > REVERSE_MAX_SIZE) {
-    ElMessage.error('图片大小不能超过 7MB')
-    return
+  let targetFile = file
+  if (targetFile.size > REVERSE_MAX_SIZE) {
+    targetFile = await compressImage(targetFile, 1.5)
   }
-  reverseImageFile.value = file
+  reverseImageFile.value = targetFile
   reverseResult.value = ''
   const reader = new FileReader()
   reader.onload = (ev) => { reverseImagePreview.value = ev.target.result }
-  reader.readAsDataURL(file)
+  reader.readAsDataURL(targetFile)
 }
 
 function clearReverseImage() {
@@ -1656,6 +1721,92 @@ onBeforeUnmount(() => {
   font-size: 10px;
   color: #9CA3AF;
   margin: 0;
+}
+
+/* Upload preview thumbnails */
+.uploaded-images-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.uploaded-thumb-wrap {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #E8EDF5;
+}
+.uploaded-thumb-wrap.add {
+  border-style: dashed;
+  cursor: pointer;
+}
+.uploaded-thumb {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #F7F9FC;
+}
+.uploaded-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.uploaded-thumb.add-thumb {
+  font-size: 18px;
+  color: #9CA3AF;
+  font-weight: 500;
+}
+.uploaded-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.uploaded-thumb-wrap:hover .uploaded-remove {
+  opacity: 1;
+}
+
+/* LOGO preview */
+.ref-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.ref-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid #E8EDF5;
+}
+.ref-remove {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #EF4444;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .structure-list {

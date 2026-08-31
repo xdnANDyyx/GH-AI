@@ -18,19 +18,28 @@
         <!-- Canvas Area -->
         <div class="canvas-box">
           <!-- <CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" /> -->
-          <!-- 未生成：显示空状态 -->
-          <div v-if="!processedImage" class="canvas-placeholder">
+          <!-- 有结果图时显示在画布中 -->
+          <div v-if="processedImage" class="canvas-result" :class="{ generating: isGenerating }">
+            <el-image
+              :src="processedImage"
+              :preview-src-list="[processedImage]"
+              fit="contain"
+              class="result-img"
+            />
+          </div>
+          <!-- 加载中 -->
+          <div v-else-if="isGenerating" class="canvas-loading">
+            <p>{{ genStatus || '正在生成...' }}</p>
+          </div>
+          <!-- 空状态占位符 -->
+          <div v-else class="canvas-placeholder">
             <svg viewBox="0 0 48 48" fill="none">
               <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
               <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
               <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <h3>AI 精修结果生成后将显示在此处</h3>
-            <p>请在右侧配置生成参数并点击发送</p>
-          </div>
-          <!-- 已生成：显示结果图 -->
-          <div v-else class="result-view">
-            <img :src="processedImage" class="result-img" alt="精修结果" @contextmenu.prevent="openHandoffMenu($event, processedImage)" />
+            <h3>上传需要精修的图片后生成</h3>
+            <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
           </div>
         </div>
 
@@ -274,8 +283,9 @@
 </template>
 
 <script>
-import { UploadFilled, ArrowDown, ArrowLeft, ArrowRight, MagicStick, DocumentCopy } from '@element-plus/icons-vue'
 import { ref, reactive, computed, onMounted, onActivated, onBeforeUnmount, nextTick } from 'vue'
+import { compressImage } from '@/utils/compress'
+import { UploadFilled, ArrowDown, ArrowLeft, ArrowRight, MagicStick, DocumentCopy } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { getPublicCreationConfigByGroup, reversePrompt, listPromptLibraryBatch } from '@/api/customer'
 // import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
@@ -695,7 +705,7 @@ export default {
     const genError = computed(() => gen.error.value)
     const aiAssistantRef = ref(null)
 
-    async function handleGenerate() {
+    async function handleGenerate(opts = {}) {
       const text = aiAssistantRef.value?.inputText?.trim() || ''
       if (!productFiles.value.length) {
         ElMessage.warning('请先上传需要精修的图片')
@@ -705,10 +715,11 @@ export default {
       try {
         const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
         const fullPrompt = boostText ? `${text}。约束：${boostText}。` : text
-        await gen.fullGenerate(productFiles.value, fullPrompt, { consumePoints: 2, featureName: 'retouch', title: '产品精修', n: 1 })
+        await gen.fullGenerate(productFiles.value, fullPrompt, { consumePoints: 2, featureName: 'retouch', title: '产品精修', n: 1, model: opts.model })
         if (gen.resultImages.value.length > 0) {
           processed.value = true
           processedImage.value = gen.resultImages.value[0].url || gen.resultImages.value[0]
+          aiAssistantRef.value?.addResultImages(gen.resultImages.value)
         }
 } catch (e) {
 if (e?.message?.includes('已取消')) return
@@ -730,7 +741,7 @@ console.error('精修生成失败:', e)
     const REVERSE_DEFAULT_PROMPT = `请对原图进行逆向视觉解构，推测其生成逻辑与核心构成元素。请以结构化、专业的中文提示词格式输出，需涵盖：结构布局与质感；关键细节；技术参数与视角。 输出结果应具有高度可复用性，能直接用于引导图像生成。`
     const reversePromptInput = ref(REVERSE_DEFAULT_PROMPT)
     const REVERSE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-    const REVERSE_MAX_SIZE = 7 * 1024 * 1024
+    const REVERSE_MAX_SIZE = 1.5 * 1024 * 1024
 
     function openReversePromptDialog() {
       reverseDialogVisible.value = true
@@ -754,20 +765,20 @@ console.error('精修生成失败:', e)
       if (file) handleReverseFile(file)
     }
 
-    function handleReverseFile(file) {
+    async function handleReverseFile(file) {
       if (!REVERSE_ALLOWED_TYPES.includes(file.type)) {
         ElMessage.error('仅支持 JPG / PNG / WebP 格式的图片')
         return
       }
-if (file.size > REVERSE_MAX_SIZE) {
-    ElMessage.error('图片大小不能超过 7MB')
-        return
+      let targetFile = file
+      if (targetFile.size > REVERSE_MAX_SIZE) {
+        targetFile = await compressImage(targetFile, 7)
       }
-      reverseImageFile.value = file
+      reverseImageFile.value = targetFile
       reverseResult.value = ''
       const reader = new FileReader()
       reader.onload = (ev) => { reverseImagePreview.value = ev.target.result }
-      reader.readAsDataURL(file)
+      reader.readAsDataURL(targetFile)
     }
 
     function clearReverseImage() {

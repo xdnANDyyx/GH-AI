@@ -17,20 +17,28 @@
           <!-- 画布浮层：缩放 / 全屏 / 导出 / 右键菜单 -->
           <!--<CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" />-->
 
-          <!-- 未生成：显示空状态 -->
-          <div class="canvas-placeholder" v-if="!hasResult">
+          <!-- 有结果图时显示在画布中 -->
+          <div v-if="hasResult" class="canvas-result" :class="{ generating: isGenerating }">
+            <el-image
+              :src="resultImages[0].url || resultImages[0]"
+              :preview-src-list="resultImages.map(r => r.url || r)"
+              fit="contain"
+              class="result-img"
+            />
+          </div>
+          <!-- 加载中 -->
+          <div v-else-if="isGenerating" class="canvas-loading">
+            <p>{{ genStatus || '正在生成...' }}</p>
+          </div>
+          <!-- 空状态占位符 -->
+          <div v-else class="canvas-placeholder">
             <svg viewBox="0 0 48 48" fill="none">
               <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
               <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
               <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <h3>AI 白底图生成后将显示在此处</h3>
-            <p>请在右侧配置生成参数并点击发送</p>
-          </div>
-
-          <!-- 已生成：显示结果图 -->
-          <div class="result-view" v-else>
-            <img :src="resultImageUrl" class="result-img" alt="白底图" @contextmenu.prevent="openHandoffMenu($event, resultImageUrl)" />
+            <h3>上传商品图并配置参数后生成</h3>
+            <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
           </div>
 
         </div>
@@ -38,7 +46,6 @@
         <div class="canvas-bottom-bar">
           <!-- <span>提示：上传优质素材被下载即可获得积分奖励 <a class="canvas-link" href="#">去上传 →</a></span> -->
           <!-- <span v-if="!hasResult"><span>本次生成预计消耗：<strong>{{ consumePoints }}</strong> 积分</span></span> -->
-          <span v-if="hasResult" class="result-status"><span class="result-dot"></span> 生成完成</span>
         </div>
       </div>
 
@@ -210,16 +217,6 @@
                   <p class="section-helper">选择输出图片上文字的语言，适配跨境电商场景</p>
                 </div>
               </div>-->
-
-              <!-- Results -->
-              <div v-if="resultImages.length" class="result-area">
-                <div class="section-label">生成结果</div>
-                <div class="result-grid">
-                  <div v-for="(img, i) in resultImages" :key="i" class="result-item">
-                    <img :src="img.url || img" />
-                  </div>
-                </div>
-              </div>
             </div>
           </el-scrollbar>
         </div>
@@ -325,6 +322,7 @@ import { useImageHandoffStore } from '@/store'
 import { getPublicCreationConfigByGroup } from '@/api/customer'
 import { reversePrompt } from '@/api/customer'
 import { getImageUrl } from '@/utils/image'
+import { compressImage } from '@/utils/compress'
 
 import { Plus, Delete, ArrowLeft, ArrowRight, ArrowDown, Download, Right, UploadFilled, Coin, MagicStick, Loading, DocumentCopy, PictureFilled } from '@element-plus/icons-vue'
 
@@ -550,18 +548,18 @@ function handleFileSelect(e) {
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_FILE_SIZE = 7 * 1024 * 1024 // 7MB
 
-function validateAndRead(file) {
+async function validateAndRead(file) {
   // 格式校验
   if (!ALLOWED_TYPES.includes(file.type)) {
     ElMessage.error('仅支持 JPG / PNG / WebP 格式的图片')
     return
   }
-  // 大小校验
-  if (file.size > MAX_FILE_SIZE) {
-    ElMessage.error('图片大小不能超过 7MB')
-    return
+  let targetFile = file
+  // 大小校验 & 自动压缩
+  if (targetFile.size > MAX_FILE_SIZE) {
+    targetFile = await compressImage(targetFile, 7)
   }
-  readFile(file)
+  readFile(targetFile)
 }
 
 function readFile(file) {
@@ -604,7 +602,7 @@ function formatFileSize(bytes) {
 }
 
 // ===== 生成 =====
-async function handleGenerate() {
+async function handleGenerate(opts = {}) {
   if (!originalFile.value) return
   if (!hasEnoughPoints.value) {
     ElMessage.warning('积分不足，请先充值')
@@ -627,11 +625,15 @@ async function handleGenerate() {
     await gen.fullGenerate(
       [originalFile.value],
       prompt,
-      { extraOptions, consumePoints: consumePoints.value, featureName: 'white_bg', title: 'AI白底图生成' }
+      { extraOptions, consumePoints: consumePoints.value, featureName: 'white_bg', title: 'AI白底图生成', model: opts.model }
     )
+    // 将结果图推入 AI 助手对话框
+    if (gen.resultImages.value.length > 0) {
+      aiAssistantRef.value?.addResultImages(gen.resultImages.value)
+    }
     // 复位对比位置
     comparePosition.value = 50
-} catch (e) {
+  } catch (e) {
 if (e?.message?.includes('已取消')) return
 console.error('白底图生成失败:', e)
   }
@@ -679,22 +681,22 @@ function handleReverseDrop(e) {
 }
 
 const REVERSE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-const REVERSE_MAX_SIZE = 7 * 1024 * 1024
+const REVERSE_MAX_SIZE = 1.5 * 1024 * 1024
 
-function handleReverseFile(file) {
+async function handleReverseFile(file) {
   if (!REVERSE_ALLOWED_TYPES.includes(file.type)) {
     ElMessage.error('仅支持 JPG / PNG / WebP 格式的图片')
     return
   }
-  if (file.size > REVERSE_MAX_SIZE) {
-    ElMessage.error('图片大小不能超过 7MB')
-    return
+  let targetFile = file
+  if (targetFile.size > REVERSE_MAX_SIZE) {
+    targetFile = await compressImage(targetFile, 1.5)
   }
-  reverseImageFile.value = file
+  reverseImageFile.value = targetFile
   reverseResult.value = ''
   const reader = new FileReader()
   reader.onload = (ev) => { reverseImagePreview.value = ev.target.result }
-  reader.readAsDataURL(file)
+  reader.readAsDataURL(targetFile)
 }
 
 function clearReverseImage() {

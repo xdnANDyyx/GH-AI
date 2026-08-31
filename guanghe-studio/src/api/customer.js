@@ -184,6 +184,18 @@ export const getSessionDetailAlt = (sessionId, recordType) =>
 export const deleteSession = (sessionId) =>
   api.delete(`/customer/ai/image/session/${sessionId}`)
 
+/** 获取批量生成任务记录 */
+export const listBatchTasks = (type = '2') =>
+  api.get('/customer/ai/image/records', { params: { type } })
+
+/** 删除单个批量生成任务记录 */
+export const deleteBatchTask = (recordId) =>
+  api.delete(`/customer/ai/image/records/${recordId}`)
+
+/** 清空批量生成任务记录 */
+export const clearBatchTasks = (type = '2') =>
+  api.delete('/customer/ai/image/records', { params: { type } })
+
 /** 保存画布参数 */
 export const saveCanvasParams = (sessionId, canvasParams) =>
   api.post('/customer/ai/image/session/canvas', { sessionId, canvasParams })

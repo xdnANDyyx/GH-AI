@@ -18,21 +18,31 @@
         <!-- Canvas Area -->
         <div class="canvas-box">
           <!-- <CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" /> -->
-          <!-- 未生成：显示空状态 -->
-          <div v-if="resultImages.length === 0" class="canvas-placeholder">
+          <!-- 有结果图时显示在画布中 -->
+          <div v-if="resultImages.length > 0" class="canvas-result" :class="{ generating: isGenerating }">
+            <el-image
+              v-for="(img, i) in resultImages"
+              :key="i"
+              :src="img.url || img"
+              :preview-src-list="resultImages.map(r => r.url || r)"
+              :initial-index="i"
+              fit="contain"
+              class="result-img"
+            />
+          </div>
+          <!-- 加载中 -->
+          <div v-else-if="isGenerating" class="canvas-loading">
+            <p>{{ genStatus || '正在生成...' }}</p>
+          </div>
+          <!-- 空状态占位符 -->
+          <div v-else class="canvas-placeholder">
             <svg viewBox="0 0 48 48" fill="none">
               <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
               <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
               <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <h3>AI 主图生成后将显示在此处</h3>
-            <p>请在右侧配置生成参数并点击发送</p>
-          </div>
-          <!-- 有结果图时：2×2 网格展示 -->
-          <div v-else class="result-grid" :class="{ generating: isGenerating }">
-            <div v-for="(img, idx) in resultImages" :key="'r'+idx" class="result-card">
-              <img :src="img.url || img" class="result-img" />
-            </div>
+            <h3>上传产品图并配置参数后生成</h3>
+            <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
           </div>
         </div>
 
@@ -188,7 +198,7 @@
               <!-- Section: 主图用途 -->
               <div class="config-section collapsible">
                 <div class="section-header collapsible" @click="toggleSection('purpose')">
-                  <span class="section-label">主图用途</span>
+                  <span class="section-label">核心目的</span>
                   <span class="expand-text">
                     {{ sections.purpose ? '收起' : '展开' }}
                     <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.purpose }"><ArrowDown /></el-icon>
@@ -210,7 +220,7 @@
               <!-- Section: 核心卖点 -->
               <div class="config-section collapsible">
                 <div class="section-header collapsible" @click="toggleSection('sellingPoints')">
-                  <span class="section-label">核心卖点</span>
+                  <span class="section-label">主图用途</span>
                   <span class="expand-text">
                     {{ sections.sellingPoints ? '收起' : '展开' }}
                     <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.sellingPoints }"><ArrowDown /></el-icon>
@@ -328,6 +338,7 @@
 
 <script>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { compressImage } from '@/utils/compress'
 import { ArrowDown, ArrowLeft, ArrowRight, UploadFilled, PictureFilled, MagicStick, DocumentCopy } from '@element-plus/icons-vue'
 // import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
 // import CanvasOverlay from '@/components/CanvasOverlay.vue'
@@ -734,13 +745,13 @@ export default {
       if (aiAssistantRef.value) aiAssistantRef.value.inputText = text
     }
 
-    async function handleGenerate() {
+    async function handleGenerate(opts = {}) {
       const text = aiAssistantRef.value?.inputText?.trim() || ''
       if (!productFiles.value.length) { ElMessage.warning('请先上传产品图片'); return }
       if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
       generating.value = true
       try {
-        const extra = { consumePoints: 2, featureName: 'main_image', title: '主图设计', model: selectedModel.value }
+        const extra = { consumePoints: 2, featureName: 'main_image', title: '主图设计', model: opts.model || selectedModel.value }
         if (activePlatform.value) {
           // 使用提示词库中该平台对应的 promptText 传给 AI，而非 raw value
           const promptText = promptMap.value[activePlatform.value]
@@ -749,6 +760,10 @@ export default {
         if (effectiveOutputSize.value) extra.outputSize = effectiveOutputSize.value
         if (generateCount.value) extra.n = Number(generateCount.value)
         await gen.fullGenerate(productFiles.value, text, extra)
+        // 将结果图推入 AI 助手对话框
+        if (gen.resultImages.value.length > 0) {
+          aiAssistantRef.value?.addResultImages(gen.resultImages.value)
+        }
 } catch (e) {
 if (e?.message?.includes('已取消')) return
 console.error('主图生成失败:', e)
@@ -806,22 +821,22 @@ console.error('主图生成失败:', e)
     }
 
     const REVERSE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-    const REVERSE_MAX_SIZE = 7 * 1024 * 1024
+    const REVERSE_MAX_SIZE = 1.5 * 1024 * 1024
 
-    function handleReverseFile(file) {
+    async function handleReverseFile(file) {
       if (!REVERSE_ALLOWED_TYPES.includes(file.type)) {
         ElMessage.error('仅支持 JPG / PNG / WebP 格式的图片')
         return
       }
-if (file.size > REVERSE_MAX_SIZE) {
-    ElMessage.error('图片大小不能超过 7MB')
-        return
+      let targetFile = file
+      if (targetFile.size > REVERSE_MAX_SIZE) {
+        targetFile = await compressImage(targetFile, 1.5)
       }
-      reverseImageFile.value = file
+      reverseImageFile.value = targetFile
       reverseResult.value = ''
       const reader = new FileReader()
       reader.onload = (ev) => { reverseImagePreview.value = ev.target.result }
-      reader.readAsDataURL(file)
+      reader.readAsDataURL(targetFile)
     }
 
     function clearReverseImage() {

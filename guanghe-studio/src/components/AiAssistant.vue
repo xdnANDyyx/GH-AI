@@ -43,7 +43,24 @@
             <div class="msg-avatar" v-if="msg.role === 'assistant'">
               <el-icon><ChatDotRound /></el-icon>
             </div>
-            <div class="msg-content">{{ msg.content }}</div>
+            <div class="msg-content">
+              <span v-if="msg.content">{{ msg.content }}</span>
+              <div v-if="msg.images && msg.images.length" class="msg-images">
+                <div
+                  v-for="(img, i) in msg.images"
+                  :key="i"
+                  class="msg-image-item"
+                >
+                  <el-image
+                    :src="img.url || img"
+                    :preview-src-list="msg.images.map(m => m.url || m)"
+                    :initial-index="i"
+                    fit="cover"
+                    preview-teleported
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -90,7 +107,7 @@
             :rows="3"
             maxlength="2000"
             show-word-limit
-            placeholder="描述你的设计需求，或向AI助手提问..."
+            placeholder="生成图片..."
             @keydown.enter.exact.prevent="sendMessage"
             resize="none"
           />
@@ -190,15 +207,15 @@ async function sendMessage() {
   if (!props.hasImage) return
 
   // 记录用户消息（文字为空时给默认提示）
-  messages.value.push({ role: 'user', content: text || '（直接生成，无文字描述）' })
+  messages.value.push({ role: 'user', content: text || '生成图片' })
   inputText.value = ''
   isLoading.value = true
   scrollToBottom()
 
-  // 直接触发生成（不走 deepseek 对话，仅生图）
+  // 直接触发生成（不走 deepseek 对话，仅生图），将用户选择的模型传给生成函数
   if (props.generateFn) {
     try {
-      await props.generateFn()
+      await props.generateFn({ model: selectedModel.value })
     } catch (e) {
       console.error('生成触发失败:', e)
     } finally {
@@ -261,7 +278,18 @@ onBeforeUnmount(() => {
   document.removeEventListener('mouseup', stopResize)
 })
 
-defineExpose({ inputText, messages })
+// ===== 供外部调用：将生成结果图推入对话框 =====
+function addResultImages(images) {
+  if (!images || !images.length) return
+  messages.value.push({
+    role: 'assistant',
+    content: '生成完成',
+    images: images.map(img => (typeof img === 'string' ? { url: img } : img)),
+  })
+  scrollToBottom()
+}
+
+defineExpose({ inputText, messages, addResultImages, selectedModel })
 </script>
 
 <style lang="scss" scoped>
@@ -450,8 +478,29 @@ defineExpose({ inputText, messages })
   line-height: 1.6;
   max-width: 85%;
   word-break: break-word;
+}
 
-  &.typing {
+.msg-images {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.msg-image-item {
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+
+  .el-image {
+    width: 100%;
+    height: 100%;
+    min-height: 80px;
+    border-radius: 8px;
+  }
+}
+
+.msg-content.typing {
     display: flex;
     gap: 4px;
     padding: 14px 18px;
@@ -466,7 +515,6 @@ defineExpose({ inputText, messages })
       &:nth-child(2) { animation-delay: 0.2s; }
       &:nth-child(3) { animation-delay: 0.4s; }
     }
-  }
 }
 
 @keyframes typing {

@@ -148,7 +148,6 @@
                 {{ gen.generating.value ? gen.statusText.value : '开始生成' }}
               </el-button>
               <div class="gen-progress" v-if="gen.generating.value">
-                <el-progress :percentage="gen.progress.value" :stroke-width="6" :show-text="false" />
                 <span class="gen-status">{{ gen.statusText.value }}</span>
               </div>
               <div class="gen-error" v-if="gen.error.value">
@@ -318,7 +317,7 @@ function appendToPrompt(tag) {
 }
 
 // 生成
-async function handleGenerate() {
+async function handleGenerate(opts = {}) {
   if (!canGenerate.value) return
   if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
   currentStep.value = 3
@@ -326,7 +325,7 @@ async function handleGenerate() {
 
   try {
     const productFiles = [originalFile.value]
-    const extraParams = { n: generateCount.value, consumePoints: 2, featureName: 'ai_assistant', title: 'AI生成' }
+    const extraParams = { n: generateCount.value, consumePoints: 2, featureName: 'ai_assistant', title: 'AI生成', model: opts.model }
 
     // 如果有参考图，上传并传入
     if (refFile.value) {

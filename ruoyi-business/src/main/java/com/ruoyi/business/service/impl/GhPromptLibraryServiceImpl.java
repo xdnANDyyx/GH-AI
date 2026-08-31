@@ -37,6 +37,20 @@ public class GhPromptLibraryServiceImpl extends ServiceImpl<GhPromptLibraryMappe
             if (StringUtils.isNotEmpty(query.getScope())) {
                 wrapper.like(GhPromptLibrary::getScope, query.getScope());
             }
+            // 引用状态筛选：referencedKeys 为逗号分隔的 promptKey 列表
+            if (StringUtils.isNotEmpty(query.getReferencedKeys())) {
+                List<String> keyList = Arrays.asList(query.getReferencedKeys().split(","));
+                if ("1".equals(query.getReferenced())) {
+                    // 已引用：promptKey IN (keys)
+                    wrapper.in(GhPromptLibrary::getPromptKey, keyList);
+                } else if ("0".equals(query.getReferenced())) {
+                    // 未引用：promptKey NOT IN (keys)
+                    wrapper.notIn(GhPromptLibrary::getPromptKey, keyList);
+                }
+            } else if ("0".equals(query.getReferenced())) {
+                // 未引用且没有任何被引用的 key，则所有数据都算未引用
+                // 不加任何条件即可
+            }
         }
         wrapper.orderByAsc(GhPromptLibrary::getSort);
         int pageNum = query != null && query.getPageNum() != null ? query.getPageNum() : 1;

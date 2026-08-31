@@ -54,31 +54,25 @@
         <!-- Canvas Area -->
         <div class="canvas-box">
           <!-- <CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" /> -->
-          <!-- 未生成：显示空状态 -->
-          <div v-if="resultImages.length === 0" class="canvas-placeholder">
+          <!-- 有结果图时显示在画布中 -->
+          <div v-if="resultImages.length > 0" class="canvas-result-grid" :class="{ generating: isGenerating }">
+            <div v-for="(img, i) in resultImages" :key="i" class="canvas-result-item" @click="previewImage(img.url)">
+              <img :src="img.url" class="canvas-result-img" />
+            </div>
+          </div>
+          <!-- 加载中 -->
+          <div v-else-if="isGenerating" class="canvas-loading">
+            <p>{{ genStatus || '正在生成...' }}</p>
+          </div>
+          <!-- 空状态占位符 -->
+          <div v-else class="canvas-placeholder">
             <svg viewBox="0 0 64 64" fill="none">
               <rect x="8" y="12" width="48" height="40" rx="4" stroke="#D1D5DB" stroke-width="2"/>
               <circle cx="24" cy="26" r="5" stroke="#D1D5DB" stroke-width="1.5"/>
               <path d="M8 44l16-14 10 10 10-14 12 12" stroke="#D1D5DB" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <h3>AI 批量处理结果生成后将显示在此处</h3>
-            <p>请在右侧配置生成参数并点击发送</p>
-          </div>
-          <!-- 有结果图时：网格展示 -->
-          <div v-else class="canvas-result-grid">
-            <div
-              v-for="(img, i) in resultImages"
-              :key="i"
-              class="canvas-result-item"
-              @click="previewImage(img.url || img)"
-            >
-              <img :src="img.url || img" class="canvas-result-img" />
-            </div>
-          </div>
-          <!-- 生成中：显示进度 -->
-          <div v-if="isGenerating" class="canvas-loading">
-            <div class="loading-spinner"></div>
-            <p>{{ genStatus || '生成中...' }}</p>
+            <h3>上传产品图并配置参数后生成</h3>
+            <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
           </div>
         </div>
 
@@ -139,6 +133,7 @@
                   <td><span class="cell-val">{{ task.genCount }} 套方案</span></td>
                   <td>
                     <span class="status-dot" :class="task.statusClass">{{ task.statusText }}</span>
+                    <div v-if="task.errorMsg" class="task-error-msg">{{ task.errorMsg }}</div>
                   </td>
                   <td>
                     <div class="progress-cell" v-if="task.progress !== null">
@@ -506,7 +501,8 @@
 
 <script setup>
 defineOptions({ name: 'BatchProcessView' })
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, onActivated, nextTick, watch } from 'vue'
+import { compressImage } from '@/utils/compress'
 import AiAssistant from '@/components/AiAssistant.vue'
 // import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
 // import CanvasOverlay from '@/components/CanvasOverlay.vue'
@@ -565,22 +561,22 @@ function handleReverseDrop(e) {
 }
 
 const REVERSE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-const REVERSE_MAX_SIZE = 7 * 1024 * 1024
+const REVERSE_MAX_SIZE = 1.5 * 1024 * 1024
 
-function handleReverseFile(file) {
+async function handleReverseFile(file) {
   if (!REVERSE_ALLOWED_TYPES.includes(file.type)) {
     ElMessage.error('仅支持 JPG / PNG / WebP 格式的图片')
     return
   }
-  if (file.size > REVERSE_MAX_SIZE) {
-    ElMessage.error('图片大小不能超过 7MB')
-    return
+  let targetFile = file
+  if (targetFile.size > REVERSE_MAX_SIZE) {
+    targetFile = await compressImage(targetFile, 1.5)
   }
-  reverseImageFile.value = file
+  reverseImageFile.value = targetFile
   reverseResult.value = ''
   const reader = new FileReader()
   reader.onload = (ev) => { reverseImagePreview.value = ev.target.result }
-  reader.readAsDataURL(file)
+  reader.readAsDataURL(targetFile)
 }
 
 function clearReverseImage() {
@@ -645,7 +641,7 @@ function toggleFullscreen() {
 }
 
 // ==================== Task List ====================
-const { tasks, createTask, updateTask, updateProgress, deleteTask: removeTask, clearAll } = useBatchTasks()
+const { tasks, createTask, updateTask, updateProgress, deleteTask: removeTask, clearAll, reloadTasks, fixStaleTasks } = useBatchTasks()
 const taskListExpanded = ref(true)
 const taskFilter = ref('all')
 const taskTabs = [
@@ -716,13 +712,30 @@ function triggerProductUpload() {
 function triggerRefUpload() {
   refInput.value?.click()
 }
-function handleProductUpload(e) {
+
+async function handleProductUpload(e) {
   const files = Array.from(e.target.files || [])
-  productImages.value = [...productImages.value, ...files].slice(0, 10)
+  const processedFiles = []
+  for (const file of files) {
+    let targetFile = file
+    if (targetFile.size > 7 * 1024 * 1024) {
+      targetFile = await compressImage(targetFile, 7)
+    }
+    processedFiles.push(targetFile)
+  }
+  productImages.value = [...productImages.value, ...processedFiles].slice(0, 10)
 }
-function handleRefUpload(e) {
+async function handleRefUpload(e) {
   const files = Array.from(e.target.files || [])
-  refImages.value = [...refImages.value, ...files].slice(0, 10)
+  const processedFiles = []
+  for (const file of files) {
+    let targetFile = file
+    if (targetFile.size > 7 * 1024 * 1024) {
+      targetFile = await compressImage(targetFile, 7)
+    }
+    processedFiles.push(targetFile)
+  }
+  refImages.value = [...refImages.value, ...processedFiles].slice(0, 10)
 }
 
 // ==================== Selling Points ====================
@@ -802,6 +815,23 @@ const languages = ref([
 
 // ==================== Generate ====================
 const generating = ref(false)
+const currentTaskId = ref(null)
+
+// 监听结果图片，一旦画布有了返回的图片，立刻将当前生成任务的状态改为已完成，进度改为100%
+watch(() => gen.resultImages.value, (newImages) => {
+  if (newImages && newImages.length > 0 && currentTaskId.value) {
+    stopProgressSimulation()
+    const resultImages = newImages.map(img => {
+      const url = img.url || img
+      return { url }
+    })
+    updateTask(currentTaskId.value, {
+      status: 'done',
+      progress: 100,
+      resultImages,
+    })
+  }
+}, { deep: true })
 
 // 进度模拟定时器
 let progressTimer = null
@@ -822,10 +852,11 @@ function stopProgressSimulation() {
   }
 }
 
-async function handleGenerate() {
+async function handleGenerate(opts = {}) {
   if (productImages.value.length === 0) { ElMessage.warning('请先上传产品图片'); return }
   if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
   generating.value = true
+  localStorage.setItem('gh_batch_cleared', 'false')
 
   // 创建任务记录
   const task = createTask({
@@ -839,20 +870,43 @@ async function handleGenerate() {
       return {}
     }),
     prompt: aiAssistantRef.value?.inputText?.trim() || '',
-    productImages: productImages.value,
+    productImages: [], // Don't save File objects to localStorage
+  })
+  
+  currentTaskId.value = task.id
+
+  // 监听 recordId 并保存到任务中
+  const unwatchRecordId = watch(() => gen.currentRecordId.value, (newId) => {
+    if (newId) {
+      updateTask(task.id, { recordId: newId })
+      unwatchRecordId()
+    }
   })
 
   // 更新为处理中
   updateTask(task.id, { status: 'processing', progress: 0 })
   startProgressSimulation(task.id)
 
+  // 总超时保护：10分钟后如果还没完成，强制标记为超时失败
+  const timeoutId = setTimeout(() => {
+    stopProgressSimulation()
+    unwatchRecordId()
+    if (generating.value) {
+      generating.value = false
+      updateTask(task.id, { status: 'failed', errorMsg: '生成超时（超过10分钟），请减少图片数量或稍后重试' })
+      ElMessage.error('生成超时，请减少图片数量或稍后重试')
+    }
+  }, 10 * 60 * 1000)
+
   try {
     const text = aiAssistantRef.value?.inputText?.trim() || ''
     const basePrompt = `批量生成电商图片，共${productImages.value.length}张，数量${genCount.value}${text ? '。' + text : ''}`
-    await gen.fullGenerate(productImages.value, basePrompt, { consumePoints: 2, featureName: 'ai_assistant', title: '批量处理生成', n: genCount.value })
+    await gen.fullGenerate(productImages.value, basePrompt, { consumePoints: 2, featureName: 'ai_assistant', title: '批量处理生成', n: genCount.value, model: opts.model })
 
     // 生成成功
     stopProgressSimulation()
+    clearTimeout(timeoutId)
+    unwatchRecordId()
     const resultImages = gen.resultImages.value.map(img => {
       const url = img.url || img
       return { url }
@@ -862,7 +916,11 @@ async function handleGenerate() {
       progress: 100,
       resultImages,
     })
+    // 将结果图推入 AI 助手对话框
+    aiAssistantRef.value?.addResultImages(resultImages)
 } catch (e) {
+clearTimeout(timeoutId)
+unwatchRecordId()
 if (e?.message?.includes('已取消')) {
 stopProgressSimulation()
 updateTask(task.id, { status: 'cancelled' })
@@ -883,23 +941,28 @@ console.error('批量生成失败:', e)
         resultImages,
       })
     } else {
-      updateTask(task.id, { status: 'failed' })
       const isTimeout = e?.code === 'ECONNABORTED'
         || /timeout|超时|人数过多|繁忙|busy|timed out/i.test(e?.message || '')
       const errorMsg = e?.message || ''
+      let taskErrorMsg = '生成失败，请稍后重试'
       if (isTimeout) {
+        taskErrorMsg = '生成超时，请减少图片数量或稍后重试'
         ElMessage.error('生成超时，当前模型处理时间较长，请稍后重试或减少图片数量')
       } else if (/network|网络|ECONNREFUSED|ERR_NETWORK/i.test(errorMsg)) {
+        taskErrorMsg = '网络连接异常，请检查网络后重试'
         ElMessage.error('网络连接异常，请检查网络后重试')
       } else if (errorMsg) {
+        taskErrorMsg = '生成失败：' + errorMsg
         ElMessage.error('生成失败：' + errorMsg)
       } else {
         ElMessage.error('生成失败，请稍后重试')
       }
+      updateTask(task.id, { status: 'failed', errorMsg: taskErrorMsg })
     }
   } finally {
     generating.value = false
     stopProgressSimulation()
+    currentTaskId.value = null
   }
 }
 
@@ -1094,6 +1157,67 @@ async function loadCreationConfig() {
   } catch { /* use defaults */ }
 }
 
+function restoreLatestWorkspace() {
+  const cleared = localStorage.getItem('gh_batch_cleared')
+  if (cleared === 'true') return
+  
+  const latestTask = tasks.value[0]
+  if (!latestTask) return
+  
+  // 恢复 AI 助手的文本
+  if (latestTask.prompt) {
+    nextTick(() => {
+      if (aiAssistantRef.value) {
+        aiAssistantRef.value.inputText = latestTask.prompt
+      }
+    })
+  }
+  
+  // 恢复生成结果到 gen.resultImages (如果是已完成的任务，并且当前 gen.resultImages 为空)
+  if (latestTask.status === 'done' && latestTask.resultImages && latestTask.resultImages.length > 0) {
+    if (gen.resultImages.value.length === 0) {
+      gen.resultImages.value = latestTask.resultImages.map(img => img.url || img)
+    }
+  }
+}
+
+let isResuming = false
+async function resumeStaleTasks() {
+  if (isResuming) return
+  isResuming = true
+  try {
+    const staleTasks = tasks.value.filter(t => t.status === 'processing' || t.status === 'queued')
+    for (const t of staleTasks) {
+      if (!t.recordId) {
+        updateTask(t.id, { status: 'failed', errorMsg: '任务信息不完整' })
+        continue
+      }
+      try {
+        gen.generating.value = true
+        generating.value = true
+        startProgressSimulation(t.id)
+        const data = await gen.pollResult(t.recordId)
+        stopProgressSimulation()
+        if (data && data.status === '2') {
+          const resultImages = data.images.map(img => ({ url: img.url || img }))
+          updateTask(t.id, { status: 'done', progress: 100, resultImages })
+          if (tasks.value[0]?.id === t.id) {
+            aiAssistantRef.value?.addResultImages(resultImages)
+          }
+        }
+      } catch (e) {
+        stopProgressSimulation()
+        updateTask(t.id, { status: 'failed', errorMsg: e.message || '生成失败' })
+      } finally {
+        gen.generating.value = false
+        generating.value = false
+      }
+    }
+  } finally {
+    isResuming = false
+  }
+}
+
 onMounted(() => {
   loadCreationConfig()
   document.addEventListener('mousemove', onMouseMove)
@@ -1105,7 +1229,19 @@ onMounted(() => {
       _configWidthPx.value = Math.round(w * 0.35)
       _aiWidthPx.value = Math.round(w * 0.55)
     }
-  })})
+  })
+  restoreLatestWorkspace()
+  resumeStaleTasks()
+})
+
+// keep-alive 重新激活时刷新任务列表
+onActivated(() => {
+  reloadTasks()
+  restoreLatestWorkspace()
+  if (!generating.value) {
+    resumeStaleTasks()
+  }
+})
 
 onBeforeUnmount(() => {
   document.removeEventListener('mousemove', onMouseMove)
@@ -1119,6 +1255,7 @@ function clearWorkspaceImages() {
   outputSize.value = ''
   language.value = 'zh-CN'
   gen.reset()
+  localStorage.setItem('gh_batch_cleared', 'true')
 }
 </script>
 
@@ -1379,17 +1516,20 @@ overflow: hidden;
 border: 1px solid #E8EDF5;
 aspect-ratio: 1;
 cursor: pointer;
-transition: border-color 0.2s, transform 0.15s;
+transition: border-color 0.2s;
 }
 .canvas-result-item:hover {
 border-color: #2563FF;
-transform: scale(1.02);
 }
 .canvas-result-img {
 width: 100%;
 height: 100%;
 object-fit: cover;
 display: block;
+transition: transform 0.25s ease;
+}
+.canvas-result-item:hover .canvas-result-img {
+transform: scale(1.05);
 }
 
 /* Canvas Loading Overlay */
@@ -1564,6 +1704,14 @@ color: #6B7280;
 .status-dot.green { color: #22C55E; }
 .status-dot.red { color: #EF4444; }
 .status-dot.gray { color: #9CA3AF; }
+
+.task-error-msg {
+  font-size: 11px;
+  color: #EF4444;
+  margin-top: 4px;
+  line-height: 1.3;
+  word-break: break-all;
+}
 
 .progress-cell {
   display: flex;

@@ -314,6 +314,8 @@ vertex:
     # 反推提示词（图生文）使用的视觉文本模型
     # 生图模型 gemini-3-pro-image 只会返回图片不会返回描述文本，反推必须用支持图像理解的文本模型
     reverse-model: gemini-2.5-flash
+    # 反推提示词（图生文）备用降级模型列表（英文逗号分隔）。当主模型发生 429 资源耗尽或 503 时，会自动按此顺序尝试。
+    reverse-fallback-models: gemini-1.5-flash,gemini-1.5-pro,gemini-2.5-pro
     # 读超时（秒）
     read-timeout: 600
     # 默认宽高比（前端未传 extraOptions.aspect_ratio 时使用）

@@ -31,6 +31,12 @@ public class PromptLibraryQueryDTO {
     /** 状态（0启用 1停用） */
     private String status;
 
+    /** 引用状态筛选：1=已引用，0=未引用 */
+    private String referenced;
+
+    /** 被引用的 promptKey 列表（逗号分隔），与 referenced=1 配合使用 */
+    private String referencedKeys;
+
     /** 页码 */
     private Integer pageNum;
 

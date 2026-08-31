@@ -14,21 +14,31 @@
         </div>
 
         <div class="canvas-box">
-          <!-- 未生成：显示空状态 -->
-          <div v-if="resultImages.length === 0" class="canvas-placeholder">
+          <!-- 有结果图时显示在画布中 -->
+          <div v-if="resultImages.length > 0" class="canvas-result" :class="{ generating: isGenerating }">
+            <el-image
+              v-for="(img, i) in resultImages"
+              :key="i"
+              :src="img.url || img"
+              :preview-src-list="resultImages.map(r => r.url || r)"
+              :initial-index="i"
+              fit="contain"
+              class="result-img"
+            />
+          </div>
+          <!-- 加载中 -->
+          <div v-else-if="isGenerating" class="canvas-loading">
+            <p>{{ genStatus || '正在生成...' }}</p>
+          </div>
+          <!-- 空状态占位符 -->
+          <div v-else class="canvas-placeholder">
             <svg viewBox="0 0 48 48" fill="none">
               <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
               <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
               <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <h3>Banner 生成后将显示在此处</h3>
-            <p>请在右侧配置生成参数并点击发送</p>
-          </div>
-          <!-- 有结果图时：展示结果 -->
-          <div v-else class="result-grid" :class="{ generating: isGenerating }">
-            <div v-for="(img, idx) in resultImages" :key="'r'+idx" class="result-card">
-              <img :src="img.url || img" class="result-img" />
-            </div>
+            <h3>上传产品图并配置参数后生成</h3>
+            <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
           </div>
         </div>
 
@@ -297,6 +307,7 @@
 
 <script>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { compressImage } from '@/utils/compress'
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { useWorkflowProgress } from '@/composables/useWorkflowProgress'
 import { ArrowDown, ArrowLeft, ArrowRight, WarningFilled, FullScreen, RefreshLeft, Delete, UploadFilled, Link, MagicStick, DocumentCopy } from '@element-plus/icons-vue'
@@ -432,22 +443,22 @@ const aiAssistantRef = ref(null)
     }
 
     const REVERSE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-    const REVERSE_MAX_SIZE = 7 * 1024 * 1024
+    const REVERSE_MAX_SIZE = 1.5 * 1024 * 1024
 
-    function handleReverseFile(file) {
+    async function handleReverseFile(file) {
       if (!REVERSE_ALLOWED_TYPES.includes(file.type)) {
         ElMessage.error('仅支持 JPG / PNG / WebP 格式的图片')
         return
       }
-if (file.size > REVERSE_MAX_SIZE) {
-    ElMessage.error('图片大小不能超过 7MB')
-        return
+      let targetFile = file
+      if (targetFile.size > REVERSE_MAX_SIZE) {
+        targetFile = await compressImage(targetFile, 1.5)
       }
-      reverseImageFile.value = file
+      reverseImageFile.value = targetFile
       reverseResult.value = ''
       const reader = new FileReader()
       reader.onload = (ev) => { reverseImagePreview.value = ev.target.result }
-      reader.readAsDataURL(file)
+      reader.readAsDataURL(targetFile)
     }
 
     function clearReverseImage() {
@@ -681,19 +692,22 @@ canvasPreset.value = ''; canvasWidth.value = 1200; canvasHeight.value = 300
     function zoomOut() { zoom.value = Math.max(10, zoom.value - 10) }
     function toggleFullscreen() {}
 
-    async function handleGenerate() {
+    async function handleGenerate(opts = {}) {
       if (!canGenerate.value) return
       if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
       try {
         const extraOptions = { canvasWidth: canvasPreset.value ? canvasWidth.value : undefined, canvasHeight: canvasPreset.value ? canvasHeight.value : undefined, bannerType: activeBannerType.value, purposes: [...selectedPurposes.value], mainTitle: mainTitle.value, subTitle: subTitle.value, btnText: btnText.value }
-        const extraParams = { n: generateCount.value, extraOptions, consumePoints: 2, featureName: 'banner', title: 'Banner设计' }
+        const extraParams = { n: generateCount.value, extraOptions, consumePoints: 2, featureName: 'banner', title: 'Banner设计', model: opts.model }
         if (bgFile.value) { const bgUrl = await gen.uploadImage(bgFile.value); extraParams.backgroundImage = bgUrl }
         if (logoFile.value) { const logoUrl = await gen.uploadImage(logoFile.value); extraParams.logoImage = logoUrl }
         const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
         const baseText = mainTitle.value + ' ' + subTitle.value
         const fullPrompt = boostText ? `${baseText}。约束：${boostText}。` : baseText
         await gen.fullGenerate([originalFile.value], fullPrompt, extraParams)
-        if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
+        if (gen.resultImages.value.length > 0) {
+          resultImages.value = gen.resultImages.value
+          aiAssistantRef.value?.addResultImages(gen.resultImages.value)
+        }
       } catch (e) {
         if (e?.message?.includes('已取消')) return
         console.error('生成失败:', e)
@@ -702,18 +716,22 @@ canvasPreset.value = ''; canvasWidth.value = 1200; canvasHeight.value = 300
 
     async function handleGenerateFromAi() {
       const text = aiAssistantRef.value?.inputText?.trim() || ''
+      const aiModel = aiAssistantRef.value?.selectedModel
       if (!originalFile.value) { ElMessage.warning('请先上传产品图片'); return }
       if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
       try {
         const extraOptions = { canvasWidth: canvasPreset.value ? canvasWidth.value : undefined, canvasHeight: canvasPreset.value ? canvasHeight.value : undefined, bannerType: activeBannerType.value, purposes: [...selectedPurposes.value], mainTitle: mainTitle.value, subTitle: subTitle.value, btnText: btnText.value }
-        const extraParams = { n: generateCount.value, extraOptions, consumePoints: 2, featureName: 'banner', title: 'Banner设计' }
+        const extraParams = { n: generateCount.value, extraOptions, consumePoints: 2, featureName: 'banner', title: 'Banner设计', model: aiModel }
         if (bgFile.value) { const bgUrl = await gen.uploadImage(bgFile.value); extraParams.backgroundImage = bgUrl }
         if (logoFile.value) { const logoUrl = await gen.uploadImage(logoFile.value); extraParams.logoImage = logoUrl }
         const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
         const baseText = mainTitle.value + ' ' + subTitle.value + (text ? ' ' + text : '')
         const fullPrompt = boostText ? `${baseText}。约束：${boostText}。` : baseText
         await gen.fullGenerate([originalFile.value], fullPrompt, extraParams)
-        if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
+        if (gen.resultImages.value.length > 0) {
+          resultImages.value = gen.resultImages.value
+          aiAssistantRef.value?.addResultImages(gen.resultImages.value)
+        }
       } catch (e) {
         if (e?.message?.includes('已取消')) return
         console.error('生成失败:', e)

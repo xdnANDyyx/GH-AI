@@ -51,7 +51,7 @@
                 <el-option label="启用" value="0" />
                 <el-option label="停用" value="1" />
               </el-select>
-              <el-select v-model="libraryFilters.referenced" placeholder="引用状态" clearable style="width: 130px">
+              <el-select v-model="libraryFilters.referenced" placeholder="引用状态" clearable style="width: 130px" @change="() => { libraryPageNum = 1; fetchPromptLibrary() }">
                 <el-option label="全部" value="" />
                 <el-option label="已引用" value="1" />
                 <el-option label="未引用" value="0" />
@@ -640,7 +640,6 @@ const unifiedCategoryOptions = [
   { value: 'opt_language',   label: '语言' },
   { value: 'opt_shadow',     label: '阴影' },
   { value: 'opt_line_style',  label: '线条样式' },
-  { value: 'opt_ratio',      label: '尺寸' },
   { value: 'opt_unit',        label: '单位选择' },
  // { value: 'opt_size_template', label: '尺寸模板' },
   { value: 'function',       label: '约束' },
@@ -703,7 +702,7 @@ const libraryFilterCategoryOptions = computed(() => {
   } else if (configGroup === 'detail_img') {
     allowed = ['opt_platform', 'opt_size', 'opt_selling', 'opt_page', 'opt_language']
   } else if (configGroup === 'size_mark') {
-    allowed = ['opt_line_style', 'opt_size', 'opt_size_template', 'opt_unit', 'opt_language']
+    allowed = ['opt_line_style', 'opt_size', 'opt_unit', 'opt_language']
   } else if (configGroup === 'retouch') {
     allowed = ['opt_tool', 'opt_quality', 'opt_format', 'opt_size']
   } else if (configGroup === 'ai_model') {
@@ -1774,7 +1773,11 @@ function onLibraryScopeChange() {
 async function fetchPromptLibrary() {
   libraryLoading.value = true
   try {
-    const res = await listAdminPromptLibrary({
+    // 先收集引用关系（用于引用状态筛选和标签显示）
+    await collectReferencedPromptKeys()
+
+    // 构建查询参数
+    const queryParams = {
       pageNum: libraryPageNum.value,
       pageSize: libraryPageSize.value,
       category: libraryFilters.category || undefined,
@@ -1782,19 +1785,20 @@ async function fetchPromptLibrary() {
       promptKey: libraryFilters.promptKey || undefined,
       scope: libraryFilters.scope || undefined,
       status: libraryFilters.status || undefined
-    })
-    // 先收集引用关系，确保引用状态筛选能正确生效
-    await collectReferencedPromptKeys()
-
-    // 引用状态筛选（前端二次过滤，因为引用状态是前端计算的）
-    let rows = res.rows || []
-    if (libraryFilters.referenced === '1') {
-      rows = rows.filter(row => referencedPromptKeys.value.has(row.promptKey))
-    } else if (libraryFilters.referenced === '0') {
-      rows = rows.filter(row => !referencedPromptKeys.value.has(row.promptKey))
     }
-    promptLibraryList.value = rows
-    libraryTotal.value = rows.length
+
+    // 引用状态筛选：传给后端做精确查询，避免前端二次过滤与分页冲突
+    if (libraryFilters.referenced) {
+      queryParams.referenced = libraryFilters.referenced
+      // 将被引用的 promptKey 列表传给后端
+      if (referencedPromptKeys.value.size > 0) {
+        queryParams.referencedKeys = Array.from(referencedPromptKeys.value).join(',')
+      }
+    }
+
+    const res = await listAdminPromptLibrary(queryParams)
+    promptLibraryList.value = res.rows || []
+    libraryTotal.value = res.total || 0
   } catch (error) {
     ElMessage.error(error.message || '获取提示词选项库失败')
   } finally {

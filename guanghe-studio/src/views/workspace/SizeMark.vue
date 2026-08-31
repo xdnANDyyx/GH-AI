@@ -15,21 +15,31 @@
 
         <!-- Canvas Area -->
         <div class="canvas-box">
-          <!-- 未生成：显示空状态 -->
-          <div v-if="resultImages.length === 0" class="canvas-placeholder">
+          <!-- 有结果图时显示在画布中 -->
+          <div v-if="resultImages.length > 0" class="canvas-result" :class="{ generating: isGenerating }">
+            <el-image
+              v-for="(img, i) in resultImages"
+              :key="i"
+              :src="img.url || img"
+              :preview-src-list="resultImages.map(r => r.url || r)"
+              :initial-index="i"
+              fit="contain"
+              class="result-img"
+            />
+          </div>
+          <!-- 加载中 -->
+          <div v-else-if="isGenerating" class="canvas-loading">
+            <p>{{ genStatus || '正在生成...' }}</p>
+          </div>
+          <!-- 空状态占位符 -->
+          <div v-else class="canvas-placeholder">
             <svg viewBox="0 0 48 48" fill="none">
               <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
               <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
               <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <h3>AI 尺寸图生成后将显示在此处</h3>
-            <p>请在右侧配置生成参数并点击发送</p>
-          </div>
-          <!-- 有结果图时：展示结果 -->
-          <div v-else class="result-grid" :class="{ generating: isGenerating }">
-            <div v-for="(img, idx) in resultImages" :key="'r'+idx" class="result-card">
-              <img :src="img.url || img" class="result-img" />
-            </div>
+            <h3>上传产品图并配置参数后生成</h3>
+            <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
           </div>
         </div>
 
@@ -348,6 +358,7 @@
 
 <script>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { compressImage } from '@/utils/compress'
 import { UploadFilled, ArrowDown, ArrowLeft, ArrowRight, MagicStick, DocumentCopy } from '@element-plus/icons-vue'
 // import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
 // import CanvasOverlay from '@/components/CanvasOverlay.vue'
@@ -671,7 +682,7 @@ export default {
     // 加载提示词库映射
     async function loadPromptMap() {
       try {
-        const res = await listPromptLibraryBatch('opt_ratio,opt_language', 'size_mark')
+        const res = await listPromptLibraryBatch('opt_language', 'size_mark')
         const items = res.data || res || []
         const map = {}
         items.forEach(item => {
@@ -753,7 +764,7 @@ export default {
       chatPrompt.value = `请自动生成清晰的尺寸标记图，标注宽度${dimWidth.value}${unit.value}、长度${dimDepth.value}${unit.value}、高度${dimHeight.value}${unit.value}，风格简洁，适合电商平台使用。`
     }
 
-    async function handleGenerate() {
+    async function handleGenerate(opts = {}) {
       const text = aiAssistantRef.value?.inputText?.trim() || ''
       if (!originalFile.value) { ElMessage.warning('请先上传产品图片'); return }
       if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
@@ -764,8 +775,11 @@ export default {
         const prompt = boostText ? `${basePrompt}；${sizeText}${text ? text + '。' : ''}约束：${boostText}。` : `${basePrompt}${sizeText ? '。' + sizeText : ''}${text ? '。' + text : ''}`
         const extraOptions = {}
         if (effectiveOutputSize.value) extraOptions.output_size = effectiveOutputSize.value
-        await gen.fullGenerate([originalFile.value], prompt, { ...extraOptions, consumePoints: 2, featureName: 'size_mark', title: '尺寸标记生成', n: 1 })
-        if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
+        await gen.fullGenerate([originalFile.value], prompt, { ...extraOptions, consumePoints: 2, featureName: 'size_mark', title: '尺寸标记生成', n: 1, model: opts.model })
+        if (gen.resultImages.value.length > 0) {
+          resultImages.value = gen.resultImages.value
+          aiAssistantRef.value?.addResultImages(gen.resultImages.value)
+        }
       } catch (e) {
         if (e?.message?.includes('已取消')) return
         console.error('尺寸标记生成失败:', e)
@@ -816,22 +830,22 @@ export default {
     }
 
     const REVERSE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-    const REVERSE_MAX_SIZE = 7 * 1024 * 1024
+    const REVERSE_MAX_SIZE = 1.5 * 1024 * 1024
 
-    function handleReverseFile(file) {
+    async function handleReverseFile(file) {
       if (!REVERSE_ALLOWED_TYPES.includes(file.type)) {
         ElMessage.error('仅支持 JPG / PNG / WebP 格式的图片')
         return
       }
-if (file.size > REVERSE_MAX_SIZE) {
-    ElMessage.error('图片大小不能超过 7MB')
-        return
+      let targetFile = file
+      if (targetFile.size > REVERSE_MAX_SIZE) {
+        targetFile = await compressImage(targetFile, 1.5)
       }
-      reverseImageFile.value = file
+      reverseImageFile.value = targetFile
       reverseResult.value = ''
       const reader = new FileReader()
       reader.onload = (ev) => { reverseImagePreview.value = ev.target.result }
-      reader.readAsDataURL(file)
+      reader.readAsDataURL(targetFile)
     }
 
     function clearReverseImage() {

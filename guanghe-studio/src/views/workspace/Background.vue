@@ -19,33 +19,31 @@
         </div>
 
         <div class="canvas-box">
-          <!-- <CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" /> -->
-          <!-- 未生成：显示空状态 -->
-          <div v-if="resultImages.length === 0 && !isGenerating" class="canvas-placeholder">
+          <!-- 有结果图时显示在画布中 -->
+          <div v-if="resultImages.length > 0" class="canvas-result" :class="{ generating: isGenerating }">
+            <el-image
+              v-for="(img, i) in resultImages"
+              :key="i"
+              :src="img.url || img"
+              :preview-src-list="resultImages.map(r => r.url || r)"
+              :initial-index="i"
+              fit="contain"
+              class="result-img"
+            />
+          </div>
+          <!-- 加载中 -->
+          <div v-else-if="isGenerating" class="canvas-loading">
+            <p>{{ genStatus || '正在生成...' }}</p>
+          </div>
+          <!-- 空状态占位符 -->
+          <div v-else class="canvas-placeholder">
             <svg viewBox="0 0 48 48" fill="none">
               <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
               <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
               <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <h3>AI 背景图生成后将显示在此处</h3>
-            <p>请在右侧配置生成参数并点击发送</p>
-          </div>
-          <!-- 有结果图时：2×2 网格展示 -->
-          <div v-else-if="resultImages.length > 0" class="result-grid" :class="{ generating: isGenerating }">
-            <div v-for="(img, idx) in resultImages" :key="'r'+idx" class="result-card">
-              <img :src="img.url || img" class="result-img" />
-            </div>
-          </div>
-          <!-- 生成中：显示 loading 覆盖层 -->
-          <div v-if="isGenerating" class="canvas-loading">
-            <div class="loading-spinner"></div>
-            <p>{{ genStatus || '生成中...' }}</p>
-          </div>
-          <!-- 生成失败：显示错误提示 -->
-          <div v-if="genError && !isGenerating" class="canvas-error">
-            <el-icon :size="36" color="#EF4444"><WarningFilled /></el-icon>
-            <p class="error-text">{{ genError }}</p>
-            <p class="error-hint">请检查配置后重试</p>
+            <h3>上传商品图并配置参数后生成</h3>
+            <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
           </div>
         </div>
 
@@ -410,6 +408,7 @@ import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
 import AiAssistant from '@/components/AiAssistant.vue'
 import { favoriteMaterial, cancelFavoriteMaterial, getPublicCreationConfigByGroup, listPromptLibraryBatch, reversePrompt } from '@/api/customer'
 import { urlToFile } from '@/utils/image'
+import { compressImage } from '@/utils/compress'
 import { ArrowLeft, ArrowRight, ArrowDown, UploadFilled, Promotion, MagicStick, DocumentCopy, WarningFilled } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -668,7 +667,7 @@ function handleRefFiles(e) {
   })
 }
 
-async function handleGenerate() {
+async function handleGenerate(opts = {}) {
   if (!productFiles.value.length) {
     ElMessage.warning('请先上传商品图')
     return
@@ -700,8 +699,9 @@ async function handleGenerate() {
     if (selectedLight.value) extraParams.light = selectedLight.value
     if (selectedStyle.value) extraParams.style = selectedStyle.value
     if (effectiveOutputSize.value) extraParams.outputSize = effectiveOutputSize.value
-    // 生图模型（占位，后续对接真实模型）
-    if (selectedModel.value) extraParams.model = selectedModel.value
+    // 生图模型：优先使用 AI 助手传过来的模型选择
+    const effectiveModel = opts.model || selectedModel.value
+    if (effectiveModel) extraParams.model = effectiveModel
     if (referenceFiles.value.length) {
       gen.statusText.value = '正在上传参考图...'
       extraParams.referenceImages = await gen.uploadImages(referenceFiles.value)
@@ -717,6 +717,10 @@ async function handleGenerate() {
     extraParams.featureName = 'background'
     extraParams.title = '白底生成背景'
     await gen.fullGenerate(productFiles.value, prompt, extraParams)
+    // 将结果图推入 AI 助手对话框
+    if (gen.resultImages.value.length > 0) {
+      aiAssistantRef.value?.addResultImages(gen.resultImages.value)
+    }
   } catch (e) {
     if (e?.message?.includes('已取消')) return
     const isTimeout = e?.code === 'ECONNABORTED'
@@ -1035,22 +1039,22 @@ function handleReverseDrop(e) {
 }
 
 const REVERSE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-const REVERSE_MAX_SIZE = 7 * 1024 * 1024
+const REVERSE_MAX_SIZE = 1.5 * 1024 * 1024
 
-function handleReverseFile(file) {
+async function handleReverseFile(file) {
   if (!REVERSE_ALLOWED_TYPES.includes(file.type)) {
     ElMessage.error('仅支持 JPG / PNG / WebP 格式的图片')
     return
   }
-  if (file.size > REVERSE_MAX_SIZE) {
-    ElMessage.error('图片大小不能超过 7MB')
-    return
+  let targetFile = file
+  if (targetFile.size > REVERSE_MAX_SIZE) {
+    targetFile = await compressImage(targetFile, 1.5)
   }
-  reverseImageFile.value = file
+  reverseImageFile.value = targetFile
   reverseResult.value = ''
   const reader = new FileReader()
   reader.onload = (ev) => { reverseImagePreview.value = ev.target.result }
-  reader.readAsDataURL(file)
+  reader.readAsDataURL(targetFile)
 }
 
 function clearReverseImage() {

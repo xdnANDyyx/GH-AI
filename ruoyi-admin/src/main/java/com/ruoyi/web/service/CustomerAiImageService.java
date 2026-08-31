@@ -69,6 +69,12 @@ private int vertexReadTimeout;
     @Value("${vertex.ai.reverse-model:gemini-2.5-flash}")
     private String vertexReverseModel;
 
+    /**
+     * 反推提示词（图生文）使用的视觉文本模型的降级/备用模型列表（逗号分隔）
+     */
+    @Value("${vertex.ai.reverse-fallback-models:gemini-1.5-flash,gemini-1.5-pro,gemini-2.5-pro}")
+    private String vertexReverseFallbackModels;
+
     // ============================================
     // 代理配置（仅 Vertex AI 生图接口走新加坡 Squid）
     // ============================================
@@ -140,7 +146,7 @@ private int vertexReadTimeout;
      * 3. GoogleCredentials.getApplicationDefault() 默认路径查找
      * GoogleCredentials 内部使用 HttpURLConnection，需要设置系统属性走代理
      */
-    private String getVertexAccessToken() {
+    String getVertexAccessToken() {
         String oldHttpsProxyHost = System.getProperty("https.proxyHost");
         String oldHttpsProxyPort = System.getProperty("https.proxyPort");
 
@@ -206,7 +212,7 @@ private int vertexReadTimeout;
     }
 
     /**
-     * 调用 Vertex AI Gemini 生成图片
+     * 调用 Vertex AI Gemini 生成图片（使用默认模型）
      * @param prompt 文本提示词
      * @param imageUrls 参考图片 URL 列表（可为 null 或空）
      * @param aspectRatio 宽高比，如 "1:1"、"16:9"、"9:16" 等
@@ -214,15 +220,29 @@ private int vertexReadTimeout;
      * @return 生成的图片 data URI 列表（形如 data:image/png;base64,...，可直接用作 img src）
      */
     private List<String> callVertexAi(String prompt, List<String> imageUrls, String aspectRatio, String imageSize) {
+        return callVertexAi(prompt, imageUrls, aspectRatio, imageSize, vertexModel);
+    }
+
+    /**
+     * 调用 Vertex AI Gemini 生成图片（支持指定模型）
+     * @param prompt 文本提示词
+     * @param imageUrls 参考图片 URL 列表（可为 null 或空）
+     * @param aspectRatio 宽高比，如 "1:1"、"16:9"、"9:16" 等
+     * @param imageSize 图片尺寸，如 "1K"、"2K" 等
+     * @param model 模型名称，如 "gemini-3-pro-image"、"gemini-3.1-flash-image"
+     * @return 生成的图片 data URI 列表（形如 data:image/png;base64,...，可直接用作 img src）
+     */
+    private List<String> callVertexAi(String prompt, List<String> imageUrls, String aspectRatio, String imageSize, String model) {
         try {
             String accessToken = getVertexAccessToken();
 
-            // 构建 Vertex AI Gemini API URL
+            // 构建 Vertex AI Gemini API URL（使用前端指定的模型，回退到默认配置）
             // 注意：
             // 1. gemini-3-pro-image (Nano Banana Pro) 仅支持 v1beta1 API 端点，v1 会返回 404
             // 2. location=global 时主机名不带区域前缀（aiplatform.googleapis.com），
             //    否则会拼出 global-aiplatform.googleapis.com 这个不存在的域名导致 404
-            String url = buildVertexAiUrl();
+            String effectiveModel = (model != null && !model.isEmpty()) ? model : vertexModel;
+            String url = buildVertexAiUrl(effectiveModel);
 
             // 构建请求体
             JSONObject requestBody = new JSONObject();
@@ -277,8 +297,8 @@ private int vertexReadTimeout;
             requestBody.put("generationConfig", generationConfig);
 
             String jsonBody = requestBody.toJSONString();
-            log.info("调用 Vertex AI, prompt 长度: {}, 参考图片数: {}, aspectRatio: {}, imageSize: {}",
-                    prompt.length(), imageUrls != null ? imageUrls.size() : 0, aspectRatio, imageSize);
+            log.info("调用 Vertex AI, 模型: {}, prompt 长度: {}, 参考图片数: {}, aspectRatio: {}, imageSize: {}",
+                    effectiveModel, prompt.length(), imageUrls != null ? imageUrls.size() : 0, aspectRatio, imageSize);
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
@@ -409,15 +429,87 @@ private int vertexReadTimeout;
 
     /**
      * 反推提示词：发送图片+文本提示给 Gemini，返回文本描述
+     * 支持多模型自动降级/容灾与重试机制以解决 429 资源耗尽等频控/限额问题。
      * @param imageBase64OrUrl 图片 base64 data URI 或 URL
      * @param prompt 文本提示（用户可编辑的默认提示词）
      * @return AI 生成的提示词文本
      */
     public String reversePrompt(String imageBase64OrUrl, String prompt) {
+        List<String> modelsToTry = new ArrayList<>();
+        if (vertexReverseModel != null && !vertexReverseModel.trim().isEmpty()) {
+            modelsToTry.add(vertexReverseModel.trim());
+        }
+        if (vertexReverseFallbackModels != null && !vertexReverseFallbackModels.trim().isEmpty()) {
+            for (String m : vertexReverseFallbackModels.split(",")) {
+                String trimmed = m.trim();
+                if (!trimmed.isEmpty() && !modelsToTry.contains(trimmed)) {
+                    modelsToTry.add(trimmed);
+                }
+            }
+        }
+        if (modelsToTry.isEmpty()) {
+            modelsToTry.add("gemini-2.5-flash");
+        }
+
+        log.info("反推提示词候选模型序列: {}", modelsToTry);
+
+        String lastErrorMsg = "未知错误";
+        for (int mIdx = 0; mIdx < modelsToTry.size(); mIdx++) {
+            String currentModel = modelsToTry.get(mIdx);
+            log.info("开始尝试反推提示词, 候选模型[{}/{}]: {}", mIdx + 1, modelsToTry.size(), currentModel);
+
+            int maxAttempts = 2; // 尝试2次（即1次重试）
+            for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+                try {
+                    String result = callVertexAiReversePrompt(currentModel, imageBase64OrUrl, prompt);
+                    log.info("反推提示词调用成功, 使用模型: {}", currentModel);
+                    return result;
+                } catch (Exception e) {
+                    lastErrorMsg = e.getMessage();
+                    log.warn("模型 {} 尝试第 {} 次失败: {}", currentModel, attempt, lastErrorMsg);
+
+                    if (attempt < maxAttempts) {
+                        // 决定是否重试：判断错误类型
+                        boolean shouldRetrySameModel = true;
+                        long sleepMs = 1000;
+
+                        String lowerMsg = lastErrorMsg != null ? lastErrorMsg.toLowerCase() : "";
+                        if (lowerMsg.contains("400") || lowerMsg.contains("403") || lowerMsg.contains("404")) {
+                            // 客户端错误/权限错误/不存在，同一模型重试无意义，直接进入下一个模型
+                            shouldRetrySameModel = false;
+                        } else if (lowerMsg.contains("429")) {
+                            // 429 频率限制/资源耗尽，稍微等久一点再试
+                            sleepMs = 1500 * attempt;
+                        } else {
+                            // 其他暂态错误（如503、超时等）
+                            sleepMs = 500 * attempt;
+                        }
+
+                        if (shouldRetrySameModel) {
+                            log.info("等待 {} ms 后重试模型 {}", sleepMs, currentModel);
+                            try {
+                                Thread.sleep(sleepMs);
+                            } catch (InterruptedException ie) {
+                                Thread.currentThread().interrupt();
+                            }
+                        } else {
+                            break; // 退出当前模型的重试循环，直接切换模型
+                        }
+                    }
+                }
+            }
+        }
+
+        throw new RuntimeException("AI 分析全部尝试失败。最后一次错误: " + lastErrorMsg);
+    }
+
+    /**
+     * 单个模型的反推提示词具体调用逻辑，支持自适应图片压缩
+     */
+    private String callVertexAiReversePrompt(String model, String imageBase64OrUrl, String prompt) {
         try {
             String accessToken = getVertexAccessToken();
-            // 反推用专门的视觉文本模型（gemini-2.5-flash），不是生图模型 gemini-3-pro-image
-            String url = buildVertexAiUrl(vertexReverseModel);
+            String url = buildVertexAiUrl(model);
 
             JSONObject requestBody = new JSONObject();
             JSONArray contents = new JSONArray();
@@ -447,6 +539,10 @@ private int vertexReadTimeout;
                     imageBytes = downloadImage(imageBase64OrUrl);
                     mimeType = detectMimeType(imageBytes);
                 }
+                
+                // 压缩图片：反推提示词场景不需要极高分辨率，压缩到 1MB 以内能极大加快传输速度、减少 429 发生概率并节省 Token
+                imageBytes = compressImage(imageBytes, 1 * 1024 * 1024);
+                
                 String base64 = Base64.getEncoder().encodeToString(imageBytes);
                 JSONObject imagePart = new JSONObject();
                 JSONObject inlineData = new JSONObject();
@@ -470,7 +566,7 @@ private int vertexReadTimeout;
             requestBody.put("generationConfig", generationConfig);
 
             log.info("反推提示词调用 Vertex AI, 模型: {}, prompt 长度: {}, 含图片: {}",
-                    vertexReverseModel, prompt != null ? prompt.length() : 0, imageBase64OrUrl != null && !imageBase64OrUrl.isEmpty());
+                    model, prompt != null ? prompt.length() : 0, imageBase64OrUrl != null && !imageBase64OrUrl.isEmpty());
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
@@ -500,7 +596,7 @@ private int vertexReadTimeout;
                         errorDetail = ", body: " + (responseBody.length() > 500 ? responseBody.substring(0, 500) : responseBody);
                     }
                 }
-                log.error("反推提示词 Vertex AI 调用失败, 状态码: {}, 响应: {}", response.statusCode(), responseBody);
+                log.error("反推提示词 Vertex AI 调用失败, 模型: {}, 状态码: {}, 响应: {}", model, response.statusCode(), responseBody);
                 throw new RuntimeException("AI 分析失败: HTTP " + response.statusCode() + errorDetail);
             }
 
@@ -544,7 +640,7 @@ private int vertexReadTimeout;
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
-            log.error("反推提示词调用异常", e);
+            log.error("反推提示词调用异常, 模型: {}", model, e);
             throw new RuntimeException("反推提示词调用异常: " + e.getMessage(), e);
         }
     }
@@ -714,6 +810,7 @@ private int vertexReadTimeout;
      * - productImages / referenceImages / imageUrls：参考图片 URL 列表
      * - extraOptions.aspect_ratio：宽高比（如 "1:1"、"16:9"、"9:16"）
      * - extraOptions.image_size / size：图片尺寸（如 "1K"、"2K"）
+     * - model：AI模型名称（如 "gemini-3-pro-image"、"gemini-3.1-flash-image"），未传则使用默认配置
      * - n：生成数量
      */
     public List<String> generateImages(String prompt, int n, String size, Map<String, Object> params) {
@@ -751,11 +848,20 @@ private int vertexReadTimeout;
             }
         }
 
-        log.info("统一生成入口, prompt 长度: {}, 参考图数: {}, aspectRatio: {}, imageSize: {}, n: {}",
-                prompt.length(), imageUrls.size(), aspectRatio, imageSize, n);
+        // 3. 解析模型名称（前端可选传入，未传则使用默认配置 vertexModel）
+        String model = vertexModel;
+        if (params != null) {
+            Object modelObj = params.get("model");
+            if (modelObj != null && !modelObj.toString().isEmpty()) {
+                model = modelObj.toString();
+            }
+        }
 
-        // 3. 调用 Vertex AI（n 由模型端生成，这里单次调用返回多图）
-        return callVertexAi(prompt, imageUrls.isEmpty() ? null : imageUrls, aspectRatio, imageSize);
+        log.info("统一生成入口, prompt 长度: {}, 参考图数: {}, aspectRatio: {}, imageSize: {}, model: {}, n: {}",
+                prompt.length(), imageUrls.size(), aspectRatio, imageSize, model, n);
+
+        // 4. 调用 Vertex AI（n 由模型端生成，这里单次调用返回多图）
+        return callVertexAi(prompt, imageUrls.isEmpty() ? null : imageUrls, aspectRatio, imageSize, model);
     }
 
     /**
@@ -956,12 +1062,20 @@ private int vertexReadTimeout;
      * 压缩失败时降级返回原始字节，不影响主流程。
      */
     private byte[] compressImage(byte[] originalBytes) {
+        return compressImage(originalBytes, MAX_IMAGE_BYTES);
+    }
+
+    /**
+     * 压缩图片到指定限制（以字节为单位），通过逐步缩小尺寸。
+     * 压缩失败时降级返回原始字节，不影响主流程。
+     */
+    private byte[] compressImage(byte[] originalBytes, int maxBytesLimit) {
         if (originalBytes == null || originalBytes.length == 0) {
             return originalBytes;
         }
-        // 未超过 7MB，无需压缩
-        if (originalBytes.length <= MAX_IMAGE_BYTES) {
-            log.info("图片 {} bytes 未超过 7MB 阈值，跳过压缩", originalBytes.length);
+        // 未超过限制，无需压缩
+        if (originalBytes.length <= maxBytesLimit) {
+            log.info("图片 {} bytes 未超过 {} 字节阈值，跳过压缩", originalBytes.length, maxBytesLimit);
             return originalBytes;
         }
         try {
@@ -986,7 +1100,7 @@ private int vertexReadTimeout;
             int origHeight = original.getHeight();
             byte[] compressed = null;
 
-            // 逐步降低缩放比例，直到压缩后 <= 7MB 或缩到最小比例 0.1
+            // 逐步降低缩放比例，直到压缩后 <= maxBytesLimit 或缩到最小比例 0.1
             for (double scale = 0.9; scale >= 0.1; scale -= 0.1) {
                 int newWidth = Math.max(1, (int) (origWidth * scale));
                 int newHeight = Math.max(1, (int) (origHeight * scale));
@@ -1004,12 +1118,12 @@ private int vertexReadTimeout;
                         scale, originalBytes.length, compressed.length,
                         origWidth, origHeight, newWidth, newHeight);
 
-                if (compressed.length <= MAX_IMAGE_BYTES) {
+                if (compressed.length <= maxBytesLimit) {
                     break;
                 }
             }
 
-            // 如果所有比例都无法压到 7MB 以内，取最后一次（最小尺寸）的结果
+            // 如果所有比例都无法压到限制以内，取最后一次（最小尺寸）的结果
             if (compressed == null || compressed.length == 0) {
                 log.warn("压缩图片: 所有缩放比例均失败，使用原始图片");
                 return originalBytes;
