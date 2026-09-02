@@ -29,12 +29,8 @@
               class="result-img"
             />
           </div>
-          <!-- 加载中 -->
-          <div v-else-if="isGenerating" class="canvas-loading">
-            <p>{{ genStatus || '正在生成...' }}</p>
-          </div>
           <!-- 空状态占位符 -->
-          <div v-else class="canvas-placeholder">
+          <div v-else-if="!isGenerating" class="canvas-placeholder">
              <svg viewBox="0 0 48 48" fill="none">
               <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
               <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
@@ -42,6 +38,12 @@
             </svg>
             <h3>上传产品图并配置参数后生成</h3>
             <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
+          </div>
+
+          <!-- 生图阶段状态绝对定位浮层 -->
+          <div v-if="isGenerating" class="canvas-loading">
+            <el-icon class="is-loading" :size="24" color="#2563FF"><Loading /></el-icon>
+            <p>{{ genStatus || '正在生成...' }}</p>
           </div>
         </div>
 
@@ -365,6 +367,7 @@
       :close-on-click-modal="false"
       append-to-body
       class="reverse-prompt-dialog"
+      draggable
     >
       <div class="reverse-prompt-body">
         <div class="rp-upload-zone" @click="triggerReverseUpload" @dragover.prevent @drop.prevent="handleReverseDrop">
@@ -750,8 +753,17 @@ async function handleGenerate(opts = {}) {
   if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
   try {
     const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
-    const fullPrompt = boostText ? `${text}。约束：${boostText}。` : text
-    const extra = { consumePoints: 2, featureName: 'detail_img', title: '详情页生成', model: opts.model || selectedModel.value }
+    const languageTextMap = {
+      'zh': '中文',
+      'en': '英文',
+      'ja': '日文',
+      'ko': '韩文'
+    }
+    const langText = languageTextMap[language.value] || '英文'
+    const langPrompt = `图片上的文字使用${langText}。`
+    const promptWithLang = text ? `${text}。${langPrompt}` : langPrompt
+    const fullPrompt = boostText ? `${promptWithLang}约束：${boostText}。` : promptWithLang
+    const extra = { consumePoints: 2, featureName: 'detail_img', title: '详情页生成', model: opts.model || selectedModel.value, language: language.value }
     if (effectiveOutputSize.value) extra.outputSize = effectiveOutputSize.value
     if (genCount.value) extra.n = Number(genCount.value)
     else extra.n = 1

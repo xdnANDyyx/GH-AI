@@ -60,12 +60,8 @@
               <img :src="img.url" class="canvas-result-img" />
             </div>
           </div>
-          <!-- 加载中 -->
-          <div v-else-if="isGenerating" class="canvas-loading">
-            <p>{{ genStatus || '正在生成...' }}</p>
-          </div>
           <!-- 空状态占位符 -->
-          <div v-else class="canvas-placeholder">
+          <div v-else-if="!isGenerating" class="canvas-placeholder">
             <svg viewBox="0 0 64 64" fill="none">
               <rect x="8" y="12" width="48" height="40" rx="4" stroke="#D1D5DB" stroke-width="2"/>
               <circle cx="24" cy="26" r="5" stroke="#D1D5DB" stroke-width="1.5"/>
@@ -73,6 +69,12 @@
             </svg>
             <h3>上传产品图并配置参数后生成</h3>
             <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
+          </div>
+
+          <!-- 生图阶段状态绝对定位浮层 -->
+          <div v-if="isGenerating" class="canvas-loading">
+            <el-icon class="is-loading" :size="24" color="#2563FF"><Loading /></el-icon>
+            <p>{{ genStatus || '正在生成...' }}</p>
           </div>
         </div>
 
@@ -452,6 +454,7 @@
       :close-on-click-modal="false"
       append-to-body
       class="reverse-prompt-dialog"
+      draggable
     >
       <div class="reverse-prompt-body">
         <!-- 图片上传区 -->
@@ -900,8 +903,19 @@ async function handleGenerate(opts = {}) {
 
   try {
     const text = aiAssistantRef.value?.inputText?.trim() || ''
-    const basePrompt = `批量生成电商图片，共${productImages.value.length}张，数量${genCount.value}${text ? '。' + text : ''}`
-    await gen.fullGenerate(productImages.value, basePrompt, { consumePoints: 2, featureName: 'ai_assistant', title: '批量处理生成', n: genCount.value, model: opts.model })
+    const languageTextMap = {
+      'zh-CN': '中文',
+      'en-US': '英文',
+      'en-GB': '英文',
+      'ja-JP': '日文',
+      'ko-KR': '韩文',
+      'de-DE': '德文',
+      'fr-FR': '法文',
+      'es-ES': '西班牙文'
+    }
+    const langText = languageTextMap[language.value] || '中文'
+    const basePrompt = `批量生成电商图片，共${productImages.value.length}张，数量${genCount.value}。图片上的文字使用${langText}。${text ? ' ' + text : ''}`
+    await gen.fullGenerate(productImages.value, basePrompt, { consumePoints: 2, featureName: 'ai_assistant', title: '批量处理生成', n: genCount.value, model: opts.model, language: language.value })
 
     // 生成成功
     stopProgressSimulation()

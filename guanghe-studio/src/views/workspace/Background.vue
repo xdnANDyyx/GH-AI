@@ -31,12 +31,8 @@
               class="result-img"
             />
           </div>
-          <!-- 加载中 -->
-          <div v-else-if="isGenerating" class="canvas-loading">
-            <p>{{ genStatus || '正在生成...' }}</p>
-          </div>
           <!-- 空状态占位符 -->
-          <div v-else class="canvas-placeholder">
+          <div v-else-if="!isGenerating" class="canvas-placeholder">
             <svg viewBox="0 0 48 48" fill="none">
               <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
               <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
@@ -44,6 +40,12 @@
             </svg>
             <h3>上传商品图并配置参数后生成</h3>
             <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
+          </div>
+
+          <!-- 生图阶段状态绝对定位浮层 -->
+          <div v-if="isGenerating" class="canvas-loading">
+            <el-icon class="is-loading" :size="24" color="#2563FF"><Loading /></el-icon>
+            <p>{{ genStatus || '正在生成...' }}</p>
           </div>
         </div>
 
@@ -95,7 +97,10 @@
               <!-- 上传商品图 -->
               <div class="config-section collapsible">
                 <div class="panel-header collapsible" @click="toggleSection('upload')">
-                  <span class="section-label"><span class="required-mark">*</span>上传商品图（最多10张）<span class="required-mark">（必填）</span></span>
+                  <span class="section-label">
+                    <span class="required-mark">*</span>上传商品图（最多10张）<span class="required-mark">（必填）</span>
+                    <span style="font-size: 11px; color: #de3163; font-weight: normal; margin-left: 8px;">(建议上传白底图)</span>
+                  </span>
                   <span class="expand-text">
                     {{ sections.upload ? '收起' : '展开' }}
                     <el-icon :size="12" class="expand-arrow" :class="{ expanded: sections.upload }"><ArrowDown /></el-icon>
@@ -336,6 +341,7 @@
       :close-on-click-modal="false"
       append-to-body
       class="reverse-prompt-dialog"
+      draggable
     >
       <div class="reverse-prompt-body">
         <div class="rp-upload-zone" @click="triggerReverseUpload" @dragover.prevent @drop.prevent="handleReverseDrop">

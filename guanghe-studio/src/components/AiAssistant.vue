@@ -4,6 +4,14 @@
       <div class="ai-title">
         <el-icon class="ai-icon"><ChatDotRound /></el-icon>
         AI 助手
+        <a
+          href="https://yuanbao.tencent.com/"
+          target="_blank"
+          class="yuanbao-link"
+        >
+          <el-icon :size="12"><Link /></el-icon>
+          腾讯元宝
+        </a>
       </div>
       <div class="ai-header-right">
         <a class="clear-link" @click="clearChat" v-if="!collapsed">清空对话</a>
@@ -22,14 +30,14 @@
           <p class="welcome-title">你好，我是光合AI助手</p>
           <p class="welcome-desc">我可以帮你优化设计参数、推荐风格搭配、解答使用问题。</p>
           <div class="quick-questions">
-            <div
+            <!-- <div
               v-for="(q, i) in quickQuestions"
               :key="i"
               class="quick-item"
               @click="sendQuick(q)"
             >
               {{ q }}
-            </div>
+            </div> -->
           </div>
         </div>
 
@@ -72,7 +80,7 @@
             <div class="msg-content">
               <template v-if="isGenerating">
                 <div class="gen-progress-info">
-                  <span>{{ genStatus || '正在生成白底图...' }}</span>
+                  <span>{{ genStatus || '正在生成...' }}</span>
                   <el-progress v-if="genProgress > 0" :percentage="genProgress" :stroke-width="4" :show-text="false" />
                 </div>
               </template>
@@ -314,6 +322,22 @@ defineExpose({ inputText, messages, addResultImages, selectedModel })
   font-size: 14px;
   font-weight: 600;
   color: var(--gh-text-primary);
+}
+
+.yuanbao-link {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--gh-primary, #2563FF);
+  text-decoration: none;
+  font-weight: normal;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  transition: opacity 0.2s;
+}
+.yuanbao-link:hover {
+  opacity: 0.8;
+  text-decoration: underline;
 }
 
 .ai-icon {

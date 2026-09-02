@@ -26,12 +26,8 @@
               class="result-img"
             />
           </div>
-          <!-- 加载中 -->
-          <div v-else-if="isGenerating" class="canvas-loading">
-            <p>{{ genStatus || '正在生成...' }}</p>
-          </div>
           <!-- 空状态占位符 -->
-          <div v-else class="canvas-placeholder">
+          <div v-else-if="!isGenerating" class="canvas-placeholder">
             <svg viewBox="0 0 48 48" fill="none">
               <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
               <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
@@ -39,6 +35,12 @@
             </svg>
             <h3>上传产品图并配置参数后生成</h3>
             <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
+          </div>
+
+          <!-- 生图阶段状态绝对定位浮层 -->
+          <div v-if="isGenerating" class="canvas-loading">
+            <el-icon class="is-loading" :size="24" color="#2563FF"><Loading /></el-icon>
+            <p>{{ genStatus || '正在生成...' }}</p>
           </div>
         </div>
 
@@ -258,6 +260,7 @@
       :close-on-click-modal="false"
       append-to-body
       class="reverse-prompt-dialog"
+      draggable
     >
       <div class="reverse-prompt-body">
         <!-- 图片上传区 -->
@@ -696,12 +699,23 @@ canvasPreset.value = ''; canvasWidth.value = 1200; canvasHeight.value = 300
       if (!canGenerate.value) return
       if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
       try {
-        const extraOptions = { canvasWidth: canvasPreset.value ? canvasWidth.value : undefined, canvasHeight: canvasPreset.value ? canvasHeight.value : undefined, bannerType: activeBannerType.value, purposes: [...selectedPurposes.value], mainTitle: mainTitle.value, subTitle: subTitle.value, btnText: btnText.value }
+        const extraOptions = { canvasWidth: canvasPreset.value ? canvasWidth.value : undefined, canvasHeight: canvasPreset.value ? canvasHeight.value : undefined, bannerType: activeBannerType.value, purposes: [...selectedPurposes.value], mainTitle: mainTitle.value, subTitle: subTitle.value, btnText: btnText.value, language: language.value }
         const extraParams = { n: generateCount.value, extraOptions, consumePoints: 2, featureName: 'banner', title: 'Banner设计', model: opts.model }
         if (bgFile.value) { const bgUrl = await gen.uploadImage(bgFile.value); extraParams.backgroundImage = bgUrl }
         if (logoFile.value) { const logoUrl = await gen.uploadImage(logoFile.value); extraParams.logoImage = logoUrl }
+        const languageTextMap = {
+          'zh-CN': '中文',
+          'en-US': '英文',
+          'en-GB': '英文',
+          'ja-JP': '日文',
+          'ko-KR': '韩文',
+          'de-DE': '德文',
+          'fr-FR': '法文',
+          'es-ES': '西班牙文'
+        }
+        const langText = languageTextMap[language.value] || '中文'
         const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
-        const baseText = mainTitle.value + ' ' + subTitle.value
+        const baseText = mainTitle.value + ' ' + subTitle.value + `；图片上的文字使用${langText}。`
         const fullPrompt = boostText ? `${baseText}。约束：${boostText}。` : baseText
         await gen.fullGenerate([originalFile.value], fullPrompt, extraParams)
         if (gen.resultImages.value.length > 0) {
@@ -720,12 +734,23 @@ canvasPreset.value = ''; canvasWidth.value = 1200; canvasHeight.value = 300
       if (!originalFile.value) { ElMessage.warning('请先上传产品图片'); return }
       if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
       try {
-        const extraOptions = { canvasWidth: canvasPreset.value ? canvasWidth.value : undefined, canvasHeight: canvasPreset.value ? canvasHeight.value : undefined, bannerType: activeBannerType.value, purposes: [...selectedPurposes.value], mainTitle: mainTitle.value, subTitle: subTitle.value, btnText: btnText.value }
+        const extraOptions = { canvasWidth: canvasPreset.value ? canvasWidth.value : undefined, canvasHeight: canvasPreset.value ? canvasHeight.value : undefined, bannerType: activeBannerType.value, purposes: [...selectedPurposes.value], mainTitle: mainTitle.value, subTitle: subTitle.value, btnText: btnText.value, language: language.value }
         const extraParams = { n: generateCount.value, extraOptions, consumePoints: 2, featureName: 'banner', title: 'Banner设计', model: aiModel }
         if (bgFile.value) { const bgUrl = await gen.uploadImage(bgFile.value); extraParams.backgroundImage = bgUrl }
         if (logoFile.value) { const logoUrl = await gen.uploadImage(logoFile.value); extraParams.logoImage = logoUrl }
+        const languageTextMap = {
+          'zh-CN': '中文',
+          'en-US': '英文',
+          'en-GB': '英文',
+          'ja-JP': '日文',
+          'ko-KR': '韩文',
+          'de-DE': '德文',
+          'fr-FR': '法文',
+          'es-ES': '西班牙文'
+        }
+        const langText = languageTextMap[language.value] || '中文'
         const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
-        const baseText = mainTitle.value + ' ' + subTitle.value + (text ? ' ' + text : '')
+        const baseText = mainTitle.value + ' ' + subTitle.value + `；图片上的文字使用${langText}。` + (text ? ' ' + text : '')
         const fullPrompt = boostText ? `${baseText}。约束：${boostText}。` : baseText
         await gen.fullGenerate([originalFile.value], fullPrompt, extraParams)
         if (gen.resultImages.value.length > 0) {

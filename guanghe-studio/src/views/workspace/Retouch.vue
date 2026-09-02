@@ -27,12 +27,8 @@
               class="result-img"
             />
           </div>
-          <!-- 加载中 -->
-          <div v-else-if="isGenerating" class="canvas-loading">
-            <p>{{ genStatus || '正在生成...' }}</p>
-          </div>
           <!-- 空状态占位符 -->
-          <div v-else class="canvas-placeholder">
+          <div v-else-if="!isGenerating" class="canvas-placeholder">
             <svg viewBox="0 0 48 48" fill="none">
               <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
               <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
@@ -40,6 +36,12 @@
             </svg>
             <h3>上传需要精修的图片后生成</h3>
             <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
+          </div>
+
+          <!-- 生图阶段状态绝对定位浮层 -->
+          <div v-if="isGenerating" class="canvas-loading">
+            <el-icon class="is-loading" :size="24" color="#2563FF"><Loading /></el-icon>
+            <p>{{ genStatus || '正在生成...' }}</p>
           </div>
         </div>
 
@@ -222,6 +224,7 @@
       :close-on-click-modal="false"
       append-to-body
       class="reverse-prompt-dialog"
+      draggable
     >
       <div class="reverse-prompt-body">
         <!-- 图片上传区 -->

@@ -27,12 +27,8 @@
               class="result-img"
             />
           </div>
-          <!-- 加载中 -->
-          <div v-else-if="isGenerating" class="canvas-loading">
-            <p>{{ genStatus || '正在生成...' }}</p>
-          </div>
           <!-- 空状态占位符 -->
-          <div v-else class="canvas-placeholder">
+          <div v-else-if="!isGenerating" class="canvas-placeholder">
             <svg viewBox="0 0 48 48" fill="none">
               <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
               <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
@@ -40,6 +36,12 @@
             </svg>
             <h3>上传产品图并配置参数后生成</h3>
             <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
+          </div>
+
+          <!-- 生图阶段状态绝对定位浮层 -->
+          <div v-if="isGenerating" class="canvas-loading">
+            <el-icon class="is-loading" :size="24" color="#2563FF"><Loading /></el-icon>
+            <p>{{ genStatus || '正在生成...' }}</p>
           </div>
         </div>
 
@@ -309,6 +311,7 @@
       :close-on-click-modal="false"
       append-to-body
       class="reverse-prompt-dialog"
+      draggable
     >
       <div class="reverse-prompt-body">
         <!-- 图片上传区 -->
@@ -746,10 +749,21 @@ export default {
       if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
       generating.value = true
       try {
-        const prompt = `生成尺寸标记图，宽度${dimWidth.value}${unit.value}、长度${dimDepth.value}${unit.value}、高度${dimHeight.value}${unit.value}，风格简洁，适合电商平台`
+        const languageTextMap = {
+          'zh-CN': '中文',
+          'en-US': '英文',
+          'en-GB': '英文',
+          'ja-JP': '日文',
+          'ko-KR': '韩文',
+          'de-DE': '德文',
+          'fr-FR': '法文',
+          'es-ES': '西班牙文'
+        }
+        const langText = languageTextMap[language.value] || '中文'
+        const prompt = `生成尺寸标记图，宽度${dimWidth.value}${unit.value}、长度${dimDepth.value}${unit.value}、高度${dimHeight.value}${unit.value}，风格简洁，适合电商平台。图片上的文字使用${langText}。`
         const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
         const fullPrompt = boostText ? `${prompt}。约束：${boostText}。` : prompt
-        await gen.fullGenerate([originalFile.value], fullPrompt, { consumePoints: 2, featureName: 'size_mark', title: '尺寸标记生成', n: 1 })
+        await gen.fullGenerate([originalFile.value], fullPrompt, { consumePoints: 2, featureName: 'size_mark', title: '尺寸标记生成', n: 1, language: language.value })
         if (gen.resultImages.value.length > 0) resultImages.value = gen.resultImages.value
       } catch (e) {
         if (e?.message?.includes('已取消')) return
@@ -769,11 +783,22 @@ export default {
       if (!originalFile.value) { ElMessage.warning('请先上传产品图片'); return }
       if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
       try {
-        const basePrompt = `生成尺寸标记图，宽度${dimWidth.value}${unit.value}、长度${dimDepth.value}${unit.value}、高度${dimHeight.value}${unit.value}，风格简洁，适合电商平台`
+        const languageTextMap = {
+          'zh-CN': '中文',
+          'en-US': '英文',
+          'en-GB': '英文',
+          'ja-JP': '日文',
+          'ko-KR': '韩文',
+          'de-DE': '德文',
+          'fr-FR': '法文',
+          'es-ES': '西班牙文'
+        }
+        const langText = languageTextMap[language.value] || '中文'
+        const basePrompt = `生成尺寸标记图，宽度${dimWidth.value}${unit.value}、长度${dimDepth.value}${unit.value}、高度${dimHeight.value}${unit.value}，风格简洁，适合电商平台。图片上的文字使用${langText}。`
         const sizeText = effectiveOutputSize.value ? `输出图片尺寸为 ${effectiveOutputSize.value}，` : ''
         const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
         const prompt = boostText ? `${basePrompt}；${sizeText}${text ? text + '。' : ''}约束：${boostText}。` : `${basePrompt}${sizeText ? '。' + sizeText : ''}${text ? '。' + text : ''}`
-        const extraOptions = {}
+        const extraOptions = { language: language.value }
         if (effectiveOutputSize.value) extraOptions.output_size = effectiveOutputSize.value
         await gen.fullGenerate([originalFile.value], prompt, { ...extraOptions, consumePoints: 2, featureName: 'size_mark', title: '尺寸标记生成', n: 1, model: opts.model })
         if (gen.resultImages.value.length > 0) {

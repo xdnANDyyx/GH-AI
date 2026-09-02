@@ -30,12 +30,8 @@
               class="result-img"
             />
           </div>
-          <!-- 加载中 -->
-          <div v-else-if="isGenerating" class="canvas-loading">
-            <p>{{ genStatus || '正在生成...' }}</p>
-          </div>
           <!-- 空状态占位符 -->
-          <div v-else class="canvas-placeholder">
+          <div v-else-if="!isGenerating" class="canvas-placeholder">
             <svg viewBox="0 0 48 48" fill="none">
               <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
               <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
@@ -43,6 +39,12 @@
             </svg>
             <h3>上传产品图并配置参数后生成</h3>
             <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
+          </div>
+
+          <!-- 生图阶段状态绝对定位浮层 -->
+          <div v-if="isGenerating" class="canvas-loading">
+            <el-icon class="is-loading" :size="24" color="#2563FF"><Loading /></el-icon>
+            <p>{{ genStatus || '正在生成...' }}</p>
           </div>
         </div>
 
@@ -290,6 +292,7 @@
       :close-on-click-modal="false"
       append-to-body
       class="reverse-prompt-dialog"
+      draggable
     >
       <div class="reverse-prompt-body">
         <div class="rp-upload-zone" @click="triggerReverseUpload" @dragover.prevent @drop.prevent="handleReverseDrop">
@@ -751,7 +754,19 @@ export default {
       if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
       generating.value = true
       try {
-        const extra = { consumePoints: 2, featureName: 'main_image', title: '主图设计', model: opts.model || selectedModel.value }
+        const languageTextMap = {
+          'zh-CN': '中文',
+          'en-US': '英文',
+          'en-GB': '英文',
+          'ja-JP': '日文',
+          'ko-KR': '韩文',
+          'de-DE': '德文',
+          'fr-FR': '法文',
+          'es-ES': '西班牙文'
+        }
+        const langText = languageTextMap[language.value] || '英文'
+        const fullPrompt = text ? `${text}。图片上的文字使用${langText}。` : `图片上的文字使用${langText}。`
+        const extra = { consumePoints: 2, featureName: 'main_image', title: '主图设计', model: opts.model || selectedModel.value, language: language.value }
         if (activePlatform.value) {
           // 使用提示词库中该平台对应的 promptText 传给 AI，而非 raw value
           const promptText = promptMap.value[activePlatform.value]
@@ -759,7 +774,7 @@ export default {
         }
         if (effectiveOutputSize.value) extra.outputSize = effectiveOutputSize.value
         if (generateCount.value) extra.n = Number(generateCount.value)
-        await gen.fullGenerate(productFiles.value, text, extra)
+        await gen.fullGenerate(productFiles.value, fullPrompt, extra)
         // 将结果图推入 AI 助手对话框
         if (gen.resultImages.value.length > 0) {
           aiAssistantRef.value?.addResultImages(gen.resultImages.value)
