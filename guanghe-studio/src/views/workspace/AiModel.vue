@@ -862,11 +862,13 @@ function removeProductFile(index) {
 }
 
 async function handleGenerate(opts = {}) {
-  const text = aiAssistantRef.value?.inputText?.trim() || ''
+  const text = opts.prompt !== undefined ? opts.prompt : (aiAssistantRef.value?.inputText?.trim() || '')
   if (!productFiles.value.length) { ElMessage.warning('请先上传产品图片'); return }
   if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
   try {
-    const _basePrompt = `生成AI模特图，性别${gender.value}，年龄${age.value}，发型${hairstyle.value}，姿势${pose.value}，服装${clothing.value}，场景${sceneStyle.value}`
+    const selectedSceneObj = sceneOptions.value.find(s => s.value === sceneStyle.value)
+    const sceneLabel = selectedSceneObj ? selectedSceneObj.label : sceneStyle.value
+    const _basePrompt = `生成AI模特图，性别${gender.value}，年龄${age.value}，发型${hairstyle.value}，姿势${pose.value}，服装${clothing.value}，场景${sceneLabel}`
     const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
     const sizeText = effectiveOutputSize.value ? `输出图片尺寸为 ${effectiveOutputSize.value}，` : ''
     const prompt = boostText ? `${_basePrompt}；${sizeText}${text ? text + '。' : ''}约束：${boostText}。` : `${_basePrompt}${sizeText ? '。' + sizeText : ''}${text ? '。' + text : ''}`
@@ -1015,12 +1017,15 @@ async function loadCreationConfig() {
 async function loadPromptMap() {
   try {
     const res = await listPromptLibraryBatch('opt_age,opt_hairstyle,opt_ethnicity,opt_pose,opt_clothing,opt_scene', 'ai_model')
-    const items = res.data || res || []
+    const groups = res.data || {}
     const map = {}
-    items.forEach(item => {
-      if (item.promptKey && item.promptText) {
-        map[item.promptKey] = item.promptText
-      }
+    Object.values(groups).forEach(list => {
+      (list || []).forEach(item => {
+        const key = item.promptKey || item.value
+        if (key && item.promptText) {
+          map[key] = item.promptText
+        }
+      })
     })
     promptMap.value = map
   } catch {

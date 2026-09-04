@@ -691,7 +691,7 @@ const libraryFilterCategoryOptions = computed(() => {
   if (!libraryFilters.scope) return unifiedCategoryOptions
   const configGroup = scopeToConfigGroupMap[libraryFilters.scope]
   if (!configGroup) return unifiedCategoryOptions
-  const optList = unifiedCategoryOptions.filter(o => o.value.startsWith('opt_'))
+  const optList = unifiedCategoryOptions.filter(o => o.value.startsWith('opt_') || ['product', 'material'].includes(o.value))
   let allowed = []
   if (configGroup === 'white_bg') {
     allowed = ['opt_shadow', 'opt_size']
@@ -704,7 +704,7 @@ const libraryFilterCategoryOptions = computed(() => {
   } else if (configGroup === 'size_mark') {
     allowed = ['opt_line_style', 'opt_size', 'opt_unit', 'opt_language']
   } else if (configGroup === 'retouch') {
-    allowed = ['opt_tool', 'opt_quality', 'opt_format', 'opt_size']
+    allowed = ['opt_tool', 'opt_quality', 'opt_format', 'opt_size', 'product', 'material']
   } else if (configGroup === 'ai_model') {
     allowed = ['opt_gender', 'opt_age', 'opt_hairstyle', 'opt_ethnicity', 'opt_pose', 'opt_clothing', 'opt_scene', 'opt_size']
   } else if (configGroup === 'banner') {
@@ -721,7 +721,7 @@ const libraryFilterCategoryOptions = computed(() => {
 
 // 创作配置绑定用（从统一列表中只取 opt_ 开头的 UI 选项库分类；AI白底图仅显示阴影+尺寸；白底图生成背景仅显示平台/场景/光线/风格/尺寸；主图设计仅显示平台/尺寸/用途/卖点；详情图/A+仅显示平台/尺寸/卖点/详情页模块）
 const promptPickerCategoryOptions = computed(() => {
-  const optList = unifiedCategoryOptions.filter(o => o.value.startsWith('opt_'))
+  const optList = unifiedCategoryOptions.filter(o => o.value.startsWith('opt_') || ['product', 'material'].includes(o.value))
   if (creationForm.configGroup === 'white_bg') {
     return optList.filter(o => ['opt_shadow', 'opt_size'].includes(o.value))
   }
@@ -738,7 +738,7 @@ const promptPickerCategoryOptions = computed(() => {
     return optList.filter(o => ['opt_line_style', 'opt_size', 'opt_size_template', 'opt_unit', 'opt_language'].includes(o.value))
   }
   if (creationForm.configGroup === 'retouch') {
-    return optList.filter(o => ['opt_tool', 'opt_quality', 'opt_format', 'opt_size'].includes(o.value))
+    return optList.filter(o => ['opt_tool', 'opt_quality', 'opt_format', 'opt_size', 'product', 'material'].includes(o.value))
   }
   if (creationForm.configGroup === 'ai_model') {
     return optList.filter(o => ['opt_gender', 'opt_age', 'opt_hairstyle', 'opt_ethnicity', 'opt_pose', 'opt_clothing', 'opt_scene', 'opt_size'].includes(o.value))
@@ -920,7 +920,9 @@ function inferPromptCategory(configKey) {
     poses: 'opt_pose',
     clothing_options: 'opt_clothing',
     scene_options: 'opt_scene',
-    banner_types: 'opt_banner_type'
+    banner_types: 'opt_banner_type',
+    product_options: 'product',
+    material_options: 'material'
   }
   return map[configKey] || ''
 }

@@ -829,19 +829,42 @@ private int vertexReadTimeout;
         String aspectRatio = sanitizeAspectRatio(defaultAspectRatio);
         String imageSize = sanitizeImageSize(defaultImageSize);
         if (params != null) {
+            // 首先尝试从顶层或 extraOptions 获取各种命名的 aspect_ratio
+            String rawAr = null;
+            Object arObj = params.get("aspect_ratio");
+            if (arObj == null) arObj = params.get("aspectRatio");
+            if (arObj == null) arObj = params.get("outputSize");
+            if (arObj == null) arObj = params.get("output_size");
+            if (arObj != null) rawAr = arObj.toString();
+
             Object extraOptionsObj = params.get("extraOptions");
             if (extraOptionsObj instanceof Map) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> extraOptions = (Map<String, Object>) extraOptionsObj;
-                Object ar = extraOptions.get("aspect_ratio");
-                if (ar != null && !ar.toString().isEmpty()) {
-                    aspectRatio = sanitizeAspectRatio(ar.toString());
+                if (rawAr == null || rawAr.isEmpty()) {
+                    Object ar = extraOptions.get("aspect_ratio");
+                    if (ar == null) ar = extraOptions.get("aspectRatio");
+                    if (ar == null) ar = extraOptions.get("outputSize");
+                    if (ar == null) ar = extraOptions.get("output_size");
+                    if (ar != null) rawAr = ar.toString();
                 }
+                
                 Object is = extraOptions.get("image_size");
                 if (is != null && !is.toString().isEmpty()) {
                     imageSize = sanitizeImageSize(is.toString());
                 }
             }
+
+            // 解析或清洗得到的 aspect_ratio
+            if (rawAr != null && !rawAr.isEmpty()) {
+                String closestAr = parseClosestAspectRatio(rawAr);
+                if (closestAr != null) {
+                    aspectRatio = closestAr;
+                } else {
+                    aspectRatio = sanitizeAspectRatio(rawAr);
+                }
+            }
+
             // 兼容顶层 size 参数
             if (size != null && !size.isEmpty()) {
                 imageSize = sanitizeImageSize(size);
@@ -860,8 +883,40 @@ private int vertexReadTimeout;
         log.info("统一生成入口, prompt 长度: {}, 参考图数: {}, aspectRatio: {}, imageSize: {}, model: {}, n: {}",
                 prompt.length(), imageUrls.size(), aspectRatio, imageSize, model, n);
 
-        // 4. 调用 Vertex AI（n 由模型端生成，这里单次调用返回多图）
-        return callVertexAi(prompt, imageUrls.isEmpty() ? null : imageUrls, aspectRatio, imageSize, model);
+        // 4. 调用 Vertex AI（根据 n 发起多次/单次调用并合并结果）
+        List<String> base64Images = new ArrayList<>();
+        if (n <= 1) {
+            base64Images.addAll(callVertexAi(prompt, imageUrls.isEmpty() ? null : imageUrls, aspectRatio, imageSize, model));
+        } else {
+            List<java.util.concurrent.CompletableFuture<List<String>>> futures = new ArrayList<>();
+            for (int i = 0; i < n; i++) {
+                final String finalPrompt = prompt;
+                final List<String> finalImageUrls = imageUrls.isEmpty() ? null : imageUrls;
+                final String finalAspectRatio = aspectRatio;
+                final String finalImageSize = imageSize;
+                final String finalModel = model;
+                futures.add(java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return callVertexAi(finalPrompt, finalImageUrls, finalAspectRatio, finalImageSize, finalModel);
+                    } catch (Exception e) {
+                        log.error("Vertex AI parallel generation failed", e);
+                        return new ArrayList<String>();
+                    }
+                }));
+            }
+            java.util.concurrent.CompletableFuture.allOf(futures.toArray(new java.util.concurrent.CompletableFuture[0])).join();
+            for (java.util.concurrent.CompletableFuture<List<String>> future : futures) {
+                try {
+                    base64Images.addAll(future.get());
+                } catch (Exception e) {
+                    log.error("Failed to get parallel generation result", e);
+                }
+            }
+            if (base64Images.isEmpty()) {
+                throw new RuntimeException("Vertex AI generation failed for all requested images");
+            }
+        }
+        return base64Images;
     }
 
     /**
@@ -885,6 +940,40 @@ private int vertexReadTimeout;
     // ============================================
     // 工具方法
     // ============================================
+
+    private String parseClosestAspectRatio(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        String v = value.trim().toLowerCase();
+        // If it's already a standard ratio
+        if (isLegalAspectRatio(v)) {
+            return v;
+        }
+        // If it's like 1600x1600 or 1200*800 or 1200/800
+        String[] parts = v.split("[xX*/]");
+        if (parts.length == 2) {
+            try {
+                double w = Double.parseDouble(parts[0].trim());
+                double h = Double.parseDouble(parts[1].trim());
+                if (w > 0 && h > 0) {
+                    double ratio = w / h;
+                    if (Math.abs(ratio - 1.0) < 0.05) return "1:1";
+                    if (Math.abs(ratio - 1.333) < 0.05) return "4:3";
+                    if (Math.abs(ratio - 0.75) < 0.05) return "3:4";
+                    if (Math.abs(ratio - 1.777) < 0.05) return "16:9";
+                    if (Math.abs(ratio - 0.562) < 0.05) return "9:16";
+                    if (Math.abs(ratio - 1.5) < 0.05) return "3:2";
+                    if (Math.abs(ratio - 0.666) < 0.05) return "2:3";
+                    if (Math.abs(ratio - 1.25) < 0.05) return "5:4";
+                    if (Math.abs(ratio - 0.8) < 0.05) return "4:5";
+                    if (Math.abs(ratio - 2.333) < 0.05) return "21:9";
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
 
     /**
      * 白名单校验宽高比，非法值回退默认值

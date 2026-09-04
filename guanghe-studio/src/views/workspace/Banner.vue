@@ -642,12 +642,15 @@ const aiFlex = computed(() => `0 0 ${_aiWidthPx.value}px`)
     async function loadPromptMap() {
       try {
         const res = await listPromptLibraryBatch('opt_banner_type,opt_purpose,opt_template', 'banner')
-        const items = res.data || res || []
+        const groups = res.data || {}
         const map = {}
-        items.forEach(item => {
-          if (item.promptKey && item.promptText) {
-            map[item.promptKey] = item.promptText
-          }
+        Object.values(groups).forEach(list => {
+          (list || []).forEach(item => {
+            const key = item.promptKey || item.value
+            if (key && item.promptText) {
+              map[key] = item.promptText
+            }
+          })
         })
         promptMap.value = map
       } catch {
@@ -713,9 +716,27 @@ canvasPreset.value = ''; canvasWidth.value = 1200; canvasHeight.value = 300
           'fr-FR': '法文',
           'es-ES': '西班牙文'
         }
-        const langText = languageTextMap[language.value] || '中文'
+        const langKey = language.value ? language.value.replace('opt_language.', '') : ''
+        const langText = languageTextMap[langKey] || languageTextMap[language.value] || '中文'
+        
+        const typeObj = bannerTypes.value.find(t => t.key === activeBannerType.value)
+        const typeName = typeObj ? typeObj.name : ''
+        const purposeLabels = selectedPurposes.value.map(key => {
+          const pObj = purposes.value.find(p => p.key === key)
+          return pObj ? pObj.label : ''
+        }).filter(Boolean)
+        const typePart = typeName ? `类型：${typeName}` : ''
+        const purposePart = purposeLabels.length > 0 ? `目的：${purposeLabels.join('、')}` : ''
+        const configPart = [typePart, purposePart].filter(Boolean).join('；')
+
         const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
-        const baseText = mainTitle.value + ' ' + subTitle.value + `；图片上的文字使用${langText}。`
+        const textParts = []
+        if (mainTitle.value) textParts.push(`主标题：${mainTitle.value}`)
+        if (subTitle.value) textParts.push(`副标题：${subTitle.value}`)
+        if (btnText.value) textParts.push(`文案：${btnText.value}`)
+        const textPrompt = textParts.join('；') + (textParts.length > 0 ? '；' : '')
+
+        const baseText = `${textPrompt}图片上的文字使用${langText}。` + (configPart ? `创意配置：${configPart}。` : '')
         const fullPrompt = boostText ? `${baseText}。约束：${boostText}。` : baseText
         await gen.fullGenerate([originalFile.value], fullPrompt, extraParams)
         if (gen.resultImages.value.length > 0) {
@@ -728,9 +749,9 @@ canvasPreset.value = ''; canvasWidth.value = 1200; canvasHeight.value = 300
       }
     }
 
-    async function handleGenerateFromAi() {
-      const text = aiAssistantRef.value?.inputText?.trim() || ''
-      const aiModel = aiAssistantRef.value?.selectedModel
+    async function handleGenerateFromAi(opts = {}) {
+      const text = opts.prompt !== undefined ? opts.prompt : (aiAssistantRef.value?.inputText?.trim() || '')
+      const aiModel = opts.model || aiAssistantRef.value?.selectedModel
       if (!originalFile.value) { ElMessage.warning('请先上传产品图片'); return }
       if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
       try {
@@ -748,9 +769,27 @@ canvasPreset.value = ''; canvasWidth.value = 1200; canvasHeight.value = 300
           'fr-FR': '法文',
           'es-ES': '西班牙文'
         }
-        const langText = languageTextMap[language.value] || '中文'
+        const langKey = language.value ? language.value.replace('opt_language.', '') : ''
+        const langText = languageTextMap[langKey] || languageTextMap[language.value] || '中文'
+        
+        const typeObj = bannerTypes.value.find(t => t.key === activeBannerType.value)
+        const typeName = typeObj ? typeObj.name : ''
+        const purposeLabels = selectedPurposes.value.map(key => {
+          const pObj = purposes.value.find(p => p.key === key)
+          return pObj ? pObj.label : ''
+        }).filter(Boolean)
+        const typePart = typeName ? `类型：${typeName}` : ''
+        const purposePart = purposeLabels.length > 0 ? `目的：${purposeLabels.join('、')}` : ''
+        const configPart = [typePart, purposePart].filter(Boolean).join('；')
+
         const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
-        const baseText = mainTitle.value + ' ' + subTitle.value + `；图片上的文字使用${langText}。` + (text ? ' ' + text : '')
+        const textPartsFromAi = []
+        if (mainTitle.value) textPartsFromAi.push(`主标题：${mainTitle.value}`)
+        if (subTitle.value) textPartsFromAi.push(`副标题：${subTitle.value}`)
+        if (btnText.value) textPartsFromAi.push(`文案：${btnText.value}`)
+        const textPromptFromAi = textPartsFromAi.join('；') + (textPartsFromAi.length > 0 ? '；' : '')
+
+        const baseText = `${textPromptFromAi}图片上的文字使用${langText}。` + (configPart ? `创意配置：${configPart}。` : '') + (text ? ' ' + text : '')
         const fullPrompt = boostText ? `${baseText}。约束：${boostText}。` : baseText
         await gen.fullGenerate([originalFile.value], fullPrompt, extraParams)
         if (gen.resultImages.value.length > 0) {

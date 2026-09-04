@@ -220,10 +220,10 @@ async function sendMessage() {
   isLoading.value = true
   scrollToBottom()
 
-  // 直接触发生成（不走 deepseek 对话，仅生图），将用户选择的模型传给生成函数
+  // 直接触发生成（不走 deepseek 对话，仅生图），将用户选择的模型和提示词传给生成函数
   if (props.generateFn) {
     try {
-      await props.generateFn({ model: selectedModel.value })
+      await props.generateFn({ model: selectedModel.value, prompt: text })
     } catch (e) {
       console.error('生成触发失败:', e)
     } finally {

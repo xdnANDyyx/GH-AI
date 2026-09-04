@@ -95,7 +95,11 @@ public class CustomerAiImageController {
         int n = 1;
         if (nValue != null) {
             try {
-                n = Integer.parseInt(nValue.toString());
+                if (nValue instanceof Number) {
+                    n = ((Number) nValue).intValue();
+                } else {
+                    n = (int) Double.parseDouble(nValue.toString());
+                }
             } catch (NumberFormatException ignored) {
             }
         }

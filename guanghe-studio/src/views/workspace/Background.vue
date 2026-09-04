@@ -678,7 +678,7 @@ async function handleGenerate(opts = {}) {
     ElMessage.warning('请先上传商品图')
     return
   }
-  const text = aiAssistantRef.value?.inputText?.trim() || ''
+  const text = opts.prompt !== undefined ? opts.prompt : (aiAssistantRef.value?.inputText?.trim() || '')
 
   // 提前设置生成状态，让用户立即看到反馈
   gen.generating.value = true

@@ -17,6 +17,19 @@ import {
   listPromptLibrary
 } from '@/api/customer'
 
+function getPollingStatusText(seconds) {
+  if (seconds <= 4) return `正在初始化模型与预检环境... (${seconds}s)`
+  if (seconds <= 10) return `正在分析参考图与输入图片特征... (${seconds}s)`
+  if (seconds <= 20) return `正在规划画布主体布局与透视投影... (${seconds}s)`
+  if (seconds <= 35) return `正在生成初始轮廓与基础低频结构... (${seconds}s)`
+  if (seconds <= 55) return `多步扩散去噪中，正在精细化光影质感... (${seconds}s)`
+  if (seconds <= 75) return `正在对产品边缘与接缝进行平滑融合... (${seconds}s)`
+  if (seconds <= 95) return `正在针对皮肤与人物细节进行二次超分微调... (${seconds}s)`
+  if (seconds <= 115) return `正在校正画面全局色彩平衡与对比度... (${seconds}s)`
+  if (seconds <= 145) return `正在进行无损高动态重构与降噪后处理... (${seconds}s)`
+  return `正在进行最终质量安全审计与图样生成检查... (${seconds}s)`
+}
+
 const FEATURE_TO_SCOPE = {
   white_bg: 'white_bg',
   background: 'change_bg',
@@ -147,8 +160,12 @@ export function useImageGeneration(sessionType) {
   async function uploadImages(files) {
     const urls = []
     for (const file of files) {
-      const url = await uploadImage(file)
-      if (url) urls.push(url)
+      if (typeof file === 'string') {
+        urls.push(file)
+      } else {
+        const url = await uploadImage(file)
+        if (url) urls.push(url)
+      }
     }
     return urls
   }
@@ -174,6 +191,14 @@ export function useImageGeneration(sessionType) {
     progress.value = 0
     statusText.value = '正在提交生成任务...'
 
+    // 开启一个虚拟的进度模拟定时器，即使是同步阻塞生图，也能在等待 HTTP 响应期间给用户展示生图阶段
+    let fakeSeconds = 0
+    const fakeTimer = setInterval(() => {
+      fakeSeconds += 1.5
+      progress.value = Math.min(90, Math.round((fakeSeconds / 45) * 100)) // 假设普通同步生图大约 45 秒内
+      statusText.value = getPollingStatusText(Math.round(fakeSeconds))
+    }, 1500)
+
     try {
       const res = await generateOmniImage({
         sessionType,
@@ -183,7 +208,10 @@ export function useImageGeneration(sessionType) {
         ...params
       })
 
-          const data = res.data || res
+      // 只要拿到了响应，就清除虚拟定时器
+      clearInterval(fakeTimer)
+
+      const data = res.data || res
       console.log('生成响应数据:', data)
       currentRecordId.value = data.id
       currentSessionId.value = data.sessionId || currentSessionId.value
@@ -199,8 +227,9 @@ export function useImageGeneration(sessionType) {
       }
 
       // 开始轮询
-      return await pollResult(data.id)
+      return await pollResult(data.id, fakeSeconds)
     } catch (e) {
+      clearInterval(fakeTimer)
       // 按实际情况提示，不再把超时/网络错误一律误报成"API Key 无效"
       if (e.code === 'ECONNABORTED' || /timeout/i.test(e.message || '')) {
         error.value = '生成超时，AI 处理较慢，请稍后重试'
@@ -215,10 +244,10 @@ export function useImageGeneration(sessionType) {
   }
 
   /** 轮询生成结果 */
-  async function pollResult(recordId) {
+  async function pollResult(recordId, initialSeconds = 0) {
     polling.value = true
     const maxAttempts = 120 // 最多轮询 2 分钟（每秒一次）
-    let attempts = 0
+    let attempts = Math.round(initialSeconds / 1.5)
 
     return new Promise((resolve, reject) => {
       const poll = async () => {
@@ -236,8 +265,9 @@ export function useImageGeneration(sessionType) {
         }
 
         attempts++
-        progress.value = Math.min(90, attempts * 2)
-        statusText.value = `AI 正在生成中... (${attempts}s)`
+        const seconds = Math.round(attempts * 1.5)
+        progress.value = Math.min(90, Math.round((seconds / 180) * 100))
+        statusText.value = getPollingStatusText(seconds)
 
         try {
           const res = await queryGenerateResult(recordId)
@@ -310,19 +340,27 @@ export function useImageGeneration(sessionType) {
     const maxRetries = 2
     let lastError = null
 
+    // 判断是否是多轮对话（即对话框/画布生成的上一张图片结果已存在）
+    const isMultiTurn = resultImages.value && resultImages.value.length > 0
+    const finalProductFiles = isMultiTurn 
+      ? [resultImages.value[resultImages.value.length - 1].url || resultImages.value[resultImages.value.length - 1]] 
+      : productFiles
+
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        // 0. 加载系统级正向/负向约束提示词并拼接
+        // 0. 加载系统级正向/负向约束提示词并拼接（从第二轮多轮对话开始不需要带默认的正向和负向约束）
         let finalPrompt = prompt
-        try {
-          const sys = await loadSystemPrompts(featureName)
-          if (sys.positive) finalPrompt = `${sys.positive}\n\n用户需求：${prompt}`
-          if (sys.negative) finalPrompt += `\n\n负向约束：${sys.negative}`
-        } catch { }
+        if (!isMultiTurn) {
+          try {
+            const sys = await loadSystemPrompts(featureName)
+            if (sys.positive) finalPrompt = `${sys.positive}\n\n用户需求：${prompt}`
+            if (sys.negative) finalPrompt += `\n\n负向约束：${sys.negative}`
+          } catch { }
+        }
 
         // 1. 上传产品图
         statusText.value = attempt === 0 ? '正在上传图片...' : `正在重试(${attempt}/${maxRetries})...`
-        const productUrls = await uploadImages(productFiles)
+        const productUrls = await uploadImages(finalProductFiles)
 
         // 2. 确保有会话
         await ensureSession(finalPrompt)

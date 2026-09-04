@@ -651,14 +651,14 @@ function toggleAllSections() {
 // Platform
 const platforms = ref(['亚马逊', 'Shopee', 'Lazada', '速卖通', '淘宝', '京东', '独立站', '其他'])
 const selectedPlatform = ref('亚马逊')
-const language = ref('en')
+const language = ref('en-US')
 const pageWidth = ref('970')
 // 语言列表（从后台加载）
 const languageOptions = ref([
-  { label: '英语（美国）', value: 'en' },
-  { label: '中文（简体）', value: 'zh' },
-  { label: '日语', value: 'ja' },
-  { label: '韩语', value: 'ko' }
+  { label: '英语（美国）', value: 'en-US' },
+  { label: '中文（简体）', value: 'zh-CN' },
+  { label: '日语', value: 'ja-JP' },
+  { label: '韩语', value: 'ko-KR' }
 ])
 
 // Selling Points
@@ -748,20 +748,35 @@ const chatMessages = ref([
 const quickTags = ['如何优化我的详情页？', '如何突出产品卖点？', '设计技巧建议']
 
 async function handleGenerate(opts = {}) {
-  const text = aiAssistantRef.value?.inputText?.trim() || ''
+  const text = opts.prompt !== undefined ? opts.prompt : (aiAssistantRef.value?.inputText?.trim() || '')
   if (!originalImage.value) { ElMessage.warning('请先上传产品图片'); return }
   if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
   try {
     const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
     const languageTextMap = {
-      'zh': '中文',
-      'en': '英文',
-      'ja': '日文',
-      'ko': '韩文'
+      'zh-CN': '中文',
+      'en-US': '英文',
+      'en-GB': '英文',
+      'ja-JP': '日文',
+      'ko-KR': '韩文',
+      'de-DE': '德文',
+      'fr-FR': '法文',
+      'es-ES': '西班牙文'
     }
-    const langText = languageTextMap[language.value] || '英文'
+    const langKey = language.value ? language.value.replace('opt_language.', '') : ''
+    const langText = languageTextMap[langKey] || languageTextMap[language.value] || '英文'
     const langPrompt = `图片上的文字使用${langText}。`
-    const promptWithLang = text ? `${text}。${langPrompt}` : langPrompt
+
+    // 拼接创意配置
+    const platformPart = selectedPlatform.value ? `目标平台风格：${selectedPlatform.value}` : ''
+    const sellingPart = (activePoints.value && activePoints.value.length > 0) ? `核心卖点：${activePoints.value.join('、')}` : ''
+    const widthPart = pageWidth.value ? `页面建议宽度：${pageWidth.value}px` : ''
+    const enabledModules = contentStructure.filter(item => item.enabled !== false).map(item => item.name)
+    const structurePart = enabledModules.length > 0 ? `页面内容结构：${enabledModules.join('；')}` : ''
+    const configPrompt = [platformPart, sellingPart, widthPart, structurePart].filter(Boolean).join('。')
+
+    const parts = [text, configPrompt, langPrompt].filter(Boolean)
+    const promptWithLang = parts.join('。')
     const fullPrompt = boostText ? `${promptWithLang}约束：${boostText}。` : promptWithLang
     const extra = { consumePoints: 2, featureName: 'detail_img', title: '详情页生成', model: opts.model || selectedModel.value, language: language.value }
     if (effectiveOutputSize.value) extra.outputSize = effectiveOutputSize.value
@@ -799,7 +814,7 @@ function clearWorkspaceImages() {
   logoFile.value = null
   resultImages.value = []
   selectedPlatform.value = '亚马逊'
-  language.value = 'en'
+  language.value = 'en-US'
   pageWidth.value = '970'
   outputSize.value = ''
   customWidth.value = 1080
@@ -1031,12 +1046,15 @@ async function loadCreationConfig() {
 async function loadPromptMap() {
   try {
     const res = await listPromptLibraryBatch('opt_platform,opt_selling,opt_page', 'detail')
-    const items = res.data || res || []
+    const groups = res.data || {}
     const map = {}
-    items.forEach(item => {
-      if (item.promptKey && item.promptText) {
-        map[item.promptKey] = item.promptText
-      }
+    Object.values(groups).forEach(list => {
+      (list || []).forEach(item => {
+        const key = item.promptKey || item.value
+        if (key && item.promptText) {
+          map[key] = item.promptText
+        }
+      })
     })
     promptMap.value = map
   } catch {

@@ -902,7 +902,7 @@ async function handleGenerate(opts = {}) {
   }, 10 * 60 * 1000)
 
   try {
-    const text = aiAssistantRef.value?.inputText?.trim() || ''
+    const text = opts.prompt !== undefined ? opts.prompt : (aiAssistantRef.value?.inputText?.trim() || '')
     const languageTextMap = {
       'zh-CN': '中文',
       'en-US': '英文',
@@ -913,9 +913,55 @@ async function handleGenerate(opts = {}) {
       'fr-FR': '法文',
       'es-ES': '西班牙文'
     }
-    const langText = languageTextMap[language.value] || '中文'
-    const basePrompt = `批量生成电商图片，共${productImages.value.length}张，数量${genCount.value}。图片上的文字使用${langText}。${text ? ' ' + text : ''}`
-    await gen.fullGenerate(productImages.value, basePrompt, { consumePoints: 2, featureName: 'ai_assistant', title: '批量处理生成', n: genCount.value, model: opts.model, language: language.value })
+    const langKey = language.value ? language.value.replace('opt_language.', '') : ''
+    const langText = languageTextMap[langKey] || languageTextMap[language.value] || '中文'
+
+    // 提取核心卖点
+    const activeSellingLabels = sellingPoints.value.filter(s => s.checked).map(s => s.label)
+    const sellingPart = activeSellingLabels.length > 0 ? `核心卖点：${activeSellingLabels.join('、')}` : ''
+
+    // 提取画质要求
+    const qualityObj = qualityOptions.value.find(q => q.value === outputQuality.value)
+    const qualityLabel = qualityObj ? qualityObj.label : (outputQuality.value === 'hd' ? '高清' : outputQuality.value)
+    const qualityPart = qualityLabel ? `画质要求：${qualityLabel}` : ''
+
+    // 提取输出格式
+    const formatPart = outputFormat.value ? `输出格式：${outputFormat.value}` : ''
+
+    // 提取输出尺寸
+    let sizeLabel = ''
+    let effectiveSizeStr = ''
+    if (outputSize.value === 'custom') {
+      sizeLabel = `自定义尺寸 (${customWidth.value}×${customHeight.value})`
+      effectiveSizeStr = `${customWidth.value}x${customHeight.value}`
+    } else if (outputSize.value) {
+      const sizeObj = sizeOptions.value.find(s => s.value === outputSize.value)
+      sizeLabel = sizeObj ? sizeObj.label : outputSize.value
+      effectiveSizeStr = outputSize.value
+    }
+    const sizePart = sizeLabel ? `输出尺寸：${sizeLabel}` : ''
+
+    const configParts = [sellingPart, qualityPart, formatPart, sizePart].filter(Boolean).join('；')
+    const configPrompt = configParts ? `创意与输出配置：${configParts}。` : ''
+
+    const basePrompt = `批量生成电商图片，共${productImages.value.length}张，每张图片生成数量为${genCount.value}。图片上的文字使用${langText}。${configPrompt}${text ? ' ' + text : ''}`
+
+    const extraOptions = {}
+    if (effectiveSizeStr) {
+      extraOptions.aspect_ratio = effectiveSizeStr
+    }
+    const qualityMap = {
+      standard: '1K',
+      high: '2K',
+      hd: '2K',
+      ultra: '4K',
+      uhd: '4K'
+    }
+    if (outputQuality.value) {
+      extraOptions.image_size = qualityMap[outputQuality.value] || '2K'
+    }
+
+    await gen.fullGenerate(productImages.value, basePrompt, { consumePoints: 2, featureName: 'ai_assistant', title: '批量处理生成', n: genCount.value, model: opts.model, language: language.value, extraOptions })
 
     // 生成成功
     stopProgressSimulation()

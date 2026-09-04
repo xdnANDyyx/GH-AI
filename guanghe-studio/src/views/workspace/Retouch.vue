@@ -166,6 +166,18 @@
                       <option v-for="s in sizeOptions" :key="s.value" :value="s.value">{{ s.value ? s.label + ' (' + s.value + ')' : s.label }}</option>
                     </select>
                   </div>
+                  <div class="output-row">
+                    <span class="output-label">产品类别</span>
+                    <select v-model="boostProduct" class="form-select" style="width: 130px">
+                      <option v-for="p in productOptions" :key="p.value" :value="p.value">{{ p.label }}</option>
+                    </select>
+                  </div>
+                  <div class="output-row">
+                    <span class="output-label">材质</span>
+                    <select v-model="boostMaterial" class="form-select" style="width: 130px">
+                      <option v-for="m in materialOptions" :key="m.value" :value="m.value">{{ m.label }}</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>
@@ -382,6 +394,27 @@ export default {
       { label: '3:2', value: '3:2', w: 24, h: 16 },
       { label: '2:3', value: '2:3', w: 16, h: 24 },
       { label: '自定义', value: 'custom', w: 18, h: 18 },
+    ])
+    const productOptions = ref([
+      { label: '不指定', value: '' },
+      { label: '沙发', value: 'product.sofa' },
+      { label: '床', value: 'product.bed' },
+      { label: '餐桌', value: 'product.dining_table' },
+      { label: '餐椅/办公椅', value: 'product.chair' },
+      { label: '电视柜/边柜', value: 'product.tv_stand' },
+      { label: '茶几', value: 'product.coffee_table' },
+      { label: '灯具', value: 'product.lamp' },
+      { label: '户外家具', value: 'product.outdoor' }
+    ])
+    const materialOptions = ref([
+      { label: '不指定', value: '' },
+      { label: '实木', value: 'material.wood' },
+      { label: '布艺', value: 'material.fabric' },
+      { label: '皮革', value: 'material.leather' },
+      { label: '金属', value: 'material.metal' },
+      { label: '玻璃', value: 'material.glass' },
+      { label: '石材', value: 'material.stone' },
+      { label: '藤编', value: 'material.rattan' }
     ])
     const selectedSize = ref('')
 
@@ -620,21 +653,42 @@ export default {
           }
         }
 
+        // ---- 产品类别 ----
+        const productCfg = map.product_options
+        if (productCfg && productCfg.configValue) {
+          const arr = JSON.parse(productCfg.configValue)
+          if (Array.isArray(arr) && arr.length) {
+            productOptions.value = arr.map(s => (typeof s === 'string' ? { label: s, value: s } : s))
+          }
+        }
+
+        // ---- 材质 ----
+        const materialCfg = map.material_options
+        if (materialCfg && materialCfg.configValue) {
+          const arr = JSON.parse(materialCfg.configValue)
+          if (Array.isArray(arr) && arr.length) {
+            materialOptions.value = arr.map(s => (typeof s === 'string' ? { label: s, value: s } : s))
+          }
+        }
+
         // 加载提示词映射
         await loadPromptMap()
       } catch { /* use defaults */ }
     }
 
-    // 加载提示词库映射：将工具/尺寸的 value 映射到对应的提示词内容
+    // 加载提示词库映射：将工具/尺寸/产品/材质的 value 映射到对应的提示词内容
     async function loadPromptMap() {
       try {
-        const res = await listPromptLibraryBatch('opt_tool,opt_size', 'retouch')
-        const items = res.data || res || []
+        const res = await listPromptLibraryBatch('opt_tool,opt_size,product,material', 'retouch')
+        const groups = res.data || {}
         const map = {}
-        items.forEach(item => {
-          if (item.promptKey && item.promptText) {
-            map[item.promptKey] = item.promptText
-          }
+        Object.values(groups).forEach(list => {
+          (list || []).forEach(item => {
+            const key = item.promptKey || item.value
+            if (key && item.promptText) {
+              map[key] = item.promptText
+            }
+          })
         })
         promptMap.value = map
       } catch {
@@ -709,16 +763,64 @@ export default {
     const aiAssistantRef = ref(null)
 
     async function handleGenerate(opts = {}) {
-      const text = aiAssistantRef.value?.inputText?.trim() || ''
+      const text = opts.prompt !== undefined ? opts.prompt : (aiAssistantRef.value?.inputText?.trim() || '')
       if (!productFiles.value.length) {
         ElMessage.warning('请先上传需要精修的图片')
         return
       }
       if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
       try {
-        const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
-        const fullPrompt = boostText ? `${text}。约束：${boostText}。` : text
-        await gen.fullGenerate(productFiles.value, fullPrompt, { consumePoints: 2, featureName: 'retouch', title: '产品精修', n: 1, model: opts.model })
+        // 拼接精修工具提示
+        const toolObj = retouchTools.value.find(t => t.key === activeTool.value)
+        const toolLabel = toolObj ? toolObj.name : activeTool.value
+        const toolPrompt = promptMap.value['opt_tool.retouch.' + activeTool.value] || promptMap.value[activeTool.value] || ''
+        const toolText = toolPrompt ? `精修工具：${toolLabel}（${toolPrompt}）` : (toolLabel ? `精修工具：${toolLabel}` : '')
+
+        // 拼接输出配置
+        const qualityObj = qualityOptions.value.find(q => q.value === outputQuality.value)
+        const qualityLabel = qualityObj ? qualityObj.label : outputQuality.value
+        const qualityText = qualityLabel ? `画质要求：${qualityLabel}` : ''
+
+        const formatObj = formatOptions.value.find(f => f.value === outputFormat.value)
+        const formatLabel = formatObj ? formatObj.label : outputFormat.value
+        const formatText = formatLabel ? `输出格式：${formatLabel}` : ''
+
+        const sizeObj = sizeOptions.value.find(s => s.value === selectedSize.value)
+        const sizeLabel = sizeObj ? sizeObj.label : selectedSize.value
+        const sizeText = sizeLabel ? `输出尺寸：${sizeLabel}` : ''
+
+        const configParts = [toolText, qualityText, formatText, sizeText].filter(Boolean).join('；')
+        const configPrompt = configParts ? `精修配置：${configParts}。` : ''
+
+        const boostProductPrompt = promptMap.value[boostProduct.value] || ''
+        const boostMaterialPrompt = promptMap.value[boostMaterial.value] || ''
+        const boostText = [boostProductPrompt, boostMaterialPrompt].filter(Boolean).join('；')
+        
+        const parts = [text, configPrompt].filter(Boolean)
+        const basePrompt = parts.join('。')
+        const fullPrompt = boostText ? `${basePrompt}。约束：${boostText}。` : basePrompt
+
+        const extraOptions = {}
+        if (selectedSize.value) {
+          extraOptions.aspect_ratio = selectedSize.value
+        }
+        const qualityMap = {
+          standard: '1K',
+          high: '2K',
+          ultra: '4K'
+        }
+        if (outputQuality.value) {
+          extraOptions.image_size = qualityMap[outputQuality.value] || '2K'
+        }
+
+        await gen.fullGenerate(productFiles.value, fullPrompt, {
+          consumePoints: 2,
+          featureName: 'retouch',
+          title: '产品精修',
+          n: 1,
+          model: opts.model,
+          extraOptions
+        })
         if (gen.resultImages.value.length > 0) {
           processed.value = true
           processedImage.value = gen.resultImages.value[0].url || gen.resultImages.value[0]
@@ -859,6 +961,7 @@ console.error('精修生成失败:', e)
       fileInput,
       workflowSteps, getStepClass, isStepLineDone,
       boostProduct, boostMaterial, boostProductRef, boostMaterialRef,
+      productOptions, materialOptions,
       triggerUpload, handleFileSelect, handleDrop, clearImage, removeProductFile,
       undo, redo, reset, toggleFullscreen,
       toggleAllSections, toggleSection,

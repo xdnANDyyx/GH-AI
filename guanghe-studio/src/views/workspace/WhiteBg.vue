@@ -613,16 +613,25 @@ async function handleGenerate(opts = {}) {
     return
   }
   try {
-    const styleText = stylePromptMap[selectedStyle.value] || '生成干净无阴影的白底图'
+    const text = opts.prompt !== undefined ? opts.prompt : (aiAssistantRef.value?.inputText?.trim() || '')
     const boostText = [
       boostProductRef.value?.getSelectedItems()[0]?.promptText,
       boostMaterialRef.value?.getSelectedItems()[0]?.promptText,
       boostCameraDistanceRef.value?.getSelectedItems()[0]?.promptText,
       boostCameraOccupationRef.value?.getSelectedItems()[0]?.promptText
     ].filter(Boolean).join('；')
-    // 尺寸为可选项：未选择时不发尺寸给 AI
-    const sizeText = effectiveOutputSize.value ? `输出图片尺寸为 ${effectiveOutputSize.value}，` : ''
-    const prompt = `${styleText}。${sizeText}图片上的文字使用${languageTextMap[language.value] || '中文'}。${boostText ? '约束：' + boostText + '。' : ''}`
+
+    const stylePart = (selectedStyle.value && selectedStyle.value !== 'no-shadow') ? (stylePromptMap[selectedStyle.value] || '') : ''
+    const sizePart = effectiveOutputSize.value ? `输出图片尺寸为 ${effectiveOutputSize.value}` : ''
+    
+    const langKey = language.value ? language.value.replace('opt_language.', '') : ''
+    const langPart = (langKey && langKey !== 'zh-CN') ? `图片上的文字使用${languageTextMap[langKey] || languageTextMap[language.value] || '中文'}` : ''
+    
+    const userPart = text ? `用户指令：${text}` : ''
+    
+    const basePrompt = [stylePart, sizePart, langPart, userPart].filter(Boolean).join('。')
+    const prompt = boostText ? (basePrompt ? `${basePrompt}。约束：${boostText}。` : `约束：${boostText}。`) : (basePrompt ? `${basePrompt}。` : '')
+
     const extraOptions = { shadow_style: selectedStyle.value, language: language.value }
     if (effectiveOutputSize.value) extraOptions.output_size = effectiveOutputSize.value
     await gen.fullGenerate(

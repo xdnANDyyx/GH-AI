@@ -686,12 +686,15 @@ export default {
     async function loadPromptMap() {
       try {
         const res = await listPromptLibraryBatch('opt_language', 'size_mark')
-        const items = res.data || res || []
+        const groups = res.data || {}
         const map = {}
-        items.forEach(item => {
-          if (item.promptKey && item.promptText) {
-            map[item.promptKey] = item.promptText
-          }
+        Object.values(groups).forEach(list => {
+          (list || []).forEach(item => {
+            const key = item.promptKey || item.value
+            if (key && item.promptText) {
+              map[key] = item.promptText
+            }
+          })
         })
         promptMap.value = map
       } catch {
@@ -759,7 +762,8 @@ export default {
           'fr-FR': '法文',
           'es-ES': '西班牙文'
         }
-        const langText = languageTextMap[language.value] || '中文'
+        const langKey = language.value ? language.value.replace('opt_language.', '') : ''
+        const langText = languageTextMap[langKey] || languageTextMap[language.value] || '中文'
         const prompt = `生成尺寸标记图，宽度${dimWidth.value}${unit.value}、长度${dimDepth.value}${unit.value}、高度${dimHeight.value}${unit.value}，风格简洁，适合电商平台。图片上的文字使用${langText}。`
         const boostText = [boostProductRef.value?.getSelectedItems()[0]?.promptText, boostMaterialRef.value?.getSelectedItems()[0]?.promptText].filter(Boolean).join('；')
         const fullPrompt = boostText ? `${prompt}。约束：${boostText}。` : prompt
@@ -779,7 +783,7 @@ export default {
     }
 
     async function handleGenerate(opts = {}) {
-      const text = aiAssistantRef.value?.inputText?.trim() || ''
+      const text = opts.prompt !== undefined ? opts.prompt : (aiAssistantRef.value?.inputText?.trim() || '')
       if (!originalFile.value) { ElMessage.warning('请先上传产品图片'); return }
       if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
       try {

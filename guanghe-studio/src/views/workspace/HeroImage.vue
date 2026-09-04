@@ -654,12 +654,15 @@ export default {
     async function loadPromptMap() {
       try {
         const res = await listPromptLibraryBatch('opt_platform,opt_purpose,opt_selling', 'main_image')
-        const items = res.data || res || []
+        const groups = res.data || {}
         const map = {}
-        items.forEach(item => {
-          if (item.value && item.promptText) {
-            map[item.value] = item.promptText
-          }
+        Object.values(groups).forEach(list => {
+          (list || []).forEach(item => {
+            const key = item.promptKey || item.value
+            if (key && item.promptText) {
+              map[key] = item.promptText
+            }
+          })
         })
         promptMap.value = map
       } catch {
@@ -749,7 +752,7 @@ export default {
     }
 
     async function handleGenerate(opts = {}) {
-      const text = aiAssistantRef.value?.inputText?.trim() || ''
+      const text = opts.prompt !== undefined ? opts.prompt : (aiAssistantRef.value?.inputText?.trim() || '')
       if (!productFiles.value.length) { ElMessage.warning('请先上传产品图片'); return }
       if (!(await gen.checkPoints(2))) { ElMessage.warning('积分不足，请先充值'); return }
       generating.value = true
@@ -764,15 +767,45 @@ export default {
           'fr-FR': '法文',
           'es-ES': '西班牙文'
         }
-        const langText = languageTextMap[language.value] || '英文'
-        const fullPrompt = text ? `${text}。图片上的文字使用${langText}。` : `图片上的文字使用${langText}。`
+        const langKey = language.value ? language.value.replace('opt_language.', '') : ''
+        const langText = languageTextMap[langKey] || languageTextMap[language.value] || '英文'
+        const langPrompt = `图片上的文字使用${langText}。`
+
+        // 拼接主图用途和核心卖点
+        const purposeObj = purposes.value.find(p => p.value === activePurpose.value)
+        const purposeLabel = purposeObj ? purposeObj.label : activePurpose.value
+        
+        const sellingLabels = activeSellingPoints.value.map(val => {
+          const obj = sellingPoints.value.find(sp => sp.value === val)
+          return obj ? obj.label : val
+        })
+        
+        const purposePart = purposeLabel ? `核心目的：${purposeLabel}` : ''
+        const sellingPart = sellingLabels.length > 0 ? `主图用途：${sellingLabels.join('、')}` : ''
+        const configPrompt = [purposePart, sellingPart].filter(Boolean).join('。')
+
+        // 目标平台风格
+        let platformPart = ''
+        if (activePlatform.value) {
+          const promptText = promptMap.value[activePlatform.value]
+          const platformObj = platformOptions.value.find(p => p.value === activePlatform.value)
+          const platformLabel = platformObj ? platformObj.label : activePlatform.value
+          platformPart = promptText ? `目标平台：${platformLabel}（${promptText}）` : (platformLabel ? `目标平台：${platformLabel}` : '')
+        }
+
+        const parts = [text, configPrompt, platformPart, langPrompt].filter(Boolean)
+        const fullPrompt = parts.join('。')
+
         const extra = { consumePoints: 2, featureName: 'main_image', title: '主图设计', model: opts.model || selectedModel.value, language: language.value }
         if (activePlatform.value) {
           // 使用提示词库中该平台对应的 promptText 传给 AI，而非 raw value
           const promptText = promptMap.value[activePlatform.value]
           if (promptText) extra.platformPrompt = promptText
         }
-        if (effectiveOutputSize.value) extra.outputSize = effectiveOutputSize.value
+        if (effectiveOutputSize.value) {
+          extra.outputSize = effectiveOutputSize.value
+          extra.aspect_ratio = effectiveOutputSize.value
+        }
         if (generateCount.value) extra.n = Number(generateCount.value)
         await gen.fullGenerate(productFiles.value, fullPrompt, extra)
         // 将结果图推入 AI 助手对话框
