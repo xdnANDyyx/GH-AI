@@ -32,14 +32,12 @@ public class CustomerAiImageServiceTest {
     @BeforeEach
     public void setUp() {
         MockitoAnnotations.openMocks(this);
-        // 初始化必要的配置属性值
         ReflectionTestUtils.setField(customerAiImageService, "vertexProjectId", "test-project-56a8fdac");
         ReflectionTestUtils.setField(customerAiImageService, "vertexLocation", "global");
+        ReflectionTestUtils.setField(customerAiImageService, "vertexModel", "gemini-3-pro-image");
         ReflectionTestUtils.setField(customerAiImageService, "vertexReverseModel", "gemini-2.5-flash");
         ReflectionTestUtils.setField(customerAiImageService, "vertexReverseFallbackModels", "gemini-1.5-flash,gemini-1.5-pro,gemini-2.5-pro");
         ReflectionTestUtils.setField(customerAiImageService, "vertexReadTimeout", 30);
-
-        // 注入模拟的 HttpClient
         ReflectionTestUtils.setField(customerAiImageService, "vertexHttpClient", mockHttpClient);
     }
 
@@ -90,5 +88,43 @@ public class CustomerAiImageServiceTest {
 
         // 验证 HttpClient 调用了 3 次（符合主模型2次重试后，回退首个备用模型成功的机制）
         verify(mockHttpClient, times(3)).send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class));
+    }
+
+    @Test
+    public void testGenerateImagesModelFallback() throws Exception {
+        ReflectionTestUtils.setField(customerAiImageService, "vertexModel", "gemini-3-pro-image");
+
+        doReturn("mock-token").when(customerAiImageService).getVertexAccessToken();
+
+        HttpResponse<String> mockResponse = mock(HttpResponse.class);
+        when(mockResponse.statusCode()).thenReturn(200);
+        when(mockResponse.body()).thenReturn("{\n" +
+                "  \"candidates\": [{\n" +
+                "    \"content\": {\n" +
+                "      \"parts\": [{\n" +
+                "        \"inlineData\": {\n" +
+                "          \"mimeType\": \"image/png\",\n" +
+                "          \"data\": \"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\"\n" +
+                "        }\n" +
+                "      }]\n" +
+                "    },\n" +
+                "    \"finishReason\": \"STOP\"\n" +
+                "  }]\n" +
+                "}");
+
+        when(mockHttpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(mockResponse);
+
+        java.util.Map<String, Object> params = new java.util.HashMap<>();
+        params.put("model", "deepseek");
+
+        java.util.List<String> result = customerAiImageService.generateImages("test prompt", 1, "1K", params);
+
+        assertNotNull(result);
+        assertEquals(1, result.size());
+        assertTrue(result.get(0).startsWith("data:image/png;base64,"));
+
+        verify(mockHttpClient, times(1)).send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class));
+        verify(customerAiImageService, times(1)).getVertexAccessToken();
     }
 }

@@ -203,7 +203,7 @@ export function useImageGeneration(sessionType) {
       const res = await generateOmniImage({
         sessionType,
         sessionId: currentSessionId.value,
-        n: 1,
+        n: params.n || 1,
         type: '1',
         ...params
       })

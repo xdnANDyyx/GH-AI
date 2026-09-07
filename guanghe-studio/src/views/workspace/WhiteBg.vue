@@ -17,32 +17,24 @@
           <!-- 画布浮层：缩放 / 全屏 / 导出 / 右键菜单 -->
           <!--<CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" />-->
 
-          <!-- 有结果图时显示在画布中 -->
-          <div v-if="hasResult" class="canvas-result" :class="{ generating: isGenerating }">
-            <el-image
-              :src="resultImages[0].url || resultImages[0]"
-              :preview-src-list="resultImages.map(r => r.url || r)"
-              fit="contain"
-              class="result-img"
-            />
-          </div>
-          <!-- 空状态占位符 -->
-          <div v-else-if="!isGenerating" class="canvas-placeholder">
-            <svg viewBox="0 0 48 48" fill="none">
-              <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
-              <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
-              <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <h3>上传商品图并配置参数后生成</h3>
-            <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
-          </div>
-
-          <!-- 生图阶段状态绝对定位浮层 -->
-          <div v-if="isGenerating" class="canvas-loading">
-            <el-icon class="is-loading" :size="24" color="#2563FF"><Loading /></el-icon>
-            <p>{{ genStatus || '正在生成...' }}</p>
-          </div>
-
+          <!-- CanvasEditor -->
+          <CanvasEditor
+            :images="resultImages"
+            feature-name="white_bg"
+            @extend="handleExtend"
+            @multi-angle="handleMultiAngle"
+            @edit-text="handleEditText"
+            @partial-redraw="handlePartialRedraw"
+            @explode-layers="handleExplodeLayers"
+            @delete="handleDelete"
+            @send-to-retouch="handleSendToRetouch"
+            @send-to-white-bg="handleSendToWhiteBg"
+            @download="handleDownload"
+            @move-up="handleMoveUp"
+            @move-down="handleMoveDown"
+            @bring-to-front="handleBringToFront"
+            @send-to-back="handleSendToBack"
+          />
         </div>
 
         <div class="canvas-bottom-bar">
@@ -328,12 +320,28 @@ import { getImageUrl } from '@/utils/image'
 import { compressImage } from '@/utils/compress'
 
 import { Plus, Delete, ArrowLeft, ArrowRight, ArrowDown, Download, Right, UploadFilled, Coin, MagicStick, Loading, DocumentCopy, PictureFilled } from '@element-plus/icons-vue'
+import CanvasEditor from '@/components/CanvasEditor.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
 const handoffStore = useImageHandoffStore()
 const gen = useImageGeneration('white_bg')
 const { steps: workflowSteps, getStepClass, isStepLineDone } = useWorkflowProgress()
+
+// ===== CanvasEditor event stubs =====
+const handleExtend = () => {}
+const handleMultiAngle = () => {}
+const handleEditText = () => {}
+const handlePartialRedraw = () => {}
+const handleExplodeLayers = () => {}
+const handleDelete = () => {}
+const handleSendToRetouch = () => {}
+const handleSendToWhiteBg = () => {}
+const handleDownload = () => {}
+const handleMoveUp = () => {}
+const handleMoveDown = () => {}
+const handleBringToFront = () => {}
+const handleSendToBack = () => {}
 
 const fileInput = ref(null)
 const originalImage = ref('')

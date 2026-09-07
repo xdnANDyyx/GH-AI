@@ -54,28 +54,24 @@
         <!-- Canvas Area -->
         <div class="canvas-box">
           <!-- <CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" /> -->
-          <!-- 有结果图时显示在画布中 -->
-          <div v-if="resultImages.length > 0" class="canvas-result-grid" :class="{ generating: isGenerating }">
-            <div v-for="(img, i) in resultImages" :key="i" class="canvas-result-item" @click="previewImage(img.url)">
-              <img :src="img.url" class="canvas-result-img" />
-            </div>
-          </div>
-          <!-- 空状态占位符 -->
-          <div v-else-if="!isGenerating" class="canvas-placeholder">
-            <svg viewBox="0 0 64 64" fill="none">
-              <rect x="8" y="12" width="48" height="40" rx="4" stroke="#D1D5DB" stroke-width="2"/>
-              <circle cx="24" cy="26" r="5" stroke="#D1D5DB" stroke-width="1.5"/>
-              <path d="M8 44l16-14 10 10 10-14 12 12" stroke="#D1D5DB" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <h3>上传产品图并配置参数后生成</h3>
-            <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
-          </div>
-
-          <!-- 生图阶段状态绝对定位浮层 -->
-          <div v-if="isGenerating" class="canvas-loading">
-            <el-icon class="is-loading" :size="24" color="#2563FF"><Loading /></el-icon>
-            <p>{{ genStatus || '正在生成...' }}</p>
-          </div>
+          <!-- CanvasEditor -->
+          <CanvasEditor
+            :images="resultImages"
+            feature-name="batch"
+            @extend="handleExtend"
+            @multi-angle="handleMultiAngle"
+            @edit-text="handleEditText"
+            @partial-redraw="handlePartialRedraw"
+            @explode-layers="handleExplodeLayers"
+            @delete="handleDelete"
+            @send-to-retouch="handleSendToRetouch"
+            @send-to-white-bg="handleSendToWhiteBg"
+            @download="handleDownload"
+            @move-up="handleMoveUp"
+            @move-down="handleMoveDown"
+            @bring-to-front="handleBringToFront"
+            @send-to-back="handleSendToBack"
+          />
         </div>
 
         <!-- Task List Card -->
@@ -514,6 +510,7 @@ import { useBatchTasks } from '@/composables/useBatchTasks'
 import { ElMessage, ElImageViewer } from 'element-plus'
 import { getPublicCreationConfigByGroup, reversePrompt } from '@/api/customer'
 import { MagicStick, DocumentCopy, UploadFilled } from '@element-plus/icons-vue'
+import CanvasEditor from '@/components/CanvasEditor.vue'
 
 // const { canvasUI, handleCanvasExport } = useCanvasInteractions({
 //   canvasSelector: '.canvas-box',
@@ -528,6 +525,21 @@ const resultImages = computed(() => gen.resultImages.value.map(img => {
   const url = img.url || img
   return { url }
 }))
+
+// ===== CanvasEditor event stubs =====
+const handleExtend = () => {}
+const handleMultiAngle = () => {}
+const handleEditText = () => {}
+const handlePartialRedraw = () => {}
+const handleExplodeLayers = () => {}
+const handleDelete = () => {}
+const handleSendToRetouch = () => {}
+const handleSendToWhiteBg = () => {}
+const handleDownload = () => {}
+const handleMoveUp = () => {}
+const handleMoveDown = () => {}
+const handleBringToFront = () => {}
+const handleSendToBack = () => {}
 
 // ==================== AI Assistant ====================
 const aiAssistantRef = ref(null)
