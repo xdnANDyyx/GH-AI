@@ -1,7 +1,7 @@
 /**
  * 画布编辑相关API
  */
-import request from '@/utils/request'
+import request from '@/api/request'
 
 /**
  * 图片扩图
@@ -71,8 +71,7 @@ export function downloadLayers(params) {
   return request({
     url: '/ai/image/download-layers',
     method: 'post',
-    data: params,
-    responseType: 'blob'
+    data: params
   })
 }
 

@@ -1,0 +1,102 @@
+# Canvas Editor 测试配置文件
+# 复制到: ruoyi-admin/src/test/resources/application.yml
+
+# 项目相关配置
+ruoyi:
+  name: RuoYi-Test
+  version: 3.9.1
+  copyrightYear: 2026
+  profile: ./uploadPath
+  addressEnabled: false
+  captchaType: math
+
+# 开发环境配置
+server:
+  port: 8781
+  servlet:
+    context-path: /
+  tomcat:
+    uri-encoding: UTF-8
+    accept-count: 1000
+    threads:
+      max: 200
+      min-spare: 20
+
+# 日志配置
+logging:
+  level:
+    com.ruoyi: debug
+    org.springframework: warn
+    com.ruoyi.web.service.CanvasEditorService: debug
+
+# API请求日志配置
+api-log:
+  enabled: true
+
+# 用户配置
+user:
+  password:
+    maxRetryCount: 5
+
+# ============================================
+# Canvas Editor 测试配置
+# ============================================
+# Vertex AI 配置（测试环境）
+vertex:
+  ai:
+    project-id: ${VERTEX_AI_PROJECT_ID:test-project}
+    location: global
+    model: gemini-3-pro-image
+    read-timeout: 600
+    credentials-path: ${VERTEX_AI_CREDENTIALS_PATH:}
+    proxy:
+      host: ${HTTPS_PROXY_HOST:}
+      port: ${HTTPS_PROXY_PORT:0}
+
+# Canvas Editor 配置
+canvas-editor:
+  max-image-size: 10485760  # 10MB
+  compression-quality: 0.8
+  max-retries: 3
+
+# ============================================
+# Spring 配置
+# ============================================
+spring:
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    driverClassName: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/ruoyi?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8&allowMultiQueries=true
+    username: root
+    password: root
+    druid:
+      validation-query: SELECT 1
+      test-on-borrow: true
+      test-while-idle: true
+      filters: stat,wall,log4j
+
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+    default-property-inclusion: non_null
+
+# MyBatis配置
+mybatis:
+  typeAliasesPackage: com.ruoyi.**.domain
+  mapperLocations: classpath*:/mapper/**/*Mapper.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    cache-enabled: true
+    lazyLoadingEnabled: true
+    multipleResultSetsEnabled: true
+    useColumnLabel: true
+    useGeneratedKeys: false
+    autoMappingBehavior: PARTIAL
+    autoMappingUnknownColumnBehavior: WARNING
+    aggressiveLazyLoading: false
+
+# PageHelper分页插件
+pagehelper:
+  helperDialect: mysql
+  supportMethodsArguments: true
+  params: count=countSql

@@ -1,16 +1,31 @@
 # Canvas Editor 文档中心
 
 > 前台工作台画布编辑器功能的完整文档集合
+> **项目状态**: ✅ 前端100%完成 | ⏳ 后端框架100%完成 & 业务逻辑51%完成
 
 ## 🚀 快速开始
 
-如果你是第一次使用，建议按以下顺序阅读：
+### 如果你是第一次使用（30分钟）
 
-1. 📚 [文档导航](canvas-editor.md) - 了解项目全貌
-2. ⭐ [快速参考](canvas-editor-quick-reference.md) - 3步集成流程
-3. 💡 [集成示例](white-bg-integration-example.md) - 看实际例子
+1. 📚 **[项目完成总结](canvas-editor-final-summary.md)** - 了解项目全貌和当前状态
+2. ⭐ **[快速参考](canvas-editor-quick-reference.md)** - 3步集成流程
+3. 💡 **[集成示例](white-bg-integration-example.md)** - 看实际例子
 
-## 📚 文档清单（11个）
+### 如果你是前端开发者
+
+👉 **[快速参考](canvas-editor-quick-reference.md)** → **[集成模板](canvas-editor-integration-template.md)**
+
+### 如果你是后端开发者
+
+👉 **[后端完成总结](canvas-editor-backend-completion.md)** → **[开发计划](canvas-editor-backend-development.md)** → **[API测试指南](canvas-editor-api-testing.md)**
+
+### 如果你是项目经理
+
+👉 **[项目完成总结](canvas-editor-final-summary.md)** → **[进度看板](canvas-editor-backend-progress.md)**
+
+---
+
+## 📚 完整文档清单（18个）
 
 ### 🎯 核心文档
 

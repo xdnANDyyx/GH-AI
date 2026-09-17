@@ -14,26 +14,23 @@
         </div>
 
         <div class="canvas-box">
-          <!-- 画布浮层：缩放 / 全屏 / 导出 / 右键菜单 -->
-          <!--<CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" />-->
-
-          <!-- CanvasEditor -->
+          <!-- Fabric.js 自由画布编辑器（对标即梦AI） -->
           <CanvasEditor
-            :images="resultImages"
+            ref="canvasEditorRef"
+            :images="canvasImages"
+            :is-generating="isGenerating"
+            :gen-status="genStatus"
             feature-name="white_bg"
-            @extend="handleExtend"
-            @multi-angle="handleMultiAngle"
-            @edit-text="handleEditText"
-            @partial-redraw="handlePartialRedraw"
-            @explode-layers="handleExplodeLayers"
-            @delete="handleDelete"
-            @send-to-retouch="handleSendToRetouch"
-            @send-to-white-bg="handleSendToWhiteBg"
-            @download="handleDownload"
-            @move-up="handleMoveUp"
-            @move-down="handleMoveDown"
-            @bring-to-front="handleBringToFront"
-            @send-to-back="handleSendToBack"
+            @extend="onCanvasExtend"
+            @multi-angle="onCanvasMultiAngle"
+            @edit-text="onCanvasEditText"
+            @partial-redraw="onCanvasPartialRedraw"
+            @explode-layers="onCanvasExplodeLayers"
+            @delete="onCanvasDelete"
+            @send-to-retouch="onCanvasSendToRetouch"
+            @send-to-white-bg="onCanvasSendToWhiteBg"
+            @download="onCanvasDownload"
+            @image-selected="onCanvasImageSelected"
           />
         </div>
 
@@ -310,8 +307,8 @@ import { useImageGeneration } from '@/composables/useImageGeneration'
 import { useWorkflowProgress } from '@/composables/useWorkflowProgress'
 import AiAssistant from '@/components/AiAssistant.vue'
 import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
-// import CanvasOverlay from '@/components/CanvasOverlay.vue'
-// import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
+import CanvasEditor from '@/components/CanvasEditor.vue'
+import { useCanvasEditor } from '@/composables/useCanvasEditor'
 import { useUserStore } from '@/store'
 import { useImageHandoffStore } from '@/store'
 import { getPublicCreationConfigByGroup } from '@/api/customer'
@@ -320,28 +317,12 @@ import { getImageUrl } from '@/utils/image'
 import { compressImage } from '@/utils/compress'
 
 import { Plus, Delete, ArrowLeft, ArrowRight, ArrowDown, Download, Right, UploadFilled, Coin, MagicStick, Loading, DocumentCopy, PictureFilled } from '@element-plus/icons-vue'
-import CanvasEditor from '@/components/CanvasEditor.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
 const handoffStore = useImageHandoffStore()
 const gen = useImageGeneration('white_bg')
 const { steps: workflowSteps, getStepClass, isStepLineDone } = useWorkflowProgress()
-
-// ===== CanvasEditor event stubs =====
-const handleExtend = () => {}
-const handleMultiAngle = () => {}
-const handleEditText = () => {}
-const handlePartialRedraw = () => {}
-const handleExplodeLayers = () => {}
-const handleDelete = () => {}
-const handleSendToRetouch = () => {}
-const handleSendToWhiteBg = () => {}
-const handleDownload = () => {}
-const handleMoveUp = () => {}
-const handleMoveDown = () => {}
-const handleBringToFront = () => {}
-const handleSendToBack = () => {}
 
 const fileInput = ref(null)
 const originalImage = ref('')
@@ -516,6 +497,46 @@ const resultImageUrl = computed(() => {
   if (!img) return ''
   return img.url || img
 })
+
+// ===== 画布编辑器 =====
+const canvasEditorRef = ref(null)
+// 画布图片列表：合并上传图片和生成结果
+const canvasImages = computed(() => {
+  const imgs = []
+  // 如果有上传的原图，也加入画布
+  if (originalImage.value) {
+    imgs.push({ url: originalImage.value, name: '上传图片' })
+  }
+  // 加入所有生成结果
+  if (resultImages.value.length > 0) {
+    resultImages.value.forEach(img => {
+      const url = img.url || img
+      if (!imgs.some(i => (i.url || i) === url)) {
+        imgs.push(img)
+      }
+    })
+  }
+  return imgs
+})
+
+// 使用画布编辑 composable（复用已有逻辑）
+const canvasEditor = useCanvasEditor(resultImages, 'white_bg')
+
+// 画布事件处理
+function onCanvasExtend(params) { canvasEditor.handleExtend(params) }
+function onCanvasMultiAngle(params) { canvasEditor.handleMultiAngle(params) }
+function onCanvasEditText(params) { canvasEditor.handleEditText(params) }
+function onCanvasPartialRedraw(params) { canvasEditor.handlePartialRedraw(params) }
+function onCanvasExplodeLayers(params) { canvasEditor.handleExplodeLayers(params) }
+function onCanvasDelete(index) {
+  canvasEditor.handleDelete(index)
+}
+function onCanvasSendToRetouch(img) { canvasEditor.handleSendToRetouch(img) }
+function onCanvasSendToWhiteBg(img) { canvasEditor.handleSendToWhiteBg(img) }
+function onCanvasDownload(img) { canvasEditor.handleDownload(img) }
+function onCanvasImageSelected(img) {
+  // 可以在这里更新一些 UI 状态
+}
 
 // ===== 画布交互浮层 =====
 // const { canvasUI, handleCanvasExport } = useCanvasInteractions({

@@ -17,24 +17,34 @@
 
         <!-- Canvas Display -->
         <div class="canvas-box">
-          <!-- CanvasEditor -->
-          <CanvasEditor
-            :images="resultImages"
-            feature-name="detail_img"
-            @extend="handleExtend"
-            @multi-angle="handleMultiAngle"
-            @edit-text="handleEditText"
-            @partial-redraw="handlePartialRedraw"
-            @explode-layers="handleExplodeLayers"
-            @delete="handleDelete"
-            @send-to-retouch="handleSendToRetouch"
-            @send-to-white-bg="handleSendToWhiteBg"
-            @download="handleDownload"
-            @move-up="handleMoveUp"
-            @move-down="handleMoveDown"
-            @bring-to-front="handleBringToFront"
-            @send-to-back="handleSendToBack"
-          />
+          <!-- 有结果图时显示在画布中 -->
+          <div v-if="resultImages.length > 0" class="canvas-result" :class="{ generating: isGenerating }">
+            <el-image
+              v-for="(img, i) in resultImages"
+              :key="i"
+              :src="img.url || img"
+              :preview-src-list="resultImages.map(r => r.url || r)"
+              :initial-index="i"
+              fit="contain"
+              class="result-img"
+            />
+          </div>
+          <!-- 空状态占位符 -->
+          <div v-else-if="!isGenerating" class="canvas-placeholder">
+             <svg viewBox="0 0 48 48" fill="none">
+              <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
+              <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
+              <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <h3>上传产品图并配置参数后生成</h3>
+            <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
+          </div>
+
+          <!-- 生图阶段状态绝对定位浮层 -->
+          <div v-if="isGenerating" class="canvas-loading">
+            <el-icon class="is-loading" :size="24" color="#2563FF"><Loading /></el-icon>
+            <p>{{ genStatus || '正在生成...' }}</p>
+          </div>
         </div>
 
         <!-- <div class="canvas-bottom-bar">AI生成的内容仅供参考，请注意核对细节与版权信息。</div> -->
@@ -416,7 +426,6 @@ import { useWorkflowProgress } from '@/composables/useWorkflowProgress'
 import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
 import AiAssistant from '@/components/AiAssistant.vue'
 import { ElMessage } from 'element-plus'
-import CanvasEditor from '@/components/CanvasEditor.vue'
 
 // const { canvasUI, handleCanvasExport } = useCanvasInteractions({
 //   canvasSelector: '.canvas-dropzone',
@@ -428,21 +437,6 @@ const { steps: workflowSteps, getStepClass, isStepLineDone } = useWorkflowProgre
 const productFiles = ref([])
 const originalImage = ref('')
 const resultImages = ref([])
-
-// ===== CanvasEditor event stubs =====
-const handleExtend = () => {}
-const handleMultiAngle = () => {}
-const handleEditText = () => {}
-const handlePartialRedraw = () => {}
-const handleExplodeLayers = () => {}
-const handleDelete = () => {}
-const handleSendToRetouch = () => {}
-const handleSendToWhiteBg = () => {}
-const handleDownload = () => {}
-const handleMoveUp = () => {}
-const handleMoveDown = () => {}
-const handleBringToFront = () => {}
-const handleSendToBack = () => {}
 const refFiles = ref([])
 const logoImage = ref('')
 const logoFile = ref(null)
@@ -737,10 +731,12 @@ const maxGenerateCount = ref(5)
 const promptMap = ref({})
 
 // AI Model
-const selectedModel = ref('gemini-3-pro-image')
+const selectedModel = ref('deepseek')
 const modelOptions = [
-  { label: 'Gemini 3 Pro Image', value: 'gemini-3-pro-image' },
-  { label: 'Gemini 3.1 Flash Image', value: 'gemini-3.1-flash-image' }
+  { label: 'DeepSeek', value: 'deepseek' },
+  { label: '通义千问 Qwen', value: 'qwen-plus' },
+  { label: '智谱 GLM-4', value: 'glm-4' },
+  { label: '豆包 Doubao', value: 'doubao' }
 ]
 
 // ===== AI Chat =====

@@ -1,76 +1,91 @@
 /**
- * 画布编辑功能混入
- * 为所有工作台模块提供统一的画布编辑能力
+ * Centralized Canvas Editor Composable
+ * 为所有工作台模块提供统一且完整的画布编辑能力。
  */
 import { ref, computed } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElLoading, ElMessageBox } from 'element-plus'
+import { useImageHandoffStore } from '@/store'
+import {
+  extendImage,
+  generateMultiAngle,
+  editImageText,
+  partialRedraw,
+  downloadLayers
+} from '@/api/canvasEditor'
 
-export const useCanvasEditor = () => {
-  // ========== 图片管理 ==========
-  const images = ref([]) // 统一管理所有图片 { id, url, name, ... }
+export const useCanvasEditor = (resultImagesRef, featureName = 'canvas') => {
+  const router = useRouter()
+  const handoffStore = useImageHandoffStore()
 
-  // 生成唯一ID
-  const generateImageId = () => {
-    return `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-  }
-
-  // 添加图片
-  const addImage = (url, metadata = {}) => {
-    const img = {
-      id: generateImageId(),
-      url,
-      name: metadata.name || `图片${images.value.length + 1}`,
-      ...metadata
+  // 包装对外部 ref 的访问，确保所有层级操作和图片添加/删除完全响应式，且两边同步
+  const images = computed({
+    get: () => resultImagesRef.value || [],
+    set: (val) => {
+      resultImagesRef.value = val
     }
-    images.value.push(img)
-    return img
-  }
+  })
+
+  // ========== 图片管理 ==========
 
   // 删除图片
-  const removeImage = (index) => {
+  const handleDelete = (index) => {
     if (index >= 0 && index < images.value.length) {
-      images.value.splice(index, 1)
+      const newImages = [...images.value]
+      newImages.splice(index, 1)
+      images.value = newImages
       ElMessage.success('图片已删除')
     }
   }
 
-  // 移动图片层级
-  const moveImageUp = (index) => {
+  // 向上移动一层（往前交换）
+  const handleMoveUp = (index) => {
     if (index > 0 && index < images.value.length) {
-      const temp = images.value[index]
-      images.value[index] = images.value[index - 1]
-      images.value[index - 1] = temp
+      const newImages = [...images.value]
+      const temp = newImages[index]
+      newImages[index] = newImages[index - 1]
+      newImages[index - 1] = temp
+      images.value = newImages
       ElMessage.success('已向上移动一层')
     }
   }
 
-  const moveImageDown = (index) => {
+  // 向下移动一层（往后交换）
+  const handleMoveDown = (index) => {
     if (index >= 0 && index < images.value.length - 1) {
-      const temp = images.value[index]
-      images.value[index] = images.value[index + 1]
-      images.value[index + 1] = temp
+      const newImages = [...images.value]
+      const temp = newImages[index]
+      newImages[index] = newImages[index + 1]
+      newImages[index + 1] = temp
+      images.value = newImages
       ElMessage.success('已向下移动一层')
     }
   }
 
-  const bringToFront = (index) => {
+  // 置顶（移动到最上层，即数组末尾）
+  const handleBringToFront = (index) => {
     if (index >= 0 && index < images.value.length - 1) {
-      const img = images.value.splice(index, 1)[0]
-      images.value.push(img)
+      const newImages = [...images.value]
+      const img = newImages.splice(index, 1)[0]
+      newImages.push(img)
+      images.value = newImages
       ElMessage.success('已置顶')
     }
   }
 
-  const sendToBack = (index) => {
+  // 置底（移动到最下层，即数组开头）
+  const handleSendToBack = (index) => {
     if (index > 0 && index < images.value.length) {
-      const img = images.value.splice(index, 1)[0]
-      images.value.unshift(img)
+      const newImages = [...images.value]
+      const img = newImages.splice(index, 1)[0]
+      newImages.unshift(img)
+      images.value = newImages
       ElMessage.success('已置底')
     }
   }
 
   // 下载图片
-  const downloadImage = (img) => {
+  const handleDownload = (img) => {
     if (!img) return
     const url = img.url || img
     const link = document.createElement('a')
@@ -79,121 +94,204 @@ export const useCanvasEditor = () => {
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-    ElMessage.success('开始下载')
+    ElMessage.success('开始下载图片')
   }
 
-  // ========== 图片编辑功能 ==========
+  // ========== 图片生成/编辑功能 ==========
 
   /**
-   * 扩图
+   * 智能扩图
    * @param {Object} params - { image, ratio, width, height }
    */
-  const extendImage = async (params) => {
+  const handleExtend = async (params) => {
     const { image, ratio, width, height } = params
-    ElMessage.info('扩图功能开发中...')
-    // TODO: 调用后端API实现扩图
-    // 1. 上传原图
-    // 2. 调用扩图接口
-    // 3. 轮询结果
-    // 4. 添加新图片到画布
+    const imageUrl = image.url || image
+    const loading = ElLoading.service({ text: '正在进行智能扩图，请稍候...', background: 'rgba(0, 0, 0, 0.7)' })
+    
+    try {
+      const res = await extendImage({ imageUrl, ratio, width, height })
+      if (res.code === 200 && res.data?.url) {
+        images.value = [...images.value, {
+          url: res.data.url,
+          name: `扩图_${ratio}_${Date.now()}`
+        }]
+        ElMessage.success('扩图生成成功')
+      } else {
+        throw new Error(res.msg || '后台未返回图片URL')
+      }
+    } catch (err) {
+      console.error('扩图失败:', err)
+      ElMessage.error(`扩图失败: ${err.message || '网络繁忙，请稍后重试'}`)
+    } finally {
+      loading.close()
+    }
   }
 
   /**
    * 多角度生成
    * @param {Object} params - { image, count, type }
    */
-  const generateMultiAngle = async (params) => {
+  const handleMultiAngle = async (params) => {
     const { image, count, type } = params
-    ElMessage.info(`正在生成${count}个角度...`)
-    // TODO: 调用后端API实现多角度生成
-    // 1. 上传原图
-    // 2. 调用多角度生成接口
-    // 3. 轮询结果
-    // 4. 批量添加新图片到画布
+    const imageUrl = image.url || image
+    const loading = ElLoading.service({ text: `正在智能生成 ${count} 个角度的商品图...`, background: 'rgba(0, 0, 0, 0.7)' })
+
+    try {
+      const res = await generateMultiAngle({ imageUrl, count, type })
+      const genImages = res.data?.images || res.images || []
+      if (genImages.length > 0) {
+        const newImages = genImages.map((img, i) => ({
+          url: img.url,
+          name: `多角度_${img.angle || (i + 1)}_${Date.now()}`
+        }))
+        images.value = [...images.value, ...newImages]
+        ElMessage.success(`多角度图片生成成功，共 ${newImages.length} 张`)
+      } else {
+        throw new Error('未返回多角度生成结果')
+      }
+    } catch (err) {
+      console.error('多角度生成失败:', err)
+      ElMessage.error(`多角度生成失败: ${err.message || '网络繁忙，请稍后重试'}`)
+    } finally {
+      loading.close()
+    }
   }
 
   /**
    * 改文字
    * @param {Object} params - { image, originalText, newText, font }
    */
-  const editText = async (params) => {
+  const handleEditText = async (params) => {
     const { image, originalText, newText, font } = params
-    ElMessage.info('正在修改文字...')
-    // TODO: 调用后端API实现文字修改
-    // 1. OCR识别原文字
-    // 2. 调用文字修改接口
-    // 3. 轮询结果
-    // 4. 替换原图片
+    const imageUrl = image.url || image
+    const loading = ElLoading.service({ text: '正在智能修改图片文字...', background: 'rgba(0, 0, 0, 0.7)' })
+
+    try {
+      const res = await editImageText({ imageUrl, originalText, newText, font })
+      if (res.code === 200 && res.data?.url) {
+        images.value = [...images.value, {
+          url: res.data.url,
+          name: `改文字_${Date.now()}`
+        }]
+        ElMessage.success('文字修改成功')
+      } else {
+        throw new Error(res.msg || '后台未返回图片URL')
+      }
+    } catch (err) {
+      console.error('修改文字失败:', err)
+      ElMessage.error(`修改文字失败: ${err.message || '网络繁忙，请稍后重试'}`)
+    } finally {
+      loading.close()
+    }
   }
 
   /**
    * 局部重绘
    * @param {Object} params - { image, description, mask }
    */
-  const partialRedraw = async (params) => {
+  const handlePartialRedraw = async (params) => {
     const { image, description, mask } = params
-    ElMessage.info('正在局部重绘...')
-    // TODO: 调用后端API实现局部重绘
-    // 1. 生成mask图片
-    // 2. 调用局部重绘接口
-    // 3. 轮询结果
-    // 4. 替换原图片
+    const imageUrl = image.url || image
+    const loading = ElLoading.service({ text: '正在进行局部区域重绘...', background: 'rgba(0, 0, 0, 0.7)' })
+
+    try {
+      const res = await partialRedraw({ imageUrl, description, mask })
+      if (res.code === 200 && res.data?.url) {
+        images.value = [...images.value, {
+          url: res.data.url,
+          name: `局部重绘_${Date.now()}`
+        }]
+        ElMessage.success('局部重绘成功')
+      } else {
+        throw new Error(res.msg || '后台未返回图片URL')
+      }
+    } catch (err) {
+      console.error('局部重绘失败:', err)
+      ElMessage.error(`局部重绘失败: ${err.message || '网络繁忙，请稍后重试'}`)
+    } finally {
+      loading.close()
+    }
   }
 
   /**
-   * 图层炸开
+   * 图层炸开并下载分离后的图层包
    * @param {Object} params - { image, layers, format }
    */
-  const explodeLayers = async (params) => {
+  const handleExplodeLayers = async (params) => {
     const { image, layers, format } = params
-    ElMessage.info('正在炸开图层...')
-    // TODO: 调用后端API实现图层分离
-    // 1. 上传原图
-    // 2. 调用图层检测接口
-    // 3. 下载分离后的图层文件
+    const imageUrl = image.url || image
+    const layerNames = layers.map(l => l.name)
+    const loading = ElLoading.service({ text: '正在对图片进行智能图层分离，打包并下载中...', background: 'rgba(0, 0, 0, 0.7)' })
+
+    try {
+      const res = await downloadLayers({ imageUrl, layers: layerNames, format })
+      let downloadUrl = ''
+      if (res.code === 200 && res.data?.downloadUrl) {
+        downloadUrl = res.data.downloadUrl
+      } else if (res.downloadUrl) {
+        downloadUrl = res.downloadUrl
+      } else if (res.data) {
+        downloadUrl = res.data
+      }
+
+      if (downloadUrl) {
+        const link = document.createElement('a')
+        link.href = downloadUrl
+        link.download = `layers_${Date.now()}.${format === 'psd' ? 'psd' : 'zip'}`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        ElMessage.success('图层包打包下载成功')
+      } else {
+        throw new Error('未获取到有效的打包下载链接')
+      }
+    } catch (err) {
+      console.error('图层打包下载失败:', err)
+      ElMessage.error(`图层分离下载失败: ${err.message || '网络繁忙，请稍后重试'}`)
+    } finally {
+      loading.close()
+    }
   }
 
-  // ========== 跨模块跳转 ==========
+  // ========== 跨模块跳转 / 图片接力 ==========
 
   /**
    * 发送到产品精修
    * @param {Object} img - 图片对象
    */
-  const sendToRetouch = (img) => {
-    // TODO: 实现跨模块跳转逻辑
-    // 1. 保存图片到全局状态管理（Pinia）
-    // 2. 路由跳转到产品精修模块
-    // 3. 产品精修模块读取全局状态并加载图片
-    ElMessage.success('已跳转到产品精修模块')
+  const handleSendToRetouch = (img) => {
+    const url = img.url || img
+    if (!url) return
+    handoffStore.setImage(url, { from: featureName, to: 'retouch' })
+    ElMessage.success('已放入产品精修，正在为您跳转...')
+    router.push('/refine')
   }
 
   /**
    * 发送到白底图
    * @param {Object} img - 图片对象
    */
-  const sendToWhiteBg = (img) => {
-    // TODO: 实现跨模块跳转逻辑
-    ElMessage.success('已跳转到白底图模块')
+  const handleSendToWhiteBg = (img) => {
+    const url = img.url || img
+    if (!url) return
+    handoffStore.setImage(url, { from: featureName, to: 'whiteBg' })
+    ElMessage.success('已放入白底图，正在为您跳转...')
+    router.push('/whiteBg')
   }
 
   return {
-    // 图片管理
-    images,
-    addImage,
-    removeImage,
-    moveImageUp,
-    moveImageDown,
-    bringToFront,
-    sendToBack,
-    downloadImage,
-    // 编辑功能
-    extendImage,
-    generateMultiAngle,
-    editText,
-    partialRedraw,
-    explodeLayers,
-    // 跨模块跳转
-    sendToRetouch,
-    sendToWhiteBg
+    handleDelete,
+    handleMoveUp,
+    handleMoveDown,
+    handleBringToFront,
+    handleSendToBack,
+    handleDownload,
+    handleExtend,
+    handleMultiAngle,
+    handleEditText,
+    handlePartialRedraw,
+    handleExplodeLayers,
+    handleSendToRetouch,
+    handleSendToWhiteBg
   }
 }

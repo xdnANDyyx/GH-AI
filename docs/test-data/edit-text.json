@@ -1,0 +1,6 @@
+{
+  "imageUrl": "https://example.com/text-image.jpg",
+  "originalText": "Hello",
+  "newText": "World",
+  "font": "Arial"
+}

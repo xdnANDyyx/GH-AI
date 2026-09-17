@@ -876,19 +876,7 @@ private int vertexReadTimeout;
         if (params != null) {
             Object modelObj = params.get("model");
             if (modelObj != null && !modelObj.toString().isEmpty()) {
-                String rawModel = modelObj.toString();
-                // 过滤掉非图像生成模型（如对话模型或其它无效字符串），避免调用 Vertex AI 时发生 404
-                if (!"deepseek".equalsIgnoreCase(rawModel)
-                        && !rawModel.contains("qwen")
-                        && !rawModel.contains("glm")
-                        && !rawModel.contains("doubao")
-                        && !rawModel.contains("gpt-3")
-                        && !rawModel.contains("gpt-4")
-                        && !rawModel.contains("chat")) {
-                    model = rawModel;
-                } else {
-                    log.warn("检测到非图像生成模型传入: {}, 自动回退到默认图像模型: {}", rawModel, vertexModel);
-                }
+                model = modelObj.toString();
             }
         }
 

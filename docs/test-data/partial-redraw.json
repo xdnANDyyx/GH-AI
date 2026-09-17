@@ -1,0 +1,10 @@
+{
+  "imageUrl": "https://example.com/image.jpg",
+  "description": "remove the background",
+  "mask": {
+    "x": 100,
+    "y": 100,
+    "width": 200,
+    "height": 200
+  }
+}
