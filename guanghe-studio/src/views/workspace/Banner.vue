@@ -14,34 +14,24 @@
         </div>
 
         <div class="canvas-box">
-          <!-- 有结果图时显示在画布中 -->
-          <div v-if="resultImages.length > 0" class="canvas-result" :class="{ generating: isGenerating }">
-            <el-image
-              v-for="(img, i) in resultImages"
-              :key="i"
-              :src="img.url || img"
-              :preview-src-list="resultImages.map(r => r.url || r)"
-              :initial-index="i"
-              fit="contain"
-              class="result-img"
-            />
-          </div>
-          <!-- 空状态占位符 -->
-          <div v-else-if="!isGenerating" class="canvas-placeholder">
-            <svg viewBox="0 0 48 48" fill="none">
-              <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
-              <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
-              <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <h3>上传产品图并配置参数后生成</h3>
-            <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
-          </div>
-
-          <!-- 生图阶段状态绝对定位浮层 -->
-          <div v-if="isGenerating" class="canvas-loading">
-            <el-icon class="is-loading" :size="24" color="#2563FF"><Loading /></el-icon>
-            <p>{{ genStatus || '正在生成...' }}</p>
-          </div>
+          <!-- Fabric.js 自由画布编辑器（对标即梦AI） -->
+          <CanvasEditor
+            ref="canvasEditorRef"
+            :images="canvasImages"
+            :is-generating="isGenerating"
+            :gen-status="genStatus"
+            feature-name="banner"
+            @extend="onCanvasExtend"
+            @multi-angle="onCanvasMultiAngle"
+            @edit-text="onCanvasEditText"
+            @partial-redraw="onCanvasPartialRedraw"
+            @explode-layers="onCanvasExplodeLayers"
+            @delete="onCanvasDelete"
+            @send-to-retouch="onCanvasSendToRetouch"
+            @send-to-white-bg="onCanvasSendToWhiteBg"
+            @download="onCanvasDownload"
+            @image-selected="onCanvasImageSelected"
+          />
         </div>
 
         <div class="canvas-tip">建议使用高质量素材，获得更佳效果</div>
@@ -311,6 +301,8 @@
 <script>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { compressImage } from '@/utils/compress'
+import CanvasEditor from '@/components/CanvasEditor.vue'
+import { useCanvasEditor } from '@/composables/useCanvasEditor'
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { useWorkflowProgress } from '@/composables/useWorkflowProgress'
 import { ArrowDown, ArrowLeft, ArrowRight, WarningFilled, FullScreen, RefreshLeft, Delete, UploadFilled, Link, MagicStick, DocumentCopy } from '@element-plus/icons-vue'
@@ -318,23 +310,48 @@ import { ElMessage } from 'element-plus'
 import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
 import AiAssistant from '@/components/AiAssistant.vue'
 import { reversePrompt, getPublicCreationConfigByGroup, listPromptLibraryBatch } from '@/api/customer'
-// import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
-// import CanvasOverlay from '@/components/CanvasOverlay.vue'
 
 export default {
   name: 'BannerView',
-  components: { ArrowDown, ArrowLeft, ArrowRight, WarningFilled, FullScreen, RefreshLeft, Delete, UploadFilled, Link, MagicStick, DocumentCopy, PromptLibrarySelect, AiAssistant },
+  components: { ArrowDown, ArrowLeft, ArrowRight, WarningFilled, FullScreen, RefreshLeft, Delete, UploadFilled, Link, MagicStick, DocumentCopy, PromptLibrarySelect, AiAssistant, CanvasEditor },
   setup() {
     const gen = useImageGeneration('render')
     const { steps: workflowSteps, getStepClass, isStepLineDone } = useWorkflowProgress()
-    // const { canvasUI, handleCanvasExport } = useCanvasInteractions({
-    //   canvasSelector: '.canvas-dropzone',
-    //   defaultName: 'banner',
-    // })
     const fileInput = ref(null); const bgFileInput = ref(null); const logoFileInput = ref(null)
     const originalImage = ref(''); const originalFile = ref(null); const bgImage = ref(''); const bgFile = ref(null); const logoImage = ref(''); const logoFile = ref(null); const resultImages = ref([])
     const uploadedFiles = ref([]); const productFiles = ref([])
     const zoom = ref(100)
+
+    // ---- Canvas Editor ----
+    const canvasEditorRef = ref(null)
+    const canvasImages = computed(() => {
+      const imgs = []
+      if (originalImage.value) imgs.push({ url: originalImage.value, name: '原图' })
+      if (resultImages.value.length > 0) {
+        resultImages.value.forEach((img, i) => {
+          imgs.push({ url: img.url || img, name: `Banner_${i + 1}` })
+        })
+      }
+      return imgs
+    })
+    const canvasEditor = useCanvasEditor(resultImages, 'banner')
+
+    function onCanvasExtend(params) { canvasEditor.handleExtend(params) }
+    function onCanvasMultiAngle(params) {
+      canvasEditor.handleMultiAngle(params, async (newImages) => {
+        if (canvasEditorRef.value && canvasEditorRef.value.addMultiAngleResults) {
+          await canvasEditorRef.value.addMultiAngleResults(newImages)
+        }
+      })
+    }
+    function onCanvasEditText(params) { canvasEditor.handleEditText(params) }
+    function onCanvasPartialRedraw(params) { canvasEditor.handlePartialRedraw(params) }
+    function onCanvasExplodeLayers(params) { canvasEditor.handleExplodeLayers(params) }
+    function onCanvasDelete(index) { canvasEditor.handleDelete(index) }
+    function onCanvasSendToRetouch(img) { canvasEditor.handleSendToRetouch(img) }
+    function onCanvasSendToWhiteBg(img) { canvasEditor.handleSendToWhiteBg(img) }
+    function onCanvasDownload(img) { canvasEditor.handleDownload(img) }
+    function onCanvasImageSelected(img) { /* 可扩展 */ }
 
     // Canvas size
     const canvasPreset = ref(''); const canvasWidth = ref(1200); const canvasHeight = ref(300); const sizeLinked = ref(true)
@@ -820,9 +837,15 @@ canvasPreset.value = ''; canvasWidth.value = 1200; canvasHeight.value = 300
       canvasFlex, configFlex, aiFlex, aiPanel, configCollapsed, startColResize, startAiResize,
       triggerUpload, triggerBgUpload, triggerLogoUpload, handleFileSelect, handleBgFileSelect, handleLogoFileSelect, handleDrop, clearImage, removeProductFile,
       undo, redo, reset, zoomIn, zoomOut, toggleFullscreen, handleGenerate, canGenerate,
-// ---- AiAssistant ----
-isGenerating, genProgress, genStatus, genError, aiAssistantRef, handleGenerateFromAi,
-clearWorkspaceImages,
+      // ---- Canvas Editor ----
+      canvasEditorRef, canvasImages,
+      onCanvasExtend, onCanvasMultiAngle, onCanvasEditText,
+      onCanvasPartialRedraw, onCanvasExplodeLayers,
+      onCanvasDelete, onCanvasSendToRetouch, onCanvasSendToWhiteBg,
+      onCanvasDownload, onCanvasImageSelected,
+      // ---- AiAssistant ----
+      isGenerating, genProgress, genStatus, genError, aiAssistantRef, handleGenerateFromAi,
+      clearWorkspaceImages,
       // ---- 反推提示词 ----
       reverseDialogVisible, reverseImageFile, reverseImagePreview, reverseResult, reverseLoading,
       reversePromptInput, openReversePromptDialog, triggerReverseUpload, handleReverseDrop,

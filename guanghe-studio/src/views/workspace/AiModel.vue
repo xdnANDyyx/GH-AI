@@ -40,34 +40,24 @@
          
         <!-- Canvas Area -->
         <div class="canvas-box">
-          <!-- 有结果图时显示在画布中 -->
-          <div v-if="resultImages.length > 0" class="canvas-result" :class="{ generating: isGenerating }">
-            <el-image
-              v-for="(img, i) in resultImages"
-              :key="i"
-              :src="img.url || img"
-              :preview-src-list="resultImages.map(r => r.url || r)"
-              :initial-index="i"
-              fit="contain"
-              class="result-img"
-            />
-          </div>
-          <!-- 空状态占位符 -->
-          <div v-else-if="!isGenerating" class="canvas-placeholder">
-            <svg viewBox="0 0 48 48" fill="none">
-              <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
-              <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
-              <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <h3>上传产品图并配置参数后生成</h3>
-            <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
-          </div>
-
-          <!-- 生图阶段状态绝对定位浮层 -->
-          <div v-if="isGenerating" class="canvas-loading">
-            <el-icon class="is-loading" :size="24" color="#2563FF"><Loading /></el-icon>
-            <p>{{ genStatus || '正在生成...' }}</p>
-          </div>
+          <!-- Fabric.js 自由画布编辑器（对标即梦AI） -->
+          <CanvasEditor
+            ref="canvasEditorRef"
+            :images="canvasImages"
+            :is-generating="isGenerating"
+            :gen-status="genStatus"
+            feature-name="ai_model"
+            @extend="onCanvasExtend"
+            @multi-angle="onCanvasMultiAngle"
+            @edit-text="onCanvasEditText"
+            @partial-redraw="onCanvasPartialRedraw"
+            @explode-layers="onCanvasExplodeLayers"
+            @delete="onCanvasDelete"
+            @send-to-retouch="onCanvasSendToRetouch"
+            @send-to-white-bg="onCanvasSendToWhiteBg"
+            @download="onCanvasDownload"
+            @image-selected="onCanvasImageSelected"
+          />
         </div>
 
         <div class="canvas-bottom-bar">
@@ -75,16 +65,20 @@
         </div>
       </div>
 
-      <!-- Divider + Toggle: canvas ⇔ config -->
+      <!-- Divider + Toggle: canvas ⇔ right panel -->
       <div class="col-divider-wrapper">
-        <div class="col-divider" @mousedown="startColResize($event, 'config')"></div>
-        <div class="config-toggle-btn" @click="configCollapsed = !configCollapsed" :title="configCollapsed ? '展开创作配置' : '折叠创作配置'">
+        <div class="col-divider" @mousedown="startColResize($event, 'right')"></div>
+        <div class="config-toggle-btn" :class="{ active: !configCollapsed }" @click="configCollapsed = !configCollapsed" :title="configCollapsed ? '展开创作配置' : '折叠创作配置'">
           <el-icon :size="14"><ArrowRight v-if="!configCollapsed" /><ArrowLeft v-else /></el-icon>
         </div>
       </div>
 
-      <!-- ===== CENTER: Config Panel ===== -->
-      <div class="config-col" :class="{ collapsed: configCollapsed }" :style="{ flex: configFlex }">
+      <!-- ===== RIGHT: Config Panel + AI ===== -->
+      <div class="right-col" :style="{ flex: rightFlex }">
+        <div class="right-panel-divider" @mousedown="startRightPanelResize($event, 'config')"></div>
+        
+        <!-- Config Panel -->
+        <div class="config-col" :class="{ collapsed: configCollapsed }" :style="{ flex: configFlex }">
         <el-scrollbar v-show="!configCollapsed">
           <div class="config-inner">
             <!-- Panel header with expand/collapse all -->
@@ -404,14 +398,13 @@
 
           </div>
         </el-scrollbar>
-      </div>
+        </div>
 
-      <!-- Divider handle: config ⇔ AI -->
-      <div class="col-divider" @mousedown="startColResize($event, 'ai')"></div>
+        <!-- Divider inside right panel: config ⇔ AI -->
+        <div class="right-panel-divider" @mousedown="startRightPanelResize($event, 'ai')"></div>
 
-      <!-- ===== RIGHT: AI Panel ===== -->
-      <div class="ai-col" :style="{ flex: aiFlex }" ref="aiPanel">
-        
+        <!-- AI Panel -->
+        <div class="ai-col" :style="{ flex: aiFlex }" ref="aiPanel">
         <AiAssistant
           ref="aiAssistantRef"
           :generate-fn="handleGenerate"
@@ -422,8 +415,9 @@
           :has-image="!!productImage"
           :on-clear-images="clearWorkspaceImages"
         />
+        </div>
       </div>
-    </div>
+      </div>
 
     <input type="file" ref="fileInput" accept="image/*" style="display:none" @change="handleFile" />
 
@@ -491,8 +485,8 @@ import {
   ChatDotRound, Monitor, User,
   PictureFilled, House, Sunny, OfficeBuilding, DocumentCopy
 } from '@element-plus/icons-vue'
-// import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
-// import CanvasOverlay from '@/components/CanvasOverlay.vue'
+import CanvasEditor from '@/components/CanvasEditor.vue'
+import { useCanvasEditor } from '@/composables/useCanvasEditor'
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { useWorkflowProgress } from '@/composables/useWorkflowProgress'
 import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
@@ -505,6 +499,37 @@ import { ElMessage } from 'element-plus'
 //   getImage: () => productImage.value || '',
 //   defaultName: 'ai-model',
 // })
+
+// ---- Canvas Editor ----
+const canvasEditorRef = ref(null)
+const canvasImages = computed(() => {
+  const imgs = []
+  if (productImage.value) imgs.push({ url: productImage.value, name: '原图' })
+  if (resultImages.value.length > 0) {
+    resultImages.value.forEach((img, i) => {
+      imgs.push({ url: img.url || img, name: `AI模特_${i + 1}` })
+    })
+  }
+  return imgs
+})
+const canvasEditor = useCanvasEditor(resultImages, 'ai_model')
+
+function onCanvasExtend(params) { canvasEditor.handleExtend(params) }
+function onCanvasMultiAngle(params) {
+  canvasEditor.handleMultiAngle(params, async (newImages) => {
+    if (canvasEditorRef.value && canvasEditorRef.value.addMultiAngleResults) {
+      await canvasEditorRef.value.addMultiAngleResults(newImages)
+    }
+  })
+}
+function onCanvasEditText(params) { canvasEditor.handleEditText(params) }
+function onCanvasPartialRedraw(params) { canvasEditor.handlePartialRedraw(params) }
+function onCanvasExplodeLayers(params) { canvasEditor.handleExplodeLayers(params) }
+function onCanvasDelete(index) { canvasEditor.handleDelete(index) }
+function onCanvasSendToRetouch(img) { canvasEditor.handleSendToRetouch(img) }
+function onCanvasSendToWhiteBg(img) { canvasEditor.handleSendToWhiteBg(img) }
+function onCanvasDownload(img) { canvasEditor.handleDownload(img) }
+function onCanvasImageSelected(img) { /* 可扩展 */ }
 
 const configCollapsed = ref(false)
 
@@ -742,6 +767,10 @@ const allExpanded = computed(() => {
 const _configWidthPx = ref(280)
 const _aiWidthPx = ref(360)
 const canvasFlex = computed(() => '1 1 0%')
+const rightFlex = computed(() => {
+  const configW = configCollapsed.value ? 40 : _configWidthPx.value
+  return `0 0 ${configW + _aiWidthPx.value + 12}px`
+})
 const configFlex = computed(() => {
   if (configCollapsed.value) return '0 0 40px'
   return `0 0 ${_configWidthPx.value}px`
@@ -759,14 +788,22 @@ function startColResize(e, target) {
   e.preventDefault()
 }
 
+function startRightPanelResize(e, target) {
+  isResizing = true
+  resizeTarget = target
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  e.preventDefault()
+}
+
 function onMouseMove(e) {
   if (!isResizing) return
   const threeCol = document.querySelector('.three-col')
   if (!threeCol) return
   const rect = threeCol.getBoundingClientRect()
 
-  if (resizeTarget === 'config') {
-    // 画布/配置栏分隔线：按比例缩放配置栏和AI栏
+  if (resizeTarget === 'right' || resizeTarget === 'config') {
+    // 画布/右侧栏分隔线：按比例缩放配置栏和AI栏宽度
     const rightWidth = rect.right - e.clientX - 24
     const totalCurrent = _configWidthPx.value + _aiWidthPx.value + 12
     if (totalCurrent > 0 && rightWidth > 200) {
@@ -775,8 +812,13 @@ function onMouseMove(e) {
       _aiWidthPx.value = Math.max(200, Math.min(800, Math.round(_aiWidthPx.value * ratio)))
     }
   } else if (resizeTarget === 'ai') {
-    // 配置栏/AI栏分隔线：只调整AI栏宽度，配置栏不变
-    const aiWidth = rect.right - e.clientX - 6
+    // 配置栏/AI栏分隔线：只调整AI栏宽度，配置栏宽度不变
+    const rightCol = document.querySelector('.right-col')
+    if (!rightCol) return
+    const rightRect = rightCol.getBoundingClientRect()
+    const rightX = e.clientX - rightRect.left
+    const configW = configCollapsed.value ? 40 : _configWidthPx.value
+    const aiWidth = rightRect.width - rightX - 6
     _aiWidthPx.value = Math.max(200, Math.min(800, Math.round(aiWidth)))
   }
 }
@@ -1157,55 +1199,71 @@ function clearWorkspaceImages() {
   min-height: 0;
 }
 
-// ---- Column Divider ----
+// ---- Column Divider + Toggle Wrapper ----
 .col-divider-wrapper {
-  width: 30px;
-  flex-shrink: 0;
-  background: transparent;
   position: relative;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
+  width: 24px;
 }
 
+// ---- Column Divider ----
 .col-divider {
   width: 6px;
   height: 100%;
   background: transparent;
   cursor: col-resize;
-  position: absolute;
-  left: 12px;
-  top: 0;
-  bottom: 0;
+  flex-shrink: 0;
+  position: relative;
   z-index: 5;
   transition: background 0.2s;
 }
 .col-divider:hover,
 .col-divider:active { background: #2563FF; }
 
-.config-toggle-btn {
+// ---- Column Toggle Button (between canvas and config) ----
+.col-divider-wrapper .config-toggle-btn {
   position: absolute;
+  right: 0;
   top: 50%;
   transform: translateY(-50%);
-  right: 0;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: #fff;
-  border: 1px solid #EBEDF5;
+  z-index: 10;
+  width: 20px;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: #fff;
+  border: 1px solid #E8EDF5;
+  border-radius: 8px 0 0 8px;
   cursor: pointer;
-  z-index: 10;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  transition: all 0.2s;
-  color: #6B6B6B;
+  color: #9CA3AF;
+  box-shadow: -2px 0 8px rgba(0,0,0,0.06);
+  transition: all 0.2s ease;
 }
-.config-toggle-btn:hover {
-  background: #F7F9FC;
+.col-divider-wrapper .config-toggle-btn.active {
   color: #2563FF;
+  border-color: #2563FF;
 }
+.col-divider-wrapper .config-toggle-btn:hover {
+  background: #F0F4FF;
+  color: #2563FF;
+  border-color: #2563FF;
+}
+
+// ---- Right Panel Divider ----
+.right-panel-divider {
+  width: 6px;
+  background: transparent;
+  cursor: col-resize;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 5;
+  transition: background 0.2s;
+}
+.right-panel-divider:hover,
+.right-panel-divider:active { background: #2563FF; }
 
 // ============================================================
 //   Canvas Column
@@ -1517,6 +1575,16 @@ function clearWorkspaceImages() {
 }
 
 // ============================================================
+//   Right Column (Config + AI)
+// ============================================================
+.right-col {
+  display: flex;
+  background: #fff;
+  min-width: 0;
+  overflow: hidden;
+}
+
+// ============================================================
 //   Config Column
 // ============================================================
 .config-col {
@@ -1525,15 +1593,14 @@ function clearWorkspaceImages() {
   overflow: hidden;
   background: #fff;
   min-width: 0;
-  transition: flex 0.3s ease;
+  position: relative;
+  transition: flex 0.3s;
+}
 
-  &.collapsed {
-    flex: 0 0 0 !important;
-    min-width: 0 !important;
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-  }
+// Collapsed state
+.config-col.collapsed {
+  flex: 0 0 40px !important;
+  min-width: 40px;
 }
 
 .prompt-boost-row {
@@ -2030,9 +2097,7 @@ gap: 8px;
   .step-line { min-width: 8px; margin: 0 4px; }
   .three-col { flex-wrap: wrap; }
   .canvas-col { flex: 0 0 100% !important; max-height: 50vh; }
-  .config-col { flex: 0 0 50% !important; }
-  .ai-col { flex: 0 0 50% !important; }
-  .col-divider-wrapper { display: none; }
+  .right-col { flex: 0 0 100% !important; max-height: 50vh; }
   .col-divider { display: none; }
 }
 
@@ -2041,8 +2106,9 @@ gap: 8px;
   .steps-bar { display: none; }
   .three-col { flex-direction: column; }
   .canvas-col { flex: 0 0 45vh !important; max-height: 45vh; }
-  .config-col { flex: 0 0 auto !important; max-height: 200px; overflow-y: auto; }
-  .ai-col { flex: 1 1 auto !important; min-height: 250px; }
+  .right-col { flex: 1 1 auto !important; min-height: 250px; }
+  .right-panel-divider { display: none; }
+  .config-col { max-height: 200px; overflow-y: auto; }
 }
 
 /* ===== 反推提示词入口按钮 ===== */

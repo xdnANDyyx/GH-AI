@@ -524,7 +524,14 @@ const canvasEditor = useCanvasEditor(resultImages, 'white_bg')
 
 // 画布事件处理
 function onCanvasExtend(params) { canvasEditor.handleExtend(params) }
-function onCanvasMultiAngle(params) { canvasEditor.handleMultiAngle(params) }
+function onCanvasMultiAngle(params) {
+  // 多角度生成结果直接铺在画布上
+  canvasEditor.handleMultiAngle(params, async (newImages) => {
+    if (canvasEditorRef.value && canvasEditorRef.value.addMultiAngleResults) {
+      await canvasEditorRef.value.addMultiAngleResults(newImages)
+    }
+  })
+}
 function onCanvasEditText(params) { canvasEditor.handleEditText(params) }
 function onCanvasPartialRedraw(params) { canvasEditor.handlePartialRedraw(params) }
 function onCanvasExplodeLayers(params) { canvasEditor.handleExplodeLayers(params) }

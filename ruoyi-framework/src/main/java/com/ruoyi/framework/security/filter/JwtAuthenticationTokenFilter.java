@@ -30,6 +30,8 @@ public class JwtAuthenticationTokenFilter extends OncePerRequestFilter {
     
     private static final String CUSTOMER_PATH_PREFIX = "/customer/";
     private static final String API_CUSTOMER_PATH_PREFIX = "/api/customer/";
+    // CanvasEditorController (/ai/image/**) 也使用客户端Token
+    private static final String CANVAS_EDITOR_PATH_PREFIX = "/ai/image/";
     
     @Autowired
     private TokenService tokenService;
@@ -56,10 +58,19 @@ public class JwtAuthenticationTokenFilter extends OncePerRequestFilter {
      */
     private LoginUser getLoginUser(HttpServletRequest request) {
         String requestURI = request.getRequestURI();
-        if (requestURI.startsWith(CUSTOMER_PATH_PREFIX) || requestURI.startsWith(API_CUSTOMER_PATH_PREFIX)) {
+        if (isCustomerPath(requestURI)) {
             return customerTokenService.getLoginUser(request);
         }
         return tokenService.getLoginUser(request);
+    }
+    
+    /**
+     * 判断是否为客户端路径
+     */
+    private boolean isCustomerPath(String requestURI) {
+        return requestURI.startsWith(CUSTOMER_PATH_PREFIX)
+            || requestURI.startsWith(API_CUSTOMER_PATH_PREFIX)
+            || requestURI.startsWith(CANVAS_EDITOR_PATH_PREFIX);
     }
     
     /**
@@ -67,7 +78,7 @@ public class JwtAuthenticationTokenFilter extends OncePerRequestFilter {
      */
     private void verifyToken(LoginUser loginUser, HttpServletRequest request) {
         String requestURI = request.getRequestURI();
-        if (requestURI.startsWith(CUSTOMER_PATH_PREFIX) || requestURI.startsWith(API_CUSTOMER_PATH_PREFIX)) {
+        if (isCustomerPath(requestURI)) {
             customerTokenService.verifyToken(loginUser);
         } else {
             tokenService.verifyToken(loginUser);

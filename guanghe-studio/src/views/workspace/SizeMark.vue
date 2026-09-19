@@ -15,34 +15,24 @@
 
         <!-- Canvas Area -->
         <div class="canvas-box">
-          <!-- 有结果图时显示在画布中 -->
-          <div v-if="resultImages.length > 0" class="canvas-result" :class="{ generating: isGenerating }">
-            <el-image
-              v-for="(img, i) in resultImages"
-              :key="i"
-              :src="img.url || img"
-              :preview-src-list="resultImages.map(r => r.url || r)"
-              :initial-index="i"
-              fit="contain"
-              class="result-img"
-            />
-          </div>
-          <!-- 空状态占位符 -->
-          <div v-else-if="!isGenerating" class="canvas-placeholder">
-            <svg viewBox="0 0 48 48" fill="none">
-              <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
-              <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
-              <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <h3>上传产品图并配置参数后生成</h3>
-            <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
-          </div>
-
-          <!-- 生图阶段状态绝对定位浮层 -->
-          <div v-if="isGenerating" class="canvas-loading">
-            <el-icon class="is-loading" :size="24" color="#2563FF"><Loading /></el-icon>
-            <p>{{ genStatus || '正在生成...' }}</p>
-          </div>
+          <!-- Fabric.js 自由画布编辑器（对标即梦AI） -->
+          <CanvasEditor
+            ref="canvasEditorRef"
+            :images="canvasImages"
+            :is-generating="isGenerating"
+            :gen-status="genStatus"
+            feature-name="dimension"
+            @extend="onCanvasExtend"
+            @multi-angle="onCanvasMultiAngle"
+            @edit-text="onCanvasEditText"
+            @partial-redraw="onCanvasPartialRedraw"
+            @explode-layers="onCanvasExplodeLayers"
+            @delete="onCanvasDelete"
+            @send-to-retouch="onCanvasSendToRetouch"
+            @send-to-white-bg="onCanvasSendToWhiteBg"
+            @download="onCanvasDownload"
+            @image-selected="onCanvasImageSelected"
+          />
         </div>
 
         <div class="canvas-bottom-bar">
@@ -50,17 +40,21 @@
         </div>
       </div>
 
-      <!-- Divider + Toggle: canvas ⇔ config -->
+      <!-- Divider + Toggle: canvas ⇔ right panel -->
       <div class="col-divider-wrapper">
-        <div class="col-divider" @mousedown="startColResize($event, 'config')"></div>
-        <div class="config-toggle-btn" @click="configCollapsed = !configCollapsed" :title="configCollapsed ? '展开创作配置' : '折叠创作配置'">
+        <div class="col-divider" @mousedown="startColResize($event, 'right')"></div>
+        <div class="config-toggle-btn" :class="{ active: !configCollapsed }" @click="configCollapsed = !configCollapsed" :title="configCollapsed ? '展开创作配置' : '折叠创作配置'">
           <el-icon :size="14"><ArrowRight v-if="!configCollapsed" /><ArrowLeft v-else /></el-icon>
         </div>
       </div>
 
-      <!-- ===== RIGHT: Config Panel (25%) ===== -->
-      <div class="config-col" :class="{ collapsed: configCollapsed }" :style="{ flex: configFlex }">
-        <el-scrollbar>
+      <!-- ===== RIGHT: Config Panel + AI ===== -->
+      <div class="right-col" :style="{ flex: rightFlex }">
+        <div class="right-panel-divider" @mousedown="startRightPanelResize($event, 'config')"></div>
+        
+        <!-- Config Panel -->
+        <div class="config-col" :class="{ collapsed: configCollapsed }" :style="{ flex: configFlex }">
+        <el-scrollbar v-show="!configCollapsed">
           <div class="config-inner">
             <!-- 创作配置 标题 -->
             <div class="panel-header" @click="toggleAllSections">
@@ -279,14 +273,13 @@
 
           </div>
         </el-scrollbar>
-      </div>
+        </div>
 
-      <!-- Divider handle: config ⇔ AI -->
-      <div class="col-divider" @mousedown="startColResize($event, 'ai')"></div>
+        <!-- Divider inside right panel: config ⇔ AI -->
+        <div class="right-panel-divider" @mousedown="startRightPanelResize($event, 'ai')"></div>
 
-      <!-- ===== RIGHT: AI Panel ===== -->
-      <div class="ai-col" :style="{ flex: aiFlex }" ref="aiPanel">
-        <div class="ai-resize-handle" @mousedown="startAiResize"></div>
+        <!-- AI Panel -->
+        <div class="ai-col" :style="{ flex: aiFlex }" ref="aiPanel">
         <AiAssistant
           ref="aiAssistantRef"
           :generate-fn="handleGenerate"
@@ -297,8 +290,9 @@
           :has-image="!!originalImage"
           :on-clear-images="clearWorkspaceImages"
         />
+        </div>
       </div>
-    </div>
+      </div>
 
     <!-- Hidden file input -->
     <input type="file" ref="fileInput" accept="image/*" multiple hidden @change="handleFileSelect" />
@@ -363,8 +357,8 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { compressImage } from '@/utils/compress'
 import { UploadFilled, ArrowDown, ArrowLeft, ArrowRight, MagicStick, DocumentCopy } from '@element-plus/icons-vue'
-// import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
-// import CanvasOverlay from '@/components/CanvasOverlay.vue'
+import CanvasEditor from '@/components/CanvasEditor.vue'
+import { useCanvasEditor } from '@/composables/useCanvasEditor'
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { useWorkflowProgress } from '@/composables/useWorkflowProgress'
 import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
@@ -374,15 +368,41 @@ import { reversePrompt, getPublicCreationConfigByGroup, listPromptLibraryBatch }
 
 export default {
   name: 'SizeMarkView',
-  components: { UploadFilled, ArrowDown, ArrowLeft, ArrowRight, MagicStick, DocumentCopy, PromptLibrarySelect, AiAssistant },
+  components: { UploadFilled, ArrowDown, ArrowLeft, ArrowRight, MagicStick, DocumentCopy, PromptLibrarySelect, AiAssistant, CanvasEditor },
   setup() {
-    // ---- Canvas Interactions ----
-    // const { canvasUI, handleCanvasExport } = useCanvasInteractions({
-    //   canvasSelector: '.canvas-box',
-    //   defaultName: 'size-mark',
-    // })
     const gen = useImageGeneration('render')
     const { steps: workflowSteps, getStepClass, isStepLineDone } = useWorkflowProgress()
+
+    // ---- Canvas Editor ----
+    const canvasEditorRef = ref(null)
+    const canvasImages = computed(() => {
+      const imgs = []
+      if (originalImage.value) imgs.push({ url: originalImage.value, name: '原图' })
+      if (resultImages.value.length > 0) {
+        resultImages.value.forEach((img, i) => {
+          imgs.push({ url: img.url || img, name: `尺寸图_${i + 1}` })
+        })
+      }
+      return imgs
+    })
+    const canvasEditor = useCanvasEditor(resultImages, 'dimension')
+
+    function onCanvasExtend(params) { canvasEditor.handleExtend(params) }
+    function onCanvasMultiAngle(params) {
+      canvasEditor.handleMultiAngle(params, async (newImages) => {
+        if (canvasEditorRef.value && canvasEditorRef.value.addMultiAngleResults) {
+          await canvasEditorRef.value.addMultiAngleResults(newImages)
+        }
+      })
+    }
+    function onCanvasEditText(params) { canvasEditor.handleEditText(params) }
+    function onCanvasPartialRedraw(params) { canvasEditor.handlePartialRedraw(params) }
+    function onCanvasExplodeLayers(params) { canvasEditor.handleExplodeLayers(params) }
+    function onCanvasDelete(index) { canvasEditor.handleDelete(index) }
+    function onCanvasSendToRetouch(img) { canvasEditor.handleSendToRetouch(img) }
+    function onCanvasSendToWhiteBg(img) { canvasEditor.handleSendToWhiteBg(img) }
+    function onCanvasDownload(img) { canvasEditor.handleDownload(img) }
+    function onCanvasImageSelected(img) { /* 可扩展 */ }
 
     // ---- State ----
     const originalImage = ref(null)
@@ -490,6 +510,10 @@ export default {
     const _aiWidthPx = ref(360)
     const aiPanel = ref(null)
     const canvasFlex = computed(() => '1 1 0%')
+    const rightFlex = computed(() => {
+      const configW = configCollapsed.value ? 40 : _configWidthPx.value
+      return `0 0 ${configW + _aiWidthPx.value + 12}px`
+    })
     const configFlex = computed(() => {
       if (configCollapsed.value) return '0 0 40px'
       return `0 0 ${_configWidthPx.value}px`
@@ -506,12 +530,20 @@ export default {
       e.preventDefault()
     }
 
+    function startRightPanelResize(e, target) {
+      isResizing = true
+      resizeTarget = target
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
+      e.preventDefault()
+    }
+
     function onMouseMove(e) {
       if (!isResizing) return
       const threeCol = document.querySelector('.three-col')
       if (!threeCol) return
       const rect = threeCol.getBoundingClientRect()
-      if (resizeTarget === 'config') {
+      if (resizeTarget === 'right' || resizeTarget === 'config') {
         const rightWidth = rect.right - e.clientX - 24
         const totalCurrent = _configWidthPx.value + _aiWidthPx.value + 12
         if (totalCurrent > 0 && rightWidth > 200) {
@@ -520,7 +552,12 @@ export default {
           _aiWidthPx.value = Math.max(200, Math.min(800, Math.round(_aiWidthPx.value * ratio)))
         }
       } else if (resizeTarget === 'ai') {
-        const aiWidth = rect.right - e.clientX - 6
+        const rightCol = document.querySelector('.right-col')
+        if (!rightCol) return
+        const rightRect = rightCol.getBoundingClientRect()
+        const rightX = e.clientX - rightRect.left
+        const configW = configCollapsed.value ? 40 : _configWidthPx.value
+        const aiWidth = rightRect.width - rightX - 6
         _aiWidthPx.value = Math.max(200, Math.min(800, Math.round(aiWidth)))
       }
     }
@@ -534,86 +571,15 @@ export default {
       }
     }
 
-    // AI panel independent resize
-    let isAiResizing = false
-    let aiStartX = 0
-    let aiStartWidth = 0
-
-    function startAiResize(e) {
-      isAiResizing = true
-      aiStartX = e.clientX
-      const aiEl = aiPanel.value
-      aiStartWidth = aiEl ? aiEl.getBoundingClientRect().width : 360
-      document.body.style.cursor = 'col-resize'
-      document.body.style.userSelect = 'none'
-      e.preventDefault()
-      e.stopPropagation()
-    }
-
-    function onAiMouseMove(e) {
-      if (!isAiResizing) return
-      const delta = aiStartX - e.clientX
-      let newWidth = aiStartWidth + delta
-      newWidth = Math.max(240, Math.min(600, newWidth))
-      _aiWidthPx.value = newWidth
-    }
-
-    function onAiMouseUp() {
-      if (isAiResizing) {
-        isAiResizing = false
-        document.body.style.cursor = ''
-        document.body.style.userSelect = ''
-      }
-    }
-
-    // AI panel vertical resize (drag top border)
-    let isAiHeightResizing = false
-    let aiHeightStartY = 0
-    let aiHeightStart = 0
-
-    function startAiHeightResize(e) {
-      isAiHeightResizing = true
-      aiHeightStartY = e.clientY
-      const aiEl = aiPanel.value
-      aiHeightStart = aiEl
-        ? (_aiHeightPx.value > 0 ? _aiHeightPx.value : aiEl.getBoundingClientRect().height)
-        : 400
-      _aiHeightPx.value = Math.round(aiHeightStart)
-      document.body.style.cursor = 'ns-resize'
-      document.body.style.userSelect = 'none'
-      e.preventDefault()
-      e.stopPropagation()
-    }
-
-    function onAiHeightMouseMove(e) {
-      if (!isAiHeightResizing) return
-      const delta = e.clientY - aiHeightStartY
-      let newHeight = aiHeightStart + delta
-      newHeight = Math.max(300, Math.min(window.innerHeight - 100, Math.round(newHeight)))
-      _aiHeightPx.value = newHeight
-    }
-
-    function onAiHeightMouseUp() {
-      if (isAiHeightResizing) {
-        isAiHeightResizing = false
-        document.body.style.cursor = ''
-        document.body.style.userSelect = ''
-      }
-    }
-
     onMounted(() => {
       document.addEventListener('mousemove', onMouseMove)
       document.addEventListener('mouseup', onMouseUp)
-      document.addEventListener('mousemove', onAiMouseMove)
-      document.addEventListener('mouseup', onAiMouseUp)
       loadCreationConfig()
     })
 
     onBeforeUnmount(() => {
       document.removeEventListener('mousemove', onMouseMove)
       document.removeEventListener('mouseup', onMouseUp)
-      document.removeEventListener('mousemove', onAiMouseMove)
-      document.removeEventListener('mouseup', onAiMouseUp)
     })
 
     // ===== 从后台创作配置读取尺寸标记配置 =====
@@ -956,7 +922,13 @@ export default {
       regenerate, downloadPng, copyLink,
       moreTemplates, startGenerate,
       applyPrompt,
-      startColResize, startAiResize,
+      startColResize, startRightPanelResize, rightFlex,
+      // ---- Canvas Editor ----
+      canvasEditorRef, canvasImages,
+      onCanvasExtend, onCanvasMultiAngle, onCanvasEditText,
+      onCanvasPartialRedraw, onCanvasExplodeLayers,
+      onCanvasDelete, onCanvasSendToRetouch, onCanvasSendToWhiteBg,
+      onCanvasDownload, onCanvasImageSelected,
       // ---- AiAssistant ----
       isGenerating, genProgress, genStatus, genError, aiAssistantRef, handleGenerate,
       clearWorkspaceImages,
@@ -1033,66 +1005,76 @@ export default {
   min-height: 0;
 }
 
-/* ===== Column Divider Wrapper ===== */
+/* ---- Column Divider + Toggle Wrapper ---- */
 .col-divider-wrapper {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  width: 24px;
+}
+
+/* ---- Column Divider ---- */
+.col-divider {
   width: 6px;
+  height: 100%;
+  background: transparent;
+  cursor: col-resize;
   flex-shrink: 0;
   position: relative;
   z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.col-divider-wrapper .col-divider {
-  position: absolute;
-  inset: 0;
-  background: transparent;
-  cursor: col-resize;
   transition: background 0.2s;
 }
+.col-divider:hover,
+.col-divider:active { background: #2563FF; }
 
-.col-divider-wrapper .col-divider:hover,
-.col-divider-wrapper .col-divider:active {
-  background: #2563FF;
-}
-
-/* ===== Config Toggle Button (Left of Config Panel) ===== */
-.config-toggle-btn {
+/* ---- Column Toggle Button (between canvas and config) ---- */
+.col-divider-wrapper .config-toggle-btn {
   position: absolute;
+  right: 0;
   top: 50%;
-  right: -10px;
   transform: translateY(-50%);
+  z-index: 10;
   width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  border: 1px solid #E8EDF5;
-  background: #fff;
-  cursor: pointer;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #6B7280;
-  z-index: 6;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-  transition: all 0.2s;
-  padding: 0;
+  background: #fff;
+  border: 1px solid #E8EDF5;
+  border-radius: 8px 0 0 8px;
+  cursor: pointer;
+  color: #9CA3AF;
+  box-shadow: -2px 0 8px rgba(0,0,0,0.06);
+  transition: all 0.2s ease;
+}
+.col-divider-wrapper .config-toggle-btn.active {
+  color: #2563FF;
+  border-color: #2563FF;
+}
+.col-divider-wrapper .config-toggle-btn:hover {
+  background: #F0F4FF;
+  color: #2563FF;
+  border-color: #2563FF;
 }
 
-.config-toggle-btn:hover {
-  border-color: #2563FF;
-  color: #2563FF;
-  background: #FAFBFF;
-  box-shadow: 0 2px 8px rgba(37, 99, 255, 0.15);
+/* ---- Right Panel Divider ---- */
+.right-panel-divider {
+  width: 6px;
+  background: transparent;
+  cursor: col-resize;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 5;
+  transition: background 0.2s;
 }
+.right-panel-divider:hover,
+.right-panel-divider:active { background: #2563FF; }
 
 /* ===== Config Panel Collapsed ===== */
 .config-col.collapsed {
-  flex: 0 0 0px !important;
-  min-width: 0 !important;
-  max-width: 0 !important;
-  overflow: hidden;
-  padding: 0;
+  flex: 0 0 40px !important;
+  min-width: 40px;
 }
 
 /* ============================================================
@@ -1235,6 +1217,16 @@ export default {
 }
 
 /* ============================================================
+   Right Column (Config + AI)
+   ============================================================ */
+.right-col {
+  display: flex;
+  background: #fff;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ============================================================
    Config Column
    ============================================================ */
 .config-col {
@@ -1243,6 +1235,8 @@ export default {
   overflow: hidden;
   background: #fff;
   min-width: 0;
+  position: relative;
+  transition: flex 0.3s;
 }
 
 .config-inner {
@@ -1470,19 +1464,7 @@ export default {
   padding: 16px;
   overflow: hidden;
   min-width: 240px;
-  position: relative;
 }
-
-.ai-resize-handle {
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 6px;
-  cursor: col-resize;
-  z-index: 5;
-  background: transparent;
-  transition: background 0.2s;
-}
-.ai-resize-handle:hover { background: #2563FF; }
 
 /* Prompt suggestion */
 .prompt-suggestion { margin-bottom: 8px; flex-shrink: 0; }
@@ -1531,8 +1513,7 @@ export default {
   .step-line { min-width: 8px; margin: 0 4px; }
   .three-col { flex-wrap: wrap; }
   .canvas-col { flex: 0 0 100% !important; max-height: 50vh; }
-  .config-col { flex: 0 0 50% !important; }
-  .ai-col { flex: 0 0 50% !important; }
+  .right-col { flex: 0 0 100% !important; max-height: 50vh; }
   .col-divider { display: none; }
   .template-grid { grid-template-columns: repeat(4, 1fr); }
 }
@@ -1541,9 +1522,9 @@ export default {
   .steps-bar { display: none; }
   .three-col { flex-direction: column; }
   .canvas-col { flex: 0 0 45vh !important; max-height: 45vh; }
-  .config-col { flex: 0 0 auto !important; max-height: 200px; overflow-y: auto; }
-  .ai-col { flex: 1 1 auto !important; min-height: 250px; }
-  .ai-resize-handle { display: none; }
+  .right-col { flex: 1 1 auto !important; min-height: 250px; }
+  .right-panel-divider { display: none; }
+  .config-col { max-height: 200px; overflow-y: auto; }
   .canvas-toolbar { flex-wrap: wrap; gap: 8px; }
 }
 

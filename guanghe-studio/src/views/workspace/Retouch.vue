@@ -17,32 +17,24 @@
 
         <!-- Canvas Area -->
         <div class="canvas-box">
-          <!-- <CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" /> -->
-          <!-- 有结果图时显示在画布中 -->
-          <div v-if="processedImage" class="canvas-result" :class="{ generating: isGenerating }">
-            <el-image
-              :src="processedImage"
-              :preview-src-list="[processedImage]"
-              fit="contain"
-              class="result-img"
-            />
-          </div>
-          <!-- 空状态占位符 -->
-          <div v-else-if="!isGenerating" class="canvas-placeholder">
-            <svg viewBox="0 0 48 48" fill="none">
-              <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
-              <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
-              <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <h3>上传需要精修的图片后生成</h3>
-            <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
-          </div>
-
-          <!-- 生图阶段状态绝对定位浮层 -->
-          <div v-if="isGenerating" class="canvas-loading">
-            <el-icon class="is-loading" :size="24" color="#2563FF"><Loading /></el-icon>
-            <p>{{ genStatus || '正在生成...' }}</p>
-          </div>
+          <!-- Fabric.js 自由画布编辑器（对标即梦AI） -->
+          <CanvasEditor
+            ref="canvasEditorRef"
+            :images="canvasImages"
+            :is-generating="isGenerating"
+            :gen-status="genStatus"
+            feature-name="retouch"
+            @extend="onCanvasExtend"
+            @multi-angle="onCanvasMultiAngle"
+            @edit-text="onCanvasEditText"
+            @partial-redraw="onCanvasPartialRedraw"
+            @explode-layers="onCanvasExplodeLayers"
+            @delete="onCanvasDelete"
+            @send-to-retouch="onCanvasSendToRetouch"
+            @send-to-white-bg="onCanvasSendToWhiteBg"
+            @download="onCanvasDownload"
+            @image-selected="onCanvasImageSelected"
+          />
         </div>
 
         <div class="canvas-bottom-bar">
@@ -300,11 +292,11 @@
 <script>
 import { ref, reactive, computed, onMounted, onActivated, onBeforeUnmount, nextTick } from 'vue'
 import { compressImage } from '@/utils/compress'
-import { UploadFilled, ArrowDown, ArrowLeft, ArrowRight, MagicStick, DocumentCopy } from '@element-plus/icons-vue'
+import { UploadFilled, ArrowDown, ArrowLeft, ArrowRight, MagicStick, DocumentCopy, Loading } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { getPublicCreationConfigByGroup, reversePrompt, listPromptLibraryBatch } from '@/api/customer'
-// import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
-// import CanvasOverlay from '@/components/CanvasOverlay.vue'
+import CanvasEditor from '@/components/CanvasEditor.vue'
+import { useCanvasEditor } from '@/composables/useCanvasEditor'
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { useWorkflowProgress } from '@/composables/useWorkflowProgress'
 import { useImageHandoffStore } from '@/store'
@@ -315,18 +307,44 @@ import { ElMessage } from 'element-plus'
 
 export default {
   name: 'RetouchView',
-  components: { PromptLibrarySelect, AiAssistant },
+  components: { PromptLibrarySelect, AiAssistant, CanvasEditor },
   setup() {
     const router = useRouter()
-    // ---- Canvas Interactions ----
-    // const { canvasUI, handleCanvasExport } = useCanvasInteractions({
-    //   canvasSelector: '.canvas-box',
-    //   getImage: () => processedImage.value || originalImage.value || '',
-    //   defaultName: 'retouch',
-    // })
     const gen = useImageGeneration('render')
     const { steps: workflowSteps, getStepClass, isStepLineDone } = useWorkflowProgress()
     const handoffStore = useImageHandoffStore()
+
+    // ---- Canvas Editor ----
+    const canvasEditorRef = ref(null)
+    const canvasImages = computed(() => {
+      const imgs = []
+      if (originalImage.value) imgs.push({ url: originalImage.value, name: '原图' })
+      if (gen.resultImages.value && gen.resultImages.value.length > 0) {
+        gen.resultImages.value.forEach((img, i) => {
+          imgs.push({ url: img.url || img, name: `精修结果_${i + 1}` })
+        })
+      }
+      return imgs
+    })
+    const canvasEditor = useCanvasEditor(gen.resultImages, 'retouch')
+
+    // 画布事件处理
+    function onCanvasExtend(params) { canvasEditor.handleExtend(params) }
+    function onCanvasMultiAngle(params) {
+      canvasEditor.handleMultiAngle(params, async (newImages) => {
+        if (canvasEditorRef.value && canvasEditorRef.value.addMultiAngleResults) {
+          await canvasEditorRef.value.addMultiAngleResults(newImages)
+        }
+      })
+    }
+    function onCanvasEditText(params) { canvasEditor.handleEditText(params) }
+    function onCanvasPartialRedraw(params) { canvasEditor.handlePartialRedraw(params) }
+    function onCanvasExplodeLayers(params) { canvasEditor.handleExplodeLayers(params) }
+    function onCanvasDelete(index) { canvasEditor.handleDelete(index) }
+    function onCanvasSendToRetouch(img) { canvasEditor.handleSendToRetouch(img) }
+    function onCanvasSendToWhiteBg(img) { canvasEditor.handleSendToWhiteBg(img) }
+    function onCanvasDownload(img) { canvasEditor.handleDownload(img) }
+    function onCanvasImageSelected(img) { /* 可扩展 */ }
 
     // ---- State ----
     const configCollapsed = ref(false)
@@ -966,7 +984,12 @@ console.error('精修生成失败:', e)
       undo, redo, reset, toggleFullscreen,
       toggleAllSections, toggleSection,
       startColResize, startAiResize,
-      // canvasUI, handleCanvasExport,
+      // ---- Canvas Editor ----
+      canvasEditorRef, canvasImages,
+      onCanvasExtend, onCanvasMultiAngle, onCanvasEditText,
+      onCanvasPartialRedraw, onCanvasExplodeLayers,
+      onCanvasDelete, onCanvasSendToRetouch, onCanvasSendToWhiteBg,
+      onCanvasDownload, onCanvasImageSelected,
       // ---- 图片接力右键菜单 ----
       handoffMenu, openHandoffMenu, hideHandoffMenu,
       // ---- 反推提示词 ----

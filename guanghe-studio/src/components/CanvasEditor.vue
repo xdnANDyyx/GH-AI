@@ -113,8 +113,19 @@
       </div>
     </div>
 
-    <!-- 扩图对话框 -->
-    <el-dialog v-model="extendDialogVisible" title="扩图" width="500px" :close-on-click-modal="false" append-to-body>
+    <!-- 扩图模式操作栏 -->
+    <div v-if="editMode === 'extend'" class="mode-action-bar">
+      <span class="mode-label">交互式扩图</span>
+      <p class="mode-hint">拖拽图片四周的手柄来扩展画布区域</p>
+      <div class="mode-actions">
+        <el-button size="small" @click="cancelExtendMode">取消</el-button>
+        <el-button size="small" @click="openExtendDialog">按比例扩图</el-button>
+        <el-button size="small" type="primary" @click="confirmExtendMode" :loading="extending">确认扩图</el-button>
+      </div>
+    </div>
+
+    <!-- 扩图对话框（比例模式） -->
+    <el-dialog v-model="extendDialogVisible" title="按比例扩图" width="500px" :close-on-click-modal="false" append-to-body>
       <div class="extend-options">
         <div class="option-group">
           <label>扩展比例</label>
@@ -124,14 +135,6 @@
             </div>
           </div>
         </div>
-        <div class="option-group">
-          <label>或自定义尺寸</label>
-          <div class="custom-size-inputs">
-            <el-input-number v-model="extendWidth" :min="100" :max="4096" :step="100" placeholder="宽" />
-            <span class="size-separator">x</span>
-            <el-input-number v-model="extendHeight" :min="100" :max="4096" :step="100" placeholder="高" />
-          </div>
-        </div>
       </div>
       <template #footer>
         <el-button @click="extendDialogVisible = false">取消</el-button>
@@ -139,26 +142,22 @@
       </template>
     </el-dialog>
 
-    <!-- 多角度对话框 -->
-    <el-dialog v-model="multiAngleDialogVisible" title="多角度生成" width="500px" :close-on-click-modal="false" append-to-body>
-      <div class="angle-options">
-        <div class="option-group">
-          <label>选择角度数量</label>
-          <el-slider v-model="angleCount" :min="2" :max="8" :step="1" show-stops />
-        </div>
-        <div class="option-group">
-          <label>角度类型</label>
-          <div class="angle-types">
-            <div v-for="type in angleTypes" :key="type.value" class="angle-type-option" :class="{ active: selectedAngleType === type.value }" @click="selectedAngleType = type.value">
-              {{ type.label }}
-            </div>
-          </div>
-        </div>
-      </div>
-      <template #footer>
-        <el-button @click="multiAngleDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="confirmMultiAngle" :loading="generatingAngles">确定</el-button>
-      </template>
+    <!-- 多角度对话框（3D 球体交互编辑器） -->
+    <el-dialog
+      v-model="multiAngleDialogVisible"
+      width="780px"
+      :close-on-click-modal="false"
+      append-to-body
+      :show-header="false"
+      class="custom-dark-dialog"
+    >
+      <CameraAngleEditor
+        v-if="multiAngleDialogVisible"
+        :image-url="selectedImageData?.url || selectedImageData"
+        :loading="generatingAngles"
+        @cancel="multiAngleDialogVisible = false"
+        @generate="handleGenerateAngles"
+      />
     </el-dialog>
 
     <!-- 改文字对话框 -->
@@ -185,27 +184,31 @@
       </template>
     </el-dialog>
 
-    <!-- 局部重绘对话框 -->
-    <el-dialog v-model="partialRedrawDialogVisible" title="局部重绘" width="600px" :close-on-click-modal="false" append-to-body>
-      <div class="partial-redraw-options">
-        <div class="option-group">
-          <label>重绘描述</label>
-          <el-input v-model="redrawDescription" type="textarea" :rows="3" placeholder="描述需要重绘的内容，如：将背景改为海边" />
-        </div>
-        <div class="option-group">
-          <label>重绘区域</label>
-          <div class="redraw-area-preview">
-            <img :src="selectedImageData?.url || selectedImageData" class="redraw-preview-img" ref="redrawPreviewRef" />
-            <div class="redraw-mask" v-if="redrawMask" :style="redrawMaskStyle"></div>
-          </div>
-          <p class="option-hint">在图片上拖动选择需要重绘的区域</p>
-        </div>
+    <!-- 局部重绘模式操作栏 -->
+    <div v-if="editMode === 'redraw'" class="mode-action-bar">
+      <span class="mode-label">涂抹式局部重绘</span>
+      <p class="mode-hint">在图片上涂抹选择需要重绘的区域</p>
+      <div class="mode-redraw-input">
+        <el-input
+          v-model="redrawDescription"
+          placeholder="描述需要重绘的内容，如：将背景改为海边"
+          size="small"
+          style="width: 300px"
+        />
+        <el-button size="small" @click="cancelRedrawMode">取消</el-button>
+        <el-button size="small" type="primary" @click="confirmRedrawMode" :loading="redrawing" :disabled="!redrawDescription.trim()">确认重绘</el-button>
       </div>
-      <template #footer>
-        <el-button @click="partialRedrawDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="confirmPartialRedraw" :loading="redrawing">确定</el-button>
-      </template>
-    </el-dialog>
+    </div>
+
+    <!-- 图层炸开模式操作栏 -->
+    <div v-if="editMode === 'layerExplode'" class="mode-action-bar">
+      <span class="mode-label">图层炸开</span>
+      <p class="mode-hint">点击图层面板可选中/取消，确认后导出选中的图层</p>
+      <div class="mode-actions">
+        <el-button size="small" @click="exitLayerExplodeMode">取消</el-button>
+        <el-button size="small" type="primary" @click="confirmExplodeLayers" :loading="exploding">确认导出</el-button>
+      </div>
+    </div>
 
     <!-- 图层炸开对话框 -->
     <el-dialog v-model="explodeLayersDialogVisible" title="图层炸开" width="600px" :close-on-click-modal="false" append-to-body>
@@ -227,7 +230,7 @@
         </div>
       </div>
       <template #footer>
-        <el-button @click="explodeLayersDialogVisible = false">取消</el-button>
+        <el-button @click="exitLayerExplodeMode">取消</el-button>
         <el-button type="primary" @click="confirmExplodeLayers" :loading="exploding">确定</el-button>
       </template>
     </el-dialog>
@@ -239,11 +242,12 @@ import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } 
 import {
   Plus, Minus, FullScreen, ZoomIn, Grid, Edit, Brush, Files,
   Delete, MagicStick, Picture, Download, ArrowUp, ArrowDown,
-  Top, Bottom, Loading
+  Top, Bottom, Loading, Close, Check, Aim, Rank
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { fabric } from 'fabric'
 import { recognizeText, detectLayers } from '@/api/canvasEditor'
+import CameraAngleEditor from './CameraAngleEditor.vue'
 
 // ===== Props =====
 const props = defineProps({
@@ -346,6 +350,28 @@ const exploding = ref(false)
 // 用于跟踪 Fabric 对象与原始图片数据的映射
 const fabricObjMap = new Map()  // fabricObj.id -> imageData
 
+// ===== 编辑模式状态 =====
+// 'none' | 'extend' | 'redraw' | 'layerExplode'
+const editMode = ref('none')
+
+// ===== 交互式扩图状态 =====
+const extendOverlay = ref(null)     // 扩图遮罩 Fabric 对象
+const extendHandles = []            // 扩图拖拽手柄数组
+let extendOriginalBound = null     // 原始图片边界
+let extendDraggingHandle = null    // 正在拖拽的手柄
+
+// ===== 涂抹式局部重绘状态 =====
+const redrawBrushPath = ref(null)  // 画笔路径 Fabric 对象
+const redrawBrushPaths = []         // 所有画笔路径
+let redrawIsDrawing = false         // 是否正在绘制
+let redrawLastPoint = null          // 上一笔点
+const redrawTextInputVisible = ref(false)
+const redrawTextInput = ref('')
+const redrawTextInputPosition = reactive({ x: 0, y: 0 })
+
+// ===== 图层炸开状态 =====
+const explodedLayers = ref([])     // 炸开后的图层对象列表
+
 // ===== 初始化 Fabric 画布 =====
 function initCanvas() {
   const wrapper = fabricWrapperRef.value
@@ -368,6 +394,52 @@ function initCanvas() {
     const target = opt.target
     const isRightClick = opt.e && opt.e.button === 2
 
+    // ===== 编辑模式优先处理 =====
+
+    // 扩图模式：检测手柄拖拽
+    if (editMode.value === 'extend' && target && target._isExtendHandle) {
+      extendDraggingHandle = target._handleName
+      return
+    }
+
+    // 涂抹重绘模式：开始绘制画笔
+    if (editMode.value === 'redraw' && !isRightClick) {
+      const pointer = canvas.getPointer(opt.e)
+      redrawIsDrawing = true
+      redrawLastPoint = pointer
+      // 创建起始点的小圆
+      const dot = new fabric.Circle({
+        left: pointer.x - 12,
+        top: pointer.y - 12,
+        radius: 12,
+        fill: 'rgba(255, 59, 48, 0.5)',
+        stroke: 'rgba(255, 59, 48, 0.8)',
+        strokeWidth: 1,
+        selectable: false,
+        evented: false,
+        _isRedrawBrush: true
+      })
+      canvas.add(dot)
+      redrawBrushPaths.push(dot)
+      return
+    }
+
+    // 图层炸开模式：点击图层面板选择
+    if (editMode.value === 'layerExplode' && target && target._isLayerPanel) {
+      // 高亮选中的面板
+      explodedLayers.value.forEach(item => {
+        if (item.panel === target) {
+          item.panel.set({ fill: 'rgba(37, 99, 255, 0.2)', strokeWidth: 3 })
+          const layerIdx = item.index
+          detectedLayers.value[layerIdx].selected = !detectedLayers.value[layerIdx].selected
+        } else {
+          item.panel.set({ fill: 'rgba(37, 99, 255, 0.08)', strokeWidth: 2 })
+        }
+      })
+      canvas.renderAll()
+      return
+    }
+
     if (isRightClick) {
       // ===== 右键：显示右键菜单 =====
       if (target) {
@@ -387,7 +459,7 @@ function initCanvas() {
     }
 
     // ===== 左键：选中图片，显示浮动工具栏 =====
-    if (target && target._fabricId) {
+    if (editMode.value === 'none' && target && target._fabricId) {
       const imageData = fabricObjMap.get(target._fabricId)
       if (imageData) {
         selectedImageData.value = imageData
@@ -402,13 +474,56 @@ function initCanvas() {
         showEditToolbar.value = true
         showContextMenu.value = false
       }
-    } else {
+    } else if (editMode.value === 'none' && (!target || !target._fabricId)) {
       // 点击空白区域，取消选中
       selectedImageData.value = null
       selectedFabricObj = null
       showEditToolbar.value = false
       showContextMenu.value = false
       emit('image-selected', null)
+    }
+  })
+
+  // 画布鼠标移动事件
+  canvas.on('mouse:move', (opt) => {
+    // 扩图模式：拖拽手柄更新遮罩
+    if (editMode.value === 'extend' && extendDraggingHandle) {
+      const pointer = canvas.getPointer(opt.e)
+      updateExtendOverlay(extendDraggingHandle, pointer)
+      return
+    }
+
+    // 涂抹重绘模式：绘制画笔（创建连续的小线段）
+    if (editMode.value === 'redraw' && redrawIsDrawing && redrawLastPoint) {
+      const pointer = canvas.getPointer(opt.e)
+      // 创建从上一点到当前点的线段
+      const line = new fabric.Line(
+        [redrawLastPoint.x, redrawLastPoint.y, pointer.x, pointer.y],
+        {
+          stroke: 'rgba(255, 59, 48, 0.5)',
+          strokeWidth: 24,
+          strokeLineCap: 'round',
+          selectable: false,
+          evented: false,
+          _isRedrawBrush: true
+        }
+      )
+      canvas.add(line)
+      redrawBrushPaths.push(line)
+      canvas.renderAll()
+      redrawLastPoint = pointer
+      return
+    }
+  })
+
+  // 画布鼠标松开事件
+  canvas.on('mouse:up', () => {
+    if (editMode.value === 'extend' && extendDraggingHandle) {
+      extendDraggingHandle = null
+    }
+    if (editMode.value === 'redraw' && redrawIsDrawing) {
+      redrawIsDrawing = false
+      redrawLastPoint = null
     }
   })
 
@@ -620,9 +735,165 @@ function hideAllMenus() {
 }
 
 // ===== 点击图片编辑功能 =====
+
+// --- 交互式扩图 ---
 function handleExtendImage() {
   showEditToolbar.value = false
+  enterExtendMode()
+}
+
+function enterExtendMode() {
+  if (!selectedFabricObj || !canvas) return
+  editMode.value = 'extend'
+  canvas.discardActiveObject()
+  canvas.selection = false
+
+  const obj = selectedFabricObj
+  const bound = obj.getBoundingRect()
+  extendOriginalBound = { left: bound.left, top: bound.top, width: bound.width, height: bound.height }
+
+  // 创建扩展区域遮罩（初始等于原图大小）
+  const padding = 80
+  extendOverlay.value = new fabric.Rect({
+    left: bound.left - padding,
+    top: bound.top - padding,
+    width: bound.width + padding * 2,
+    height: bound.height + padding * 2,
+    fill: 'rgba(37, 99, 255, 0.08)',
+    stroke: '#2563FF',
+    strokeWidth: 2,
+    strokeDashArray: [6, 4],
+    selectable: false,
+    evented: true,
+    _isExtendOverlay: true
+  })
+  canvas.add(extendOverlay.value)
+
+  // 创建 8 个拖拽手柄（4 角 + 4 边中点）
+  const handlePositions = [
+    { name: 'tl', x: bound.left - padding, y: bound.top - padding, cursor: 'nwse-resize' },
+    { name: 'tr', x: bound.left + bound.width + padding, y: bound.top - padding, cursor: 'nesw-resize' },
+    { name: 'bl', x: bound.left - padding, y: bound.top + bound.height + padding, cursor: 'nesw-resize' },
+    { name: 'br', x: bound.left + bound.width + padding, y: bound.top + bound.height + padding, cursor: 'nwse-resize' },
+    { name: 't', x: bound.left + bound.width / 2, y: bound.top - padding, cursor: 'ns-resize' },
+    { name: 'r', x: bound.left + bound.width + padding, y: bound.top + bound.height / 2, cursor: 'ew-resize' },
+    { name: 'b', x: bound.left + bound.width / 2, y: bound.top + bound.height + padding, cursor: 'ns-resize' },
+    { name: 'l', x: bound.left - padding, y: bound.top + bound.height / 2, cursor: 'ew-resize' }
+  ]
+
+  handlePositions.forEach(pos => {
+    const handle = new fabric.Rect({
+      left: pos.x - 6,
+      top: pos.y - 6,
+      width: 12,
+      height: 12,
+      fill: '#fff',
+      stroke: '#2563FF',
+      strokeWidth: 2,
+      rx: 2,
+      ry: 2,
+      selectable: false,
+      hoverCursor: pos.cursor,
+      _isExtendHandle: true,
+      _handleName: pos.name
+    })
+    extendHandles.push(handle)
+    canvas.add(handle)
+  })
+
+  canvas.renderAll()
+}
+
+function updateExtendOverlay(handleName, pointer) {
+  if (!extendOverlay.value || !extendOriginalBound) return
+  const o = extendOverlay.value
+  const orig = extendOriginalBound
+
+  let newLeft = o.left, newTop = o.top, newWidth = o.width, newHeight = o.height
+
+  if (handleName.includes('l')) {
+    newLeft = Math.min(pointer.x, orig.left + orig.width - 20)
+    newWidth = orig.left + (orig.width / 2) - newLeft + (orig.width / 2)
+  }
+  if (handleName.includes('r')) {
+    newWidth = Math.max(20, pointer.x - o.left)
+  }
+  if (handleName.includes('t')) {
+    newTop = Math.min(pointer.y, orig.top + orig.height - 20)
+    newHeight = orig.top + (orig.height / 2) - newTop + (orig.height / 2)
+  }
+  if (handleName.includes('b')) {
+    newHeight = Math.max(20, pointer.y - o.top)
+  }
+
+  o.set({ left: newLeft, top: newTop, width: newWidth, height: newHeight })
+
+  // 更新手柄位置
+  const cx = o.left + o.width / 2
+  const cy = o.top + o.height / 2
+  extendHandles.forEach(h => {
+    const name = h._handleName
+    let hx = cx, hy = cy
+    if (name.includes('l')) hx = o.left
+    if (name.includes('r')) hx = o.left + o.width
+    if (name.includes('t')) hy = o.top
+    if (name.includes('b')) hy = o.top + o.height
+    h.set({ left: hx - 6, top: hy - 6 })
+  })
+
+  canvas.renderAll()
+}
+
+function cancelExtendMode() {
+  exitExtendMode()
+}
+
+function exitExtendMode() {
+  editMode.value = 'none'
+  if (canvas) {
+    canvas.selection = true
+    if (extendOverlay.value) {
+      canvas.remove(extendOverlay.value)
+      extendOverlay.value = null
+    }
+    extendHandles.forEach(h => canvas.remove(h))
+    extendHandles.length = 0
+    canvas.renderAll()
+  }
+}
+
+function openExtendDialog() {
   extendDialogVisible.value = true
+}
+
+function confirmExtendMode() {
+  if (!extendOverlay.value || !selectedImageData.value) {
+    ElMessage.warning('请先拖拽扩展区域')
+    return
+  }
+  extending.value = true
+  const o = extendOverlay.value
+  const orig = extendOriginalBound
+
+  // 计算扩展信息
+  const extendLeft = Math.max(0, orig.left - o.left)
+  const extendTop = Math.max(0, orig.top - o.top)
+  const extendRight = Math.max(0, (o.left + o.width) - (orig.left + orig.width))
+  const extendBottom = Math.max(0, (o.top + o.height) - (orig.top + orig.height))
+  const totalWidth = o.width
+  const totalHeight = o.height
+  const ratio = `${Math.round(totalWidth / 100)}:${Math.round(totalHeight / 100)}`
+
+  emit('extend', {
+    image: selectedImageData.value,
+    ratio: ratio,
+    width: Math.round(totalWidth),
+    height: Math.round(totalHeight),
+    extend: { left: extendLeft, top: extendTop, right: extendRight, bottom: extendBottom }
+  })
+
+  exitExtendMode()
+  extending.value = false
 }
 
 function handleMultiAngle() {
@@ -653,17 +924,92 @@ async function handleEditText() {
   }
 }
 
+// --- 涂抹式局部重绘 ---
 function handlePartialRedraw() {
   showEditToolbar.value = false
-  redrawDescription.value = ''
-  redrawMask.value = null
-  partialRedrawDialogVisible.value = true
-
-  nextTick(() => {
-    setupRedrawMaskSelection()
-  })
+  enterRedrawMode()
 }
 
+function enterRedrawMode() {
+  if (!selectedFabricObj || !canvas) return
+  editMode.value = 'redraw'
+  canvas.discardActiveObject()
+  canvas.selection = false
+  // 锁定所有图片对象，防止涂抹时图片被拖动
+  canvas.getObjects().forEach(obj => {
+    if (obj._fabricId) {
+      obj.set({
+        selectable: false,
+        evented: false,
+        lockMovementX: true,
+        lockMovementY: true
+      })
+    }
+  })
+  canvas.renderAll()
+  redrawDescription.value = ''
+  redrawBrushPaths.length = 0
+  ElMessage.info('请在图片上涂抹选择需要重绘的区域')
+}
+
+function cancelRedrawMode() {
+  exitRedrawMode()
+}
+
+function exitRedrawMode() {
+  editMode.value = 'none'
+  redrawDescription.value = ''
+  if (canvas) {
+    canvas.selection = true
+    // 解锁所有图片对象
+    canvas.getObjects().forEach(obj => {
+      if (obj._fabricId) {
+        obj.set({
+          selectable: true,
+          evented: true,
+          lockMovementX: false,
+          lockMovementY: false
+        })
+      }
+    })
+    redrawBrushPaths.forEach(p => canvas.remove(p))
+    redrawBrushPaths.length = 0
+    canvas.renderAll()
+  }
+}
+
+function confirmRedrawMode() {
+  if (!redrawDescription.value.trim()) {
+    ElMessage.warning('请描述需要重绘的内容')
+    return
+  }
+  if (redrawBrushPaths.length === 0) {
+    ElMessage.warning('请先在图片上涂抹选择区域')
+    return
+  }
+  redrawing.value = true
+  // 计算涂抹区域的包围盒作为 mask
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  redrawBrushPaths.forEach(p => {
+    const bound = p.getBoundingRect()
+    minX = Math.min(minX, bound.left)
+    minY = Math.min(minY, bound.top)
+    maxX = Math.max(maxX, bound.left + bound.width)
+    maxY = Math.max(maxY, bound.top + bound.height)
+  })
+  const mask = { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
+
+  emit('partial-redraw', {
+    image: selectedImageData.value,
+    description: redrawDescription.value,
+    mask: mask
+  })
+
+  exitRedrawMode()
+  redrawing.value = false
+}
+
+// --- 图层炸开 ---
 async function handleExplodeLayers() {
   showEditToolbar.value = false
   exploding.value = true
@@ -678,10 +1024,11 @@ async function handleExplodeLayers() {
         selected: true,
         ...l
       }))
+      // 进入图层炸开模式
+      enterLayerExplodeMode()
     } else {
       throw new Error('未检测到有效图层')
     }
-    explodeLayersDialogVisible.value = true
   } catch (error) {
     console.error('图层检测失败:', error)
     ElMessage.warning('智能图层识别失败，已加载默认图层结构')
@@ -690,10 +1037,68 @@ async function handleExplodeLayers() {
       { name: '主体产品层', selected: true, type: 'product' },
       { name: '文本图层', selected: true, type: 'text' }
     ]
-    explodeLayersDialogVisible.value = true
+    enterLayerExplodeMode()
   } finally {
     exploding.value = false
   }
+}
+
+function enterLayerExplodeMode() {
+  if (!selectedFabricObj || !canvas) return
+  editMode.value = 'layerExplode'
+  canvas.discardActiveObject()
+  canvas.selection = false
+
+  const obj = selectedFabricObj
+  const bound = obj.getBoundingRect()
+  const cx = bound.left + bound.width / 2
+  const cy = bound.top + bound.height / 2
+
+  // 保存原图位置
+  const originalLeft = obj.left
+  const originalTop = obj.top
+
+  // 为每个检测到的图层创建一个占位区域
+  explodedLayers.value = detectedLayers.value.map((layer, i) => {
+    const angle = (i / detectedLayers.value.length) * Math.PI * 2
+    const dist = 120
+    const x = cx + Math.cos(angle) * dist
+    const y = cy + Math.sin(angle) * dist
+
+    // 创建图层面板
+    const panel = new fabric.Rect({
+      left: x - 80,
+      top: y - 80,
+      width: 160,
+      height: 160,
+      fill: 'rgba(37, 99, 255, 0.08)',
+      stroke: '#2563FF',
+      strokeWidth: 2,
+      strokeDashArray: [6, 4],
+      selectable: true,
+      _isLayerPanel: true
+    })
+
+    // 创建图层名称标签
+    const label = new fabric.Text(layer.name, {
+      left: x,
+      top: y + 85,
+      fontSize: 12,
+      fill: '#2563FF',
+      originX: 'center',
+      originY: 'center',
+      selectable: false,
+      _isLayerLabel: true
+    })
+
+    canvas.add(panel)
+    canvas.add(label)
+    canvas.renderAll()
+
+    return { panel, label, layer, index: i }
+  })
+
+  ElMessage.success(`检测到 ${detectedLayers.value.length} 个图层，已分散展示`)
 }
 
 // ===== 右键菜单功能 =====
@@ -800,13 +1205,16 @@ function confirmExtend() {
   }
 }
 
-function confirmMultiAngle() {
+function handleGenerateAngles(params) {
   generatingAngles.value = true
   try {
     emit('multi-angle', {
       image: selectedImageData.value,
-      count: angleCount.value,
-      type: selectedAngleType.value
+      count: 1,
+      type: 'custom',
+      horizontal: params.horizontal,
+      vertical: params.vertical,
+      isCustomAngle: true
     })
     multiAngleDialogVisible.value = false
   } finally {
@@ -834,6 +1242,7 @@ function confirmEditText() {
 }
 
 function confirmPartialRedraw() {
+  // 兼容旧版API调用，已由 confirmRedrawMode 替代
   if (!redrawDescription.value.trim()) {
     ElMessage.warning('请描述需要重绘的内容')
     return
@@ -843,9 +1252,8 @@ function confirmPartialRedraw() {
     emit('partial-redraw', {
       image: selectedImageData.value,
       description: redrawDescription.value,
-      mask: redrawMask.value
+      mask: null
     })
-    partialRedrawDialogVisible.value = false
   } finally {
     redrawing.value = false
   }
@@ -860,55 +1268,30 @@ function confirmExplodeLayers() {
       layers: selectedLayers,
       format: exportLayersAs.value
     })
-    explodeLayersDialogVisible.value = false
+    // 退出图层炸开模式
+    exitLayerExplodeMode()
   } finally {
     exploding.value = false
   }
 }
 
-// ===== 局部重绘区域选择 =====
+function exitLayerExplodeMode() {
+  editMode.value = 'none'
+  if (canvas) {
+    canvas.selection = true
+    explodedLayers.value.forEach(item => {
+      if (item.panel) canvas.remove(item.panel)
+      if (item.label) canvas.remove(item.label)
+    })
+    explodedLayers.value = []
+    canvas.renderAll()
+  }
+  explodeLayersDialogVisible.value = false
+}
+
+// ===== 局部重绘区域选择（已废弃，保留兼容） =====
 function setupRedrawMaskSelection() {
-  const previewImg = redrawPreviewRef.value
-  if (!previewImg) return
-
-  let isDrawing = false
-  let startX = 0, startY = 0
-
-  const onMouseDown = (e) => {
-    isDrawing = true
-    const rect = previewImg.getBoundingClientRect()
-    startX = e.clientX - rect.left
-    startY = e.clientY - rect.top
-    redrawMask.value = { x: startX, y: startY, width: 0, height: 0 }
-  }
-
-  const onMouseMove = (e) => {
-    if (!isDrawing) return
-    const rect = previewImg.getBoundingClientRect()
-    const curX = e.clientX - rect.left
-    const curY = e.clientY - rect.top
-    redrawMask.value = {
-      x: Math.min(startX, curX),
-      y: Math.min(startY, curY),
-      width: Math.abs(curX - startX),
-      height: Math.abs(curY - startY)
-    }
-  }
-
-  const onMouseUp = () => {
-    isDrawing = false
-  }
-
-  previewImg.addEventListener('mousedown', onMouseDown)
-  document.addEventListener('mousemove', onMouseMove)
-  document.addEventListener('mouseup', onMouseUp)
-
-  // 清理函数（在对话框关闭时移除事件）
-  previewImg._cleanupMask = () => {
-    previewImg.removeEventListener('mousedown', onMouseDown)
-    document.removeEventListener('mousemove', onMouseMove)
-    document.removeEventListener('mouseup', onMouseUp)
-  }
+  // 旧版对话框内拖选逻辑，已由画布上直接涂抹替代
 }
 
 // ===== 键盘事件 =====
@@ -1022,6 +1405,55 @@ defineExpose({
 
     canvas.add(fabricImg)
     canvas.renderAll()
+  },
+  // 多角度生成结果直接铺在画布上
+  addMultiAngleResults: async (imageUrls) => {
+    if (!canvas || !imageUrls || imageUrls.length === 0) return
+
+    // 网格排列：计算每行几个
+    const cols = Math.ceil(Math.sqrt(imageUrls.length))
+    const rows = Math.ceil(imageUrls.length / cols)
+    const cellSize = Math.min(canvas.width / (cols + 1), canvas.height / (rows + 1))
+    const startX = (canvas.width - cellSize * cols) / 2
+    const startY = (canvas.height - cellSize * rows) / 2
+
+    for (let i = 0; i < imageUrls.length; i++) {
+      const url = imageUrls[i].url || imageUrls[i]
+      const row = Math.floor(i / cols)
+      const col = i % cols
+      const fabricImg = await loadFabricImage(url)
+      if (!fabricImg) continue
+
+      fabricImg._fabricId = 'img_angle_' + Date.now() + '_' + i
+      const imageData = { url, angle: i + 1, ...imageUrls[i] }
+      fabricObjMap.set(fabricImg._fabricId, imageData)
+
+      const scale = cellSize / Math.max(fabricImg.width, fabricImg.height) * 0.8
+      fabricImg.scale(scale)
+
+      fabricImg.set({
+        left: startX + col * cellSize + (cellSize - fabricImg.width * scale) / 2,
+        top: startY + row * cellSize + (cellSize - fabricImg.height * scale) / 2,
+        cornerColor: '#2563FF',
+        cornerStrokeColor: '#2563FF',
+        borderColor: '#2563FF',
+        cornerSize: 10,
+        transparentCorners: false,
+        cornerStyle: 'circle',
+        padding: 4
+      })
+
+      canvas.add(fabricImg)
+    }
+
+    canvas.renderAll()
+    ElMessage.success(`已将 ${imageUrls.length} 张多角度结果铺在画布上`)
+  },
+  // 退出所有编辑模式
+  exitAllModes: () => {
+    if (editMode.value === 'extend') exitExtendMode()
+    if (editMode.value === 'redraw') exitRedrawMode()
+    if (editMode.value === 'layerExplode') exitLayerExplodeMode()
   }
 })
 </script>
@@ -1230,6 +1662,61 @@ defineExpose({
   }
 }
 
+/* 编辑模式操作栏 */
+.mode-action-bar {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+  padding: 10px 20px;
+  border: 1px solid #f0f0f0;
+  animation: fadeInUp 0.2s ease;
+
+  .mode-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #2563ff;
+    white-space: nowrap;
+  }
+
+  .mode-hint {
+    font-size: 12px;
+    color: #9ca3af;
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  .mode-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .mode-redraw-input {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
 /* 对话框通用选项样式 */
 .extend-options,
 .angle-options,
@@ -1359,6 +1846,23 @@ defineExpose({
   to {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+/* Custom dark dialog styling for 3D Camera Editor */
+:deep(.custom-dark-dialog) {
+  background-color: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+  margin-top: 10vh !important;
+
+  .el-dialog__header {
+    display: none !important;
+  }
+
+  .el-dialog__body {
+    padding: 0 !important;
+    background-color: transparent !important;
   }
 }
 </style>

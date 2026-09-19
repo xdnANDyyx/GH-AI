@@ -100,16 +100,16 @@ export const useCanvasEditor = (resultImagesRef, featureName = 'canvas') => {
   // ========== 图片生成/编辑功能 ==========
 
   /**
-   * 智能扩图
-   * @param {Object} params - { image, ratio, width, height }
+   * 智能扩图（支持交互式拖拽扩展信息）
+   * @param {Object} params - { image, ratio, width, height, extend }
    */
   const handleExtend = async (params) => {
-    const { image, ratio, width, height } = params
+    const { image, ratio, width, height, extend } = params
     const imageUrl = image.url || image
     const loading = ElLoading.service({ text: '正在进行智能扩图，请稍候...', background: 'rgba(0, 0, 0, 0.7)' })
     
     try {
-      const res = await extendImage({ imageUrl, ratio, width, height })
+      const res = await extendImage({ imageUrl, ratio, width, height, extend })
       if (res.code === 200 && res.data?.url) {
         images.value = [...images.value, {
           url: res.data.url,
@@ -128,24 +128,41 @@ export const useCanvasEditor = (resultImagesRef, featureName = 'canvas') => {
   }
 
   /**
-   * 多角度生成
-   * @param {Object} params - { image, count, type }
+   * 多角度生成（支持自定义摄像机方位，结果直接铺在画布上）
+   * @param {Object} params - { image, count, type, horizontal, vertical, isCustomAngle }
+   * @param {Function} onResults - 可选回调，接收生成结果URL数组，用于直接铺在画布上
    */
-  const handleMultiAngle = async (params) => {
-    const { image, count, type } = params
+  const handleMultiAngle = async (params, onResults) => {
+    const { image, count, type, horizontal, vertical, isCustomAngle } = params
     const imageUrl = image.url || image
-    const loading = ElLoading.service({ text: `正在智能生成 ${count} 个角度的商品图...`, background: 'rgba(0, 0, 0, 0.7)' })
+    const loadingText = isCustomAngle
+      ? `正在智能生成指定方位 (水平:${horizontal}°, 垂直:${vertical}°) 的商品图...`
+      : `正在智能生成 ${count} 个角度的商品图...`
+    const loading = ElLoading.service({ text: loadingText, background: 'rgba(0, 0, 0, 0.7)' })
 
     try {
-      const res = await generateMultiAngle({ imageUrl, count, type })
+      const res = await generateMultiAngle({
+        imageUrl,
+        count,
+        type,
+        horizontal,
+        vertical,
+        isCustomAngle
+      })
       const genImages = res.data?.images || res.images || []
       if (genImages.length > 0) {
         const newImages = genImages.map((img, i) => ({
           url: img.url,
-          name: `多角度_${img.angle || (i + 1)}_${Date.now()}`
+          name: isCustomAngle
+            ? `多角度_方位_${horizontal}_${vertical}_${Date.now()}`
+            : `多角度_${img.angle || (i + 1)}_${Date.now()}`
         }))
         images.value = [...images.value, ...newImages]
-        ElMessage.success(`多角度图片生成成功，共 ${newImages.length} 张`)
+        // 如果提供了回调，将结果直接铺到画布上
+        if (onResults && typeof onResults === 'function') {
+          await onResults(newImages)
+        }
+        ElMessage.success(`多角度图片生成成功，共 ${newImages.length} 张，已铺展到画布上`)
       } else {
         throw new Error('未返回多角度生成结果')
       }
