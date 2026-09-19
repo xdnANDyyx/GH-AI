@@ -14,28 +14,24 @@
 
         <div class="canvas-wrapper"
         >
-          <!-- <CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" /> -->
-          <div class="upload-zone" @click="triggerUpload" @dragover.prevent @drop.prevent="handleDrop">
-            <!-- 无图片时显示上传占位 -->
-            <div class="upload-placeholder" v-if="!originalImage">
-              <el-icon :size="48" color="#9CA3AF"><Picture /></el-icon>
-              <p class="upload-main-text">请在右侧配置生成参数并点击发送</p>
-              <p class="upload-sub-text">支持 JPG / PNG 格式，单张最大 7MB</p>
-            </div>
-            <!-- 有原图但还没生成结果 -->
-            <div class="upload-preview" v-else-if="!resultImages.length">
-              <img :src="originalImage" class="preview-img" />
-            </div>
-            <!-- 生成结果展示 -->
-            <div class="result-preview" v-else>
-              <img :src="resultImages[activeResult]?.url || resultImages[activeResult]" class="preview-img" />
-              <div class="result-nav" v-if="resultImages.length > 1">
-                <button @click.stop="activeResult = Math.max(0, activeResult - 1)" :disabled="activeResult === 0">‹</button>
-                <span>{{ activeResult + 1 }} / {{ resultImages.length }}</span>
-                <button @click.stop="activeResult = Math.min(resultImages.length - 1, activeResult + 1)" :disabled="activeResult === resultImages.length - 1">›</button>
-              </div>
-            </div>
-          </div>
+          <!-- Fabric.js 自由画布编辑器（对标即梦AI） -->
+          <CanvasEditor
+            ref="canvasEditorRef"
+            :images="canvasImages"
+            :is-generating="isGenerating"
+            :gen-status="genStatus"
+            :feature-name="sessionType"
+            @extend="onCanvasExtend"
+            @multi-angle="onCanvasMultiAngle"
+            @edit-text="onCanvasEditText"
+            @partial-redraw="onCanvasPartialRedraw"
+            @explode-layers="onCanvasExplodeLayers"
+            @delete="onCanvasDelete"
+            @send-to-retouch="onCanvasSendToRetouch"
+            @send-to-white-bg="onCanvasSendToWhiteBg"
+            @download="onCanvasDownload"
+            @image-selected="onCanvasImageSelected"
+          />
         </div>
 
         <!-- 底部工具栏 -->
@@ -214,8 +210,8 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useImageGeneration } from '@/composables/useImageGeneration'
-// import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
-// import CanvasOverlay from '@/components/CanvasOverlay.vue'
+import CanvasEditor from '@/components/CanvasEditor.vue'
+import { useCanvasEditor } from '@/composables/useCanvasEditor'
 import { aiDialogue } from '@/api/customer'
 import { ElMessage } from 'element-plus'
 
@@ -268,7 +264,46 @@ const aiMessages = ref([])
 const sections = reactive({ ref: false, size: true })
 
 const resultImages = computed(() => gen.resultImages.value)
+const isGenerating = computed(() => gen.generating.value)
+const genStatus = computed(() => gen.statusText.value)
 const canGenerate = computed(() => !!originalImage.value && !!prompt.value.trim() && !gen.generating.value)
+
+// ===== 画布编辑器 =====
+const canvasEditorRef = ref(null)
+const canvasImages = computed(() => {
+  const imgs = []
+  if (originalImage.value) {
+    imgs.push({ url: originalImage.value, name: '上传图片' })
+  }
+  if (resultImages.value.length > 0) {
+    resultImages.value.forEach(img => {
+      const url = img.url || img
+      if (!imgs.some(i => (i.url || i) === url)) {
+        imgs.push(img)
+      }
+    })
+  }
+  return imgs
+})
+
+const canvasEditor = useCanvasEditor(resultImages, sessionType)
+
+function onCanvasExtend(params) { canvasEditor.handleExtend(params) }
+function onCanvasMultiAngle(params) {
+  canvasEditor.handleMultiAngle(params, async (newImages) => {
+    if (canvasEditorRef.value && canvasEditorRef.value.addMultiAngleResults) {
+      await canvasEditorRef.value.addMultiAngleResults(newImages)
+    }
+  })
+}
+function onCanvasEditText(params) { canvasEditor.handleEditText(params) }
+function onCanvasPartialRedraw(params) { canvasEditor.handlePartialRedraw(params) }
+function onCanvasExplodeLayers(params) { canvasEditor.handleExplodeLayers(params) }
+function onCanvasDelete(index) { canvasEditor.handleDelete(index) }
+function onCanvasSendToRetouch(img) { canvasEditor.handleSendToRetouch(img) }
+function onCanvasSendToWhiteBg(img) { canvasEditor.handleSendToWhiteBg(img) }
+function onCanvasDownload(img) { canvasEditor.handleDownload(img) }
+function onCanvasImageSelected(img) { /* UI state */ }
 
 function toggleSection(key) { sections[key] = !sections[key] }
 

@@ -53,29 +53,24 @@
           -->
         <!-- Canvas Area -->
         <div class="canvas-box">
-          <!-- <CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" /> -->
-          <!-- 有结果图时显示在画布中 -->
-          <div v-if="resultImages.length > 0" class="canvas-result-grid" :class="{ generating: isGenerating }">
-            <div v-for="(img, i) in resultImages" :key="i" class="canvas-result-item" @click="previewImage(img.url)">
-              <img :src="img.url" class="canvas-result-img" />
-            </div>
-          </div>
-          <!-- 空状态占位符 -->
-          <div v-else-if="!isGenerating" class="canvas-placeholder">
-            <svg viewBox="0 0 64 64" fill="none">
-              <rect x="8" y="12" width="48" height="40" rx="4" stroke="#D1D5DB" stroke-width="2"/>
-              <circle cx="24" cy="26" r="5" stroke="#D1D5DB" stroke-width="1.5"/>
-              <path d="M8 44l16-14 10 10 10-14 12 12" stroke="#D1D5DB" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <h3>上传产品图并配置参数后生成</h3>
-            <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
-          </div>
-
-          <!-- 生图阶段状态绝对定位浮层 -->
-          <div v-if="isGenerating" class="canvas-loading">
-            <el-icon class="is-loading" :size="24" color="#2563FF"><Loading /></el-icon>
-            <p>{{ genStatus || '正在生成...' }}</p>
-          </div>
+          <!-- Fabric.js 自由画布编辑器（对标即梦AI） -->
+          <CanvasEditor
+            ref="canvasEditorRef"
+            :images="canvasImages"
+            :is-generating="isGenerating"
+            :gen-status="genStatus"
+            feature-name="batch_process"
+            @extend="onCanvasExtend"
+            @multi-angle="onCanvasMultiAngle"
+            @edit-text="onCanvasEditText"
+            @partial-redraw="onCanvasPartialRedraw"
+            @explode-layers="onCanvasExplodeLayers"
+            @delete="onCanvasDelete"
+            @send-to-retouch="onCanvasSendToRetouch"
+            @send-to-white-bg="onCanvasSendToWhiteBg"
+            @download="onCanvasDownload"
+            @image-selected="onCanvasImageSelected"
+          />
         </div>
 
         <!-- Task List Card -->
@@ -507,8 +502,8 @@ defineOptions({ name: 'BatchProcessView' })
 import { ref, computed, onMounted, onBeforeUnmount, onActivated, nextTick, watch } from 'vue'
 import { compressImage } from '@/utils/compress'
 import AiAssistant from '@/components/AiAssistant.vue'
-// import { useCanvasInteractions } from '@/composables/useCanvasInteractions'
-// import CanvasOverlay from '@/components/CanvasOverlay.vue'
+import CanvasEditor from '@/components/CanvasEditor.vue'
+import { useCanvasEditor } from '@/composables/useCanvasEditor'
 import { useImageGeneration } from '@/composables/useImageGeneration'
 import { useBatchTasks } from '@/composables/useBatchTasks'
 import { ElMessage, ElImageViewer } from 'element-plus'
@@ -1316,6 +1311,55 @@ function clearWorkspaceImages() {
   language.value = 'zh-CN'
   gen.reset()
   localStorage.setItem('gh_batch_cleared', 'true')
+}
+
+// ===== 画布编辑器 =====
+const canvasEditorRef = ref(null)
+// 画布图片列表：合并上传图片和生成结果
+const canvasImages = computed(() => {
+  const imgs = []
+  // 如果有上传的原图，也加入画布
+  if (productImages.value.length > 0) {
+    productImages.value.forEach(f => {
+      const url = f instanceof File ? URL.createObjectURL(f) : f
+      imgs.push({ url, name: '上传图片' })
+    })
+  }
+  // 加入所有生成结果
+  if (resultImages.value.length > 0) {
+    resultImages.value.forEach(img => {
+      const url = img.url || img
+      if (!imgs.some(i => (i.url || i) === url)) {
+        imgs.push(img)
+      }
+    })
+  }
+  return imgs
+})
+
+// 使用画布编辑 composable（复用已有逻辑）
+const canvasEditor = useCanvasEditor(resultImages, 'batch_process')
+
+// 画布事件处理
+function onCanvasExtend(params) { canvasEditor.handleExtend(params) }
+function onCanvasMultiAngle(params) {
+  canvasEditor.handleMultiAngle(params, async (newImages) => {
+    if (canvasEditorRef.value && canvasEditorRef.value.addMultiAngleResults) {
+      await canvasEditorRef.value.addMultiAngleResults(newImages)
+    }
+  })
+}
+function onCanvasEditText(params) { canvasEditor.handleEditText(params) }
+function onCanvasPartialRedraw(params) { canvasEditor.handlePartialRedraw(params) }
+function onCanvasExplodeLayers(params) { canvasEditor.handleExplodeLayers(params) }
+function onCanvasDelete(index) {
+  canvasEditor.handleDelete(index)
+}
+function onCanvasSendToRetouch(img) { canvasEditor.handleSendToRetouch(img) }
+function onCanvasSendToWhiteBg(img) { canvasEditor.handleSendToWhiteBg(img) }
+function onCanvasDownload(img) { canvasEditor.handleDownload(img) }
+function onCanvasImageSelected(img) {
+  // 可以在这里更新一些 UI 状态
 }
 </script>
 

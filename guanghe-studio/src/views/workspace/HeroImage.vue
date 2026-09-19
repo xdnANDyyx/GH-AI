@@ -17,35 +17,24 @@
 
         <!-- Canvas Area -->
         <div class="canvas-box">
-          <!-- <CanvasOverlay :overlay="canvasUI" @export="handleCanvasExport" /> -->
-          <!-- 有结果图时显示在画布中 -->
-          <div v-if="resultImages.length > 0" class="canvas-result" :class="{ generating: isGenerating }">
-            <el-image
-              v-for="(img, i) in resultImages"
-              :key="i"
-              :src="img.url || img"
-              :preview-src-list="resultImages.map(r => r.url || r)"
-              :initial-index="i"
-              fit="contain"
-              class="result-img"
-            />
-          </div>
-          <!-- 空状态占位符 -->
-          <div v-else-if="!isGenerating" class="canvas-placeholder">
-            <svg viewBox="0 0 48 48" fill="none">
-              <rect x="6" y="10" width="36" height="28" rx="3" stroke="#9CA3AF" stroke-width="1.5"/>
-              <circle cx="18" cy="22" r="4" stroke="#9CA3AF" stroke-width="1.5"/>
-              <path d="M6 32l9-9 6 6 9-12 12 15" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <h3>上传产品图并配置参数后生成</h3>
-            <p>生成结果将同时显示在此画布和右侧 AI 助手中</p>
-          </div>
-
-          <!-- 生图阶段状态绝对定位浮层 -->
-          <div v-if="isGenerating" class="canvas-loading">
-            <el-icon class="is-loading" :size="24" color="#2563FF"><Loading /></el-icon>
-            <p>{{ genStatus || '正在生成...' }}</p>
-          </div>
+          <!-- Fabric.js 自由画布编辑器（对标即梦AI） -->
+          <CanvasEditor
+            ref="canvasEditorRef"
+            :images="canvasImages"
+            :is-generating="isGenerating"
+            :gen-status="genStatus"
+            feature-name="main_image"
+            @extend="onCanvasExtend"
+            @multi-angle="onCanvasMultiAngle"
+            @edit-text="onCanvasEditText"
+            @partial-redraw="onCanvasPartialRedraw"
+            @explode-layers="onCanvasExplodeLayers"
+            @delete="onCanvasDelete"
+            @send-to-retouch="onCanvasSendToRetouch"
+            @send-to-white-bg="onCanvasSendToWhiteBg"
+            @download="onCanvasDownload"
+            @image-selected="onCanvasImageSelected"
+          />
         </div>
 
         <!-- <div class="canvas-bottom-bar">AI生成的内容仅供参考，请注意核对细节与版权信息。</div> -->
@@ -349,12 +338,14 @@ import { useImageGeneration } from '@/composables/useImageGeneration'
 import { useWorkflowProgress } from '@/composables/useWorkflowProgress'
 import PromptLibrarySelect from '@/components/PromptLibrarySelect.vue'
 import AiAssistant from '@/components/AiAssistant.vue'
+import CanvasEditor from '@/components/CanvasEditor.vue'
+import { useCanvasEditor } from '@/composables/useCanvasEditor'
 import { aiDialogue, getPublicCreationConfigByGroup, listPromptLibraryBatch, reversePrompt } from '@/api/customer'
 import { ElMessage } from 'element-plus'
 
 export default {
   name: 'HeroImageView',
-  components: { ArrowDown, ArrowLeft, ArrowRight, UploadFilled, PictureFilled, MagicStick, DocumentCopy, PromptLibrarySelect, AiAssistant },
+  components: { ArrowDown, ArrowLeft, ArrowRight, UploadFilled, PictureFilled, MagicStick, DocumentCopy, PromptLibrarySelect, AiAssistant, CanvasEditor },
   setup() {
     // ---- Canvas Interactions ----
     // const { canvasUI, handleCanvasExport } = useCanvasInteractions({
@@ -835,6 +826,43 @@ console.error('主图生成失败:', e)
       gen.reset()
     }
 
+    // ===== 画布编辑器 =====
+    const canvasEditorRef = ref(null)
+    const canvasImages = computed(() => {
+      const imgs = []
+      if (refImage.value) {
+        imgs.push({ url: refImage.value, name: '上传图片' })
+      }
+      if (resultImages.value.length > 0) {
+        resultImages.value.forEach(img => {
+          const url = img.url || img
+          if (!imgs.some(i => (i.url || i) === url)) {
+            imgs.push(img)
+          }
+        })
+      }
+      return imgs
+    })
+
+    const canvasEditor = useCanvasEditor(resultImages, 'main_image')
+
+    function onCanvasExtend(params) { canvasEditor.handleExtend(params) }
+    function onCanvasMultiAngle(params) {
+      canvasEditor.handleMultiAngle(params, async (newImages) => {
+        if (canvasEditorRef.value && canvasEditorRef.value.addMultiAngleResults) {
+          await canvasEditorRef.value.addMultiAngleResults(newImages)
+        }
+      })
+    }
+    function onCanvasEditText(params) { canvasEditor.handleEditText(params) }
+    function onCanvasPartialRedraw(params) { canvasEditor.handlePartialRedraw(params) }
+    function onCanvasExplodeLayers(params) { canvasEditor.handleExplodeLayers(params) }
+    function onCanvasDelete(index) { canvasEditor.handleDelete(index) }
+    function onCanvasSendToRetouch(img) { canvasEditor.handleSendToRetouch(img) }
+    function onCanvasSendToWhiteBg(img) { canvasEditor.handleSendToWhiteBg(img) }
+    function onCanvasDownload(img) { canvasEditor.handleDownload(img) }
+    function onCanvasImageSelected(img) { /* UI state */ }
+
     function clearChat() {
       chatMessages.value = []
       productFiles.value = []
@@ -963,6 +991,11 @@ console.error('主图生成失败:', e)
       reverseResult, reverseLoading,
       openReversePromptDialog, triggerReverseUpload, handleReverseDrop,
       clearReverseImage, submitReversePrompt, copyResult,
+      // 画布编辑器
+      canvasEditorRef, canvasImages,
+      onCanvasExtend, onCanvasMultiAngle, onCanvasEditText, onCanvasPartialRedraw,
+      onCanvasExplodeLayers, onCanvasDelete, onCanvasSendToRetouch, onCanvasSendToWhiteBg,
+      onCanvasDownload, onCanvasImageSelected,
       // canvasUI, handleCanvasExport,
     }
   }
