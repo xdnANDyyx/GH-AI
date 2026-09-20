@@ -119,8 +119,8 @@ public class SecurityConfig {
                            "/*/api-docs", "/v3/api-docs/**", "/v3/api-docs.yaml", "/doc.html", "/druid/**").permitAll()
                     // 客户端接口需要登录认证（不需要鉴权）
                    .requestMatchers("/customer/**", "/api/customer/**").authenticated()
-                    // 画布编辑器接口使用客户端Token认证
-                   .requestMatchers("/ai/image/**").authenticated()
+                    // 画布编辑器接口使用客户端Token认证（兼容 context-path=/api 的生产环境）
+                   .requestMatchers("/ai/image/**", "/api/ai/image/**").authenticated()
                     // 除上面外的所有请求全部需要鉴权认证
                    .anyRequest().authenticated();
             })

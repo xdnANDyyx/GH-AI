@@ -25,6 +25,9 @@ public class AuthenticationEntryPointImpl implements AuthenticationEntryPoint, S
 
     private static final String CUSTOMER_PATH_PREFIX = "/customer/";
     private static final String API_CUSTOMER_PATH_PREFIX = "/api/customer/";
+    // CanvasEditorController 路径也属于客户端
+    private static final String CANVAS_EDITOR_PATH_PREFIX = "/ai/image/";
+    private static final String API_CANVAS_EDITOR_PATH_PREFIX = "/api/ai/image/";
 
     @Override
     public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException e)
@@ -43,6 +46,9 @@ public class AuthenticationEntryPointImpl implements AuthenticationEntryPoint, S
     }
     
     private boolean isCustomerRequest(String requestURI) {
-        return requestURI.startsWith(CUSTOMER_PATH_PREFIX) || requestURI.startsWith(API_CUSTOMER_PATH_PREFIX);
+        return requestURI.startsWith(CUSTOMER_PATH_PREFIX) 
+            || requestURI.startsWith(API_CUSTOMER_PATH_PREFIX)
+            || requestURI.startsWith(CANVAS_EDITOR_PATH_PREFIX)
+            || requestURI.startsWith(API_CANVAS_EDITOR_PATH_PREFIX);
     }
 }
