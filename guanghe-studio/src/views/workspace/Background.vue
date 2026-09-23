@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<template>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<template>
   <div class="workspace-page">
     <!-- Three-column layout -->
     <div class="three-col">
@@ -770,7 +770,7 @@ const canvasImages = computed(() => {
 })
 
 // 使用画布编辑 composable（复用已有逻辑）
-const canvasEditor = useCanvasEditor(resultImages, 'background')
+const canvasEditor = useCanvasEditor(gen.resultImages, 'background')
 
 // 画布事件处理
 function onCanvasExtend(params) { canvasEditor.handleExtend(params) }

@@ -59,6 +59,21 @@
             </div>
 
             <div class="nav-group">
+              <div class="nav-group-title">工具与运营</div>
+              <button
+                v-for="item in toolMenus"
+                :key="item.title"
+                type="button"
+                class="nav-item nav-item-btn"
+                @click="handleComingSoon"
+              >
+                <el-icon><component :is="item.icon" /></el-icon>
+                <span>{{ item.title }}</span>
+                <span class="nav-badge soon">SOON</span>
+              </button>
+            </div>
+
+            <div class="nav-group">
               <div class="nav-group-title">资源管理</div>
               <router-link
                 v-for="item in resourceMenus"
@@ -250,6 +265,19 @@ const resourceMenus = [
   { path: '/history', title: '历史记录', icon: 'Clock' },
   { path: '/points-center', title: '积分中心', icon: 'Coin' }
 ]
+
+const toolMenus = [
+  { title: '侵权检测', icon: 'Search' },
+  { title: '视频生成', icon: 'VideoPlay' },
+  { title: '一键上传平台', icon: 'UploadFilled' },
+  { title: '买家秀图', icon: 'ShoppingBag' }
+]
+
+function handleComingSoon() {
+  closeAccountMenu()
+  mobileSidebarOpen.value = false
+  ElMessage.info('页面正在开发中，敬请期待！')
+}
 
 const materialMenus = [
   { path: '/materialPlaza', title: '素材广场', icon: 'Grid', badge: 'NEW' },
@@ -463,6 +491,18 @@ async function logout() {
 
 .nav-badge.new {
   background: #2563ff;
+}
+
+.nav-item-btn {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.nav-badge.soon {
+  background: #f59e0b;
 }
 
 .sidebar-footer {

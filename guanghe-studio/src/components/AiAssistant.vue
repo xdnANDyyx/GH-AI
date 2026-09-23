@@ -58,6 +58,8 @@
                   v-for="(img, i) in msg.images"
                   :key="i"
                   class="msg-image-item"
+                  draggable="true"
+                  @dragstart="(e) => onImageDragStart(e, img)"
                 >
                   <el-image
                     :src="img.url || img"
@@ -295,6 +297,14 @@ function addResultImages(images) {
     images: images.map(img => (typeof img === 'string' ? { url: img } : img)),
   })
   scrollToBottom()
+}
+
+// ===== 拖拽图片到画布 =====
+function onImageDragStart(e, img) {
+  const url = img.url || img
+  e.dataTransfer.effectAllowed = 'copy'
+  e.dataTransfer.setData('text/plain', url)
+  e.dataTransfer.setData('text/uri-list', url)
 }
 
 defineExpose({ inputText, messages, addResultImages, selectedModel })

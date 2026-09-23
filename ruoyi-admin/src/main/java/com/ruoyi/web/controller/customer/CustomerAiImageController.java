@@ -87,6 +87,8 @@ public class CustomerAiImageController {
 
     @PostMapping("/generate/omni-image")
     public AjaxResult<Map<String, Object>> generateOmniImage(@RequestBody Map<String, Object> params) {
+        log.info("[AI生图] 收到前端请求, params keys: {}", params.keySet());
+        log.info("[AI生图] n = {}, sessionType = {}, model = {}", params.get("n"), params.get("sessionType"), params.get("model"));
         Object sessionIdValue = params.get("sessionId");
         String sessionId = sessionIdValue != null ? sessionIdValue.toString() : UUID.randomUUID().toString();
         Object promptValue = params.get("prompt");
@@ -103,6 +105,7 @@ public class CustomerAiImageController {
             } catch (NumberFormatException ignored) {
             }
         }
+        log.info("[AI生图] 解析后 n = {}", n);
         Object sizeValue = params.get("size");
         String size = sizeValue != null ? sizeValue.toString() : null;
 

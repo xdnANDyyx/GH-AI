@@ -286,7 +286,7 @@ const canvasImages = computed(() => {
   return imgs
 })
 
-const canvasEditor = useCanvasEditor(resultImages, sessionType)
+const canvasEditor = useCanvasEditor(gen.resultImages, sessionType)
 
 function onCanvasExtend(params) { canvasEditor.handleExtend(params) }
 function onCanvasMultiAngle(params) {

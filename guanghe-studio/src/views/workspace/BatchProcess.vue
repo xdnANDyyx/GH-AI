@@ -1338,7 +1338,7 @@ const canvasImages = computed(() => {
 })
 
 // 使用画布编辑 composable（复用已有逻辑）
-const canvasEditor = useCanvasEditor(resultImages, 'batch_process')
+const canvasEditor = useCanvasEditor(gen.resultImages, 'batch_process')
 
 // 画布事件处理
 function onCanvasExtend(params) { canvasEditor.handleExtend(params) }

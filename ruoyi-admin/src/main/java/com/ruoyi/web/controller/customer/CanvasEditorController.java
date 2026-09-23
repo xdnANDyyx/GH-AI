@@ -61,16 +61,32 @@ public class CanvasEditorController {
             String imageUrl = (String) params.get("imageUrl");
             Integer count = params.get("count") instanceof Number ? ((Number) params.get("count")).intValue() : 4;
             String type = (String) params.get("type");
+            Boolean isCustomAngle = params.get("isCustomAngle") instanceof Boolean ? (Boolean) params.get("isCustomAngle") : false;
 
             if (imageUrl == null || imageUrl.isEmpty()) {
                 return AjaxResult.error("图片URL不能为空");
             }
 
-            if (count < 2 || count > 8) {
-                return AjaxResult.error("生成数量必须在2-8之间");
+            // 自定义角度模式允许 count=1（用户指定一个摄像机方位生成1张图）；
+            // 预设模式要求 count 在 2-8 之间
+            if (isCustomAngle) {
+                if (count < 1 || count > 8) {
+                    return AjaxResult.error("生成数量必须在1-8之间");
+                }
+            } else {
+                if (count < 2 || count > 8) {
+                    return AjaxResult.error("生成数量必须在2-8之间");
+                }
             }
 
-            List<Map<String, Object>> images = canvasEditorService.generateMultiAngle(imageUrl, count, type);
+            List<Map<String, Object>> images;
+            if (isCustomAngle) {
+                Integer horizontal = params.get("horizontal") instanceof Number ? ((Number) params.get("horizontal")).intValue() : 0;
+                Integer vertical = params.get("vertical") instanceof Number ? ((Number) params.get("vertical")).intValue() : 0;
+                images = canvasEditorService.generateMultiAngleCustom(imageUrl, count, horizontal, vertical);
+            } else {
+                images = canvasEditorService.generateMultiAngle(imageUrl, count, type);
+            }
             Map<String, Object> result = new HashMap<>();
             result.put("images", images);
             return AjaxResult.success(result);

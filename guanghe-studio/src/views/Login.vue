@@ -293,6 +293,15 @@
         <el-checkbox v-model="rememberMe" class="remember-check">记住登录信息</el-checkbox>
       </div>
 
+      <div class="agreement-check">
+        <el-checkbox v-model="agreed" class="agree-checkbox">
+          <span class="agree-text">我已阅读并同意</span>
+          <a :href="serviceAgreementUrl" target="_blank" rel="noopener" class="agree-link" @click.stop>《光合AI用户服务协议》</a>
+          <span class="agree-text">和</span>
+          <a :href="privacyAgreementUrl" target="_blank" rel="noopener" class="agree-link" @click.stop>《光合AI隐私政策》</a>
+        </el-checkbox>
+      </div>
+
       <el-button type="primary" size="large" class="submit-btn" :loading="loading" @click="handleSubmit">
         {{ submitText }}
       </el-button>
@@ -311,10 +320,9 @@
       </div>
 
       <div class="login-footer">
-        <span>登录即表示同意</span>
-        <a href="#">《用户协议》</a>
-        <span>和</span>
-        <a href="#">《隐私政策》</a>
+        <a :href="serviceAgreementUrl" target="_blank" rel="noopener">《用户服务协议》</a>
+        <span>｜</span>
+        <a :href="privacyAgreementUrl" target="_blank" rel="noopener">《隐私政策》</a>
       </div>
     </div>
 
@@ -350,6 +358,9 @@ const countdown = ref(0)
 const resetCountdown = ref(0)
 const wechatBindCountdown = ref(0)
 const rememberMe = ref(true)
+const agreed = ref(false)
+const serviceAgreementUrl = '/agreement?type=service'
+const privacyAgreementUrl = '/agreement?type=privacy'
 const captchaEnabled = ref(false)
 const captchaImage = ref('')
 const captchaUuid = ref('')
@@ -644,6 +655,7 @@ async function pollWechatStatus() {
 }
 
 async function startWechatLogin() {
+  if (!ensureAgreed()) return
   wechatLoading.value = true
   try {
     const res = await userStore.createWechatLoginState()
@@ -662,6 +674,7 @@ async function startWechatLogin() {
 
 async function confirmWechatLogin() {
   if (!wechatState.value) return
+  if (!ensureAgreed()) return
   wechatLoading.value = true
   try {
     await userStore.mockConfirmWechatLogin(wechatState.value)
@@ -818,7 +831,16 @@ async function handleResetPassword() {
   }
 }
 
+function ensureAgreed() {
+  if (!agreed.value) {
+    ElMessage.warning('请先阅读并勾选同意《光合AI用户服务协议》和《光合AI隐私政策》')
+    return false
+  }
+  return true
+}
+
 function handleSubmit() {
+  if (!ensureAgreed()) return
   if (activeTab.value === 'password') {
     handlePasswordLogin()
     return
@@ -1005,6 +1027,33 @@ onBeforeUnmount(() => {
   :deep(.el-checkbox__label) {
     color: var(--gh-text-secondary);
     font-size: 13px;
+  }
+}
+
+.agreement-check {
+  margin: -8px 0 16px;
+
+  .agree-checkbox {
+    height: auto;
+    align-items: flex-start;
+    white-space: normal;
+    line-height: 1.5;
+
+    :deep(.el-checkbox__label) {
+      display: inline;
+      font-size: 13px;
+      color: var(--gh-text-secondary, #6B7280);
+      line-height: 1.6;
+    }
+  }
+
+  .agree-link {
+    color: var(--gh-primary, #2563FF);
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
   }
 }
 

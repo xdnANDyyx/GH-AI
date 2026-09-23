@@ -52,6 +52,12 @@ const routes = [
     component: () => import('@/views/Login.vue'),
     meta: { guestOnly: true }
   },
+  {
+    path: '/agreement',
+    name: 'Agreement',
+    component: () => import('@/views/Agreement.vue'),
+    meta: { title: '用户服务协议与隐私政策' }
+  },
   // ===== 管理后台 =====
   {
     path: '/admin',

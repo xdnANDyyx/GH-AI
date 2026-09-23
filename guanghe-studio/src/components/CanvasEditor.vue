@@ -259,10 +259,10 @@ const props = defineProps({
 
 // ===== Emits =====
 const emit = defineEmits([
-  'extend', 'multi-angle', 'edit-text', 'partial-redraw', 'explode-layers',
-  'delete', 'send-to-retouch', 'send-to-white-bg', 'download',
-  'move-up', 'move-down', 'bring-to-front', 'send-to-back',
-  'update:images', 'image-selected'
+'extend', 'multi-angle', 'edit-text', 'partial-redraw', 'explode-layers',
+'delete', 'send-to-retouch', 'send-to-white-bg', 'download',
+'move-up', 'move-down', 'bring-to-front', 'send-to-back',
+'update:images', 'image-selected', 'add-image'
 ])
 
 // ===== DOM Refs =====
@@ -575,6 +575,30 @@ function initCanvas() {
 
   // 监听窗口大小变化
   window.addEventListener('resize', handleResize)
+
+  // ===== 拖拽接收：从 AI 助手聊天框拖拽图片到画布 =====
+  const dragWrapper = fabricWrapperRef.value
+  if (dragWrapper) {
+    dragWrapper.addEventListener('dragover', (e) => {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'copy'
+      dragWrapper.classList.add('drag-over')
+    })
+    dragWrapper.addEventListener('dragleave', () => {
+      dragWrapper.classList.remove('drag-over')
+    })
+    dragWrapper.addEventListener('drop', async (e) => {
+      e.preventDefault()
+      dragWrapper.classList.remove('drag-over')
+
+      // 获取拖拽的数据
+      const imageUrl = e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('text/uri-list')
+      if (imageUrl) {
+        // 通过 emit 通知父组件把图片加入 images 列表
+        emit('add-image', { url: imageUrl, name: `拖入_${Date.now()}` })
+      }
+    })
+  }
 }
 
 function handleResize() {
@@ -586,34 +610,56 @@ function handleResize() {
 }
 
 // ===== 加载图片到画布 =====
-async function loadImagesToCanvas(newImages) {
+// 已加载图片的 URL 集合，用于增量加载判断
+const loadedImageUrls = new Set()
+
+async function loadImagesToCanvas(newImages, isIncremental = false) {
   if (!canvas) return
 
-  // 清除现有对象（保留画布本身）
-  const objects = canvas.getObjects()
-  objects.forEach(obj => {
-    canvas.remove(obj)
-    fabricObjMap.delete(obj.id || obj._fabricId)
-  })
+  // 首次加载或全量重载时清空画布
+  if (!isIncremental) {
+    const objects = canvas.getObjects()
+    objects.forEach(obj => {
+      canvas.remove(obj)
+      fabricObjMap.delete(obj.id || obj._fabricId)
+    })
+    loadedImageUrls.clear()
+  }
 
   if (!newImages || newImages.length === 0) return
 
-  // 按顺序加载每张图片
+  // 过滤出尚未加载的新图片
+  const imagesToAdd = []
   for (let i = 0; i < newImages.length; i++) {
     const imgData = newImages[i]
     const url = imgData.url || imgData
     if (!url) continue
+    // 增量模式：跳过已加载的图片
+    if (isIncremental && loadedImageUrls.has(url)) continue
+    imagesToAdd.push({ imgData, url, index: i })
+  }
+
+  if (imagesToAdd.length === 0) return
+
+  // 计算已有图片数量用于偏移
+  const existingCount = canvas.getObjects().length
+
+  // 按顺序加载每张图片
+  for (let idx = 0; idx < imagesToAdd.length; idx++) {
+    const { imgData, url, i } = imagesToAdd[idx]
+    const offsetIdx = existingCount + idx
 
     try {
       const fabricImg = await loadFabricImage(url)
       if (!fabricImg) continue
 
       // 设置图片ID用于映射
-      fabricImg._fabricId = 'img_' + Date.now() + '_' + i
+      fabricImg._fabricId = 'img_' + Date.now() + '_' + offsetIdx
       fabricObjMap.set(fabricImg._fabricId, imgData)
+      loadedImageUrls.add(url)
 
       // 居中排列，多张图片错开排列
-      const offset = i * 30
+      const offset = offsetIdx * 30
       fabricImg.set({
         left: canvas.width / 2 - fabricImg.width / 2 + offset,
         top: canvas.height / 2 - fabricImg.height / 2 + offset,
@@ -1316,10 +1362,15 @@ function handleGlobalClick(e) {
   showContextMenu.value = false
 }
 
-// ===== 监听 images 变化 =====
-watch(() => props.images, (newImages) => {
-  if (canvas) {
-    loadImagesToCanvas(newImages)
+// ===== 监听 images 变化（增量加载，不清空已有图片） =====
+watch(() => props.images, (newImages, oldImages) => {
+  if (!canvas) return
+  if (!oldImages || oldImages.length === 0) {
+    // 首次加载，全量加载
+    loadImagesToCanvas(newImages, false)
+  } else {
+    // 后续变化，增量加载（只添加新图片，不清除已有图片）
+    loadImagesToCanvas(newImages, true)
   }
 }, { deep: true })
 
@@ -1376,14 +1427,15 @@ defineExpose({
     showContextMenu.value = false
   },
   getCanvas: () => canvas,
-  addImage: async (url, options = {}) => {
-    if (!canvas) return
-    const fabricImg = await loadFabricImage(url)
-    if (!fabricImg) return
+addImage: async (url, options = {}) => {
+if (!canvas) return
+const fabricImg = await loadFabricImage(url)
+if (!fabricImg) return
 
-    fabricImg._fabricId = 'img_' + Date.now() + '_' + Math.random()
-    const imageData = { url, ...options }
-    fabricObjMap.set(fabricImg._fabricId, imageData)
+fabricImg._fabricId = 'img_' + Date.now() + '_' + Math.random()
+const imageData = { url, ...options }
+fabricObjMap.set(fabricImg._fabricId, imageData)
+loadedImageUrls.add(url)
 
     fabricImg.set({
       left: options.left || canvas.width / 2 - fabricImg.width / 2,
@@ -1427,6 +1479,7 @@ defineExpose({
       fabricImg._fabricId = 'img_angle_' + Date.now() + '_' + i
       const imageData = { url, angle: i + 1, ...imageUrls[i] }
       fabricObjMap.set(fabricImg._fabricId, imageData)
+      loadedImageUrls.add(url)
 
       const scale = cellSize / Math.max(fabricImg.width, fabricImg.height) * 0.8
       fabricImg.scale(scale)
@@ -1471,6 +1524,12 @@ defineExpose({
   width: 100%;
   height: 100%;
   position: relative;
+
+  &.drag-over {
+    outline: 2px dashed #2563FF;
+    outline-offset: -4px;
+    background: rgba(37, 99, 255, 0.04);
+  }
 
   :deep(canvas) {
     position: absolute;

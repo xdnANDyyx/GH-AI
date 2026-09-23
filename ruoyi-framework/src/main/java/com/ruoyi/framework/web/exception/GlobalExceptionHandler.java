@@ -19,6 +19,7 @@ import com.ruoyi.common.exception.DemoModeException;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.common.utils.html.EscapeUtil;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * 全局异常处理器
@@ -82,6 +83,17 @@ public class GlobalExceptionHandler {
         }
         log.error("请求参数类型不匹配'{}',发生系统异常.", requestURI, e);
         return AjaxResult.error(String.format("请求参数类型不匹配，参数[%s]要求类型为：'%s'，但输入值为：'%s'", e.getName(), e.getRequiredType().getName(), value));
+    }
+
+    /**
+     * 静态资源不存在（/profile/** 上传文件缺失等）
+     * 文件已丢失或被清理属于数据问题：只记一行警告，不打印堆栈，返回 404
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public AjaxResult handleNoResourceFoundException(NoResourceFoundException e, HttpServletRequest request) {
+        String requestURI = request.getRequestURI();
+        log.warn("请求地址'{}', 静态资源不存在(文件缺失或已被清理): {}", requestURI, e.getMessage());
+        return AjaxResult.error(HttpStatus.NOT_FOUND, "资源不存在或已被清理");
     }
 
     /**

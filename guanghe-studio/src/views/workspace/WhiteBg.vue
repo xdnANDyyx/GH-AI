@@ -31,6 +31,7 @@
             @send-to-white-bg="onCanvasSendToWhiteBg"
             @download="onCanvasDownload"
             @image-selected="onCanvasImageSelected"
+            @add-image="onCanvasAddImage"
           />
         </div>
 
@@ -503,11 +504,7 @@ const canvasEditorRef = ref(null)
 // 画布图片列表：合并上传图片和生成结果
 const canvasImages = computed(() => {
   const imgs = []
-  // 如果有上传的原图，也加入画布
-  if (originalImage.value) {
-    imgs.push({ url: originalImage.value, name: '上传图片' })
-  }
-  // 加入所有生成结果
+  // 只有生成后的图片才显示到画布，上传的原图不显示
   if (resultImages.value.length > 0) {
     resultImages.value.forEach(img => {
       const url = img.url || img
@@ -520,7 +517,7 @@ const canvasImages = computed(() => {
 })
 
 // 使用画布编辑 composable（复用已有逻辑）
-const canvasEditor = useCanvasEditor(resultImages, 'white_bg')
+const canvasEditor = useCanvasEditor(gen.resultImages, 'white_bg')
 
 // 画布事件处理
 function onCanvasExtend(params) { canvasEditor.handleExtend(params) }
@@ -542,7 +539,13 @@ function onCanvasSendToRetouch(img) { canvasEditor.handleSendToRetouch(img) }
 function onCanvasSendToWhiteBg(img) { canvasEditor.handleSendToWhiteBg(img) }
 function onCanvasDownload(img) { canvasEditor.handleDownload(img) }
 function onCanvasImageSelected(img) {
-  // 可以在这里更新一些 UI 状态
+// 可以在这里更新一些 UI 状态
+}
+
+// 从 AI 助手聊天框拖拽图片到画布
+function onCanvasAddImage(imageData) {
+  // 通过 useCanvasEditor 把图片加入 images 列表，watch 会增量加载到画布
+  canvasEditor.handleAddImage(imageData)
 }
 
 // ===== 画布交互浮层 =====
@@ -657,7 +660,7 @@ async function handleGenerate(opts = {}) {
       boostCameraOccupationRef.value?.getSelectedItems()[0]?.promptText
     ].filter(Boolean).join('；')
 
-    const stylePart = (selectedStyle.value && selectedStyle.value !== 'no-shadow') ? (stylePromptMap[selectedStyle.value] || '') : ''
+    const stylePart = selectedStyle.value ? (stylePromptMap[selectedStyle.value] || '') : ''
     const sizePart = effectiveOutputSize.value ? `输出图片尺寸为 ${effectiveOutputSize.value}` : ''
     
     const langKey = language.value ? language.value.replace('opt_language.', '') : ''
@@ -668,12 +671,14 @@ async function handleGenerate(opts = {}) {
     const basePrompt = [stylePart, sizePart, langPart, userPart].filter(Boolean).join('。')
     const prompt = boostText ? (basePrompt ? `${basePrompt}。约束：${boostText}。` : `约束：${boostText}。`) : (basePrompt ? `${basePrompt}。` : '')
 
-    const extraOptions = { shadow_style: selectedStyle.value, language: language.value }
-    if (effectiveOutputSize.value) extraOptions.output_size = effectiveOutputSize.value
+    const extraParams = { consumePoints: consumePoints.value, featureName: 'white_bg', title: 'AI白底图生成', model: opts.model }
+    // 白底样式和输出尺寸作为顶层参数传递给后端（与 Background.vue 保持一致）
+    if (selectedStyle.value) extraParams.shadowStyle = selectedStyle.value
+    if (effectiveOutputSize.value) extraParams.outputSize = effectiveOutputSize.value
     await gen.fullGenerate(
       [originalFile.value],
       prompt,
-      { extraOptions, consumePoints: consumePoints.value, featureName: 'white_bg', title: 'AI白底图生成', model: opts.model }
+      extraParams
     )
     // 将结果图推入 AI 助手对话框
     if (gen.resultImages.value.length > 0) {
@@ -691,7 +696,12 @@ const stylePromptMap = {
   'no-shadow': '生成干净无阴影的白底图',
   'natural-shadow': '生成带自然投影的白底图，阴影自然柔和',
   'soft-shadow': '生成带柔和渐变阴影的白底图，阴影过渡平滑',
-  'hard-shadow': '生成带硬朗阴影的白底图，阴影边缘清晰对比强烈'
+  'hard-shadow': '生成带硬朗阴影的白底图，阴影边缘清晰对比强烈',
+  'none': '生成干净无阴影的白底图',
+  'natural': '生成带自然投影的白底图，阴影自然柔和',
+  'soft': '生成带柔和渐变阴影的白底图，阴影过渡平滑',
+  'hard': '生成带硬朗阴影的白底图，阴影边缘清晰对比强烈',
+  'reflection': '生成带倒影效果的白底图，产品倒影自然'
 }
 
 const languageTextMap = {

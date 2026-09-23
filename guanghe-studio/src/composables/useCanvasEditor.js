@@ -296,6 +296,17 @@ export const useCanvasEditor = (resultImagesRef, featureName = 'canvas') => {
     router.push('/whiteBg')
   }
 
+  // ========== 从 AI 助手拖拽添加图片 ==========
+
+  /**
+   * 添加图片到画布（拖拽或手动添加）
+   * @param {Object} imageData - { url, name }
+   */
+  const handleAddImage = (imageData) => {
+    if (!imageData || !imageData.url) return
+    images.value = [...images.value, imageData]
+  }
+
   return {
     handleDelete,
     handleMoveUp,
@@ -309,6 +320,7 @@ export const useCanvasEditor = (resultImagesRef, featureName = 'canvas') => {
     handlePartialRedraw,
     handleExplodeLayers,
     handleSendToRetouch,
-    handleSendToWhiteBg
+    handleSendToWhiteBg,
+    handleAddImage
   }
 }

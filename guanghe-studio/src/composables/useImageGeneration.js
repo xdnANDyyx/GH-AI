@@ -200,13 +200,15 @@ export function useImageGeneration(sessionType) {
     }, 1500)
 
     try {
-      const res = await generateOmniImage({
+      const requestBody = {
         sessionType,
         sessionId: currentSessionId.value,
         n: 1,
         type: '1',
         ...params
-      })
+      }
+      console.log('[AI生图] 发送给后端的请求参数, n =', requestBody.n, ', params.n =', params.n, ', 完整params:', JSON.stringify({ ...params, productImages: params.productImages ? `[${params.productImages.length}张]` : undefined }))
+      const res = await generateOmniImage(requestBody)
 
       // 只要拿到了响应，就清除虚拟定时器
       clearInterval(fakeTimer)

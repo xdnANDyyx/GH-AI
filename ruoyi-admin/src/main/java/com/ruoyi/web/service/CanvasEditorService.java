@@ -252,6 +252,100 @@ public class CanvasEditorService {
         return images;
     }
 
+    // ============================================
+    // 2b. 多角度生成（自定义摄像机方位）
+    // ============================================
+    public List<Map<String, Object>> generateMultiAngleCustom(String imageUrl, int count, int horizontal, int vertical) throws Exception {
+        log.info("执行自定义角度生成: count={}, horizontal={}, vertical={}", count, horizontal, vertical);
+
+        // 构建自定义角度提示词
+        String prompt = buildCustomAnglePrompt(horizontal, vertical);
+
+        // 调用Vertex AI生成图片
+        List<String> resultImages = callVertexAi(prompt, List.of(imageUrl), "1:1", "1K");
+
+        if (resultImages == null || resultImages.isEmpty()) {
+            throw new RuntimeException("自定义角度生成失败：Vertex AI未返回结果");
+        }
+
+        // 构建返回结果
+        List<Map<String, Object>> images = new ArrayList<>();
+        for (int i = 0; i < Math.min(resultImages.size(), count); i++) {
+            Map<String, Object> img = new HashMap<>();
+            img.put("url", resultImages.get(i));
+            img.put("angle", "方位_" + horizontal + "_" + vertical);
+            img.put("type", "custom");
+            images.add(img);
+        }
+
+        log.info("自定义角度生成成功，生成{}张图片", images.size());
+
+        // 保存编辑历史
+        Map<String, Object> params = new HashMap<>();
+        params.put("imageUrl", imageUrl);
+        params.put("count", count);
+        params.put("horizontal", horizontal);
+        params.put("vertical", vertical);
+        params.put("isCustomAngle", true);
+        saveEditHistory(imageUrl, "multi-angle", params, images.size() > 0 ? (String) images.get(0).get("url") : "");
+
+        return images;
+    }
+
+    /**
+     * 构建自定义摄像机方位的提示词
+     * horizontal: -180 ~ 180 (水平旋转角度)
+     * vertical: -90 ~ 90 (垂直俯仰角度)
+     */
+    private String buildCustomAnglePrompt(int horizontal, int vertical) {
+        StringBuilder prompt = new StringBuilder();
+
+        // 描述水平方位
+        String hDirection;
+        if (horizontal == 0) {
+            hDirection = "front view (0°)";
+        } else if (horizontal > 0 && horizontal <= 45) {
+            hDirection = "slightly right-front view (" + horizontal + "°)";
+        } else if (horizontal > 45 && horizontal <= 90) {
+            hDirection = "right side view (" + horizontal + "°)";
+        } else if (horizontal > 90 && horizontal <= 135) {
+            hDirection = "right-rear view (" + horizontal + "°)";
+        } else if (horizontal > 135 && horizontal <= 180) {
+            hDirection = "rear view (" + horizontal + "°)";
+        } else if (horizontal < 0 && horizontal >= -45) {
+            hDirection = "slightly left-front view (" + horizontal + "°)";
+        } else if (horizontal < -45 && horizontal >= -90) {
+            hDirection = "left side view (" + horizontal + "°)";
+        } else if (horizontal < -90 && horizontal >= -135) {
+            hDirection = "left-rear view (" + horizontal + "°)";
+        } else {
+            hDirection = "rear view (" + horizontal + "°)";
+        }
+
+        // 描述垂直方位
+        String vDirection;
+        if (vertical == 0) {
+            vDirection = "eye-level";
+        } else if (vertical > 30) {
+            vDirection = "high angle / slightly top-down view (" + vertical + "°)";
+        } else if (vertical > 0) {
+            vDirection = "slightly elevated view (" + vertical + "°)";
+        } else if (vertical < -30) {
+            vDirection = "low angle / looking up view (" + vertical + "°)";
+        } else {
+            vDirection = "slightly lowered view (" + vertical + "°)";
+        }
+
+        prompt.append("Generate a product photo from a specific camera angle. ");
+        prompt.append("Camera position: horizontal rotation ").append(horizontal).append("°, vertical tilt ").append(vertical).append("°. ");
+        prompt.append("This corresponds to a ").append(hDirection).append(" and ").append(vDirection).append(". ");
+        prompt.append("Maintain the product's key features, colors, and lighting consistency. ");
+        prompt.append("Keep the background consistent and professional. ");
+        prompt.append("The product should remain the same, only the camera angle changes.");
+
+        return prompt.toString();
+    }
+
     /**
      * 构建多角度生成提示词
      */
@@ -1326,6 +1420,16 @@ public class CanvasEditorService {
      */
     private void saveEditHistory(String imageId, String operation, Map<String, Object> params, String resultUrl) throws Exception {
         try {
+            // 如果 imageId 过长（如 base64 编码的图片数据），生成 MD5 哈希作为 imageId
+            if (imageId != null && imageId.length() > 255) {
+                java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+                byte[] digest = md.digest(imageId.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                StringBuilder sb = new StringBuilder("hash_");
+                for (byte b : digest) {
+                    sb.append(String.format("%02x", b));
+                }
+                imageId = sb.toString();
+            }
             // 获取当前用户ID
             Long userId = getCurrentUserId();
 
@@ -1561,8 +1665,16 @@ public class CanvasEditorService {
                             log.warn("Vertex AI 声明 mimeType: {} 与文件头实际类型不符, 实际: {}", mimeType, realMime);
                         }
 
-                        dataUriImages.add("data:" + realMime + ";base64," + data);
-                        log.info("提取到图片, base64长度: {}, 解码字节数: {}", data.length(), imageBytes.length);
+                        // 上传图片到文件存储，返回真实URL（避免 Data URI 过大导致前端无法显示和数据库存储失败）
+                        String imageUrl;
+                        try {
+                            imageUrl = imageUploadService.uploadImage(imageBytes, realMime);
+                        } catch (Exception uploadEx) {
+                            log.error("图片上传失败, 回退为 Data URI, 字节数: {}", imageBytes.length, uploadEx);
+                            imageUrl = "data:" + realMime + ";base64," + data;
+                        }
+                        dataUriImages.add(imageUrl);
+                        log.info("提取到图片, base64长度: {}, 解码字节数: {}, 上传后URL: {}", data.length(), imageBytes.length, imageUrl);
                     }
                 }
             }
@@ -1654,7 +1766,7 @@ public class CanvasEditorService {
     }
 
     /**
-     * 下载图片（支持URL和Base64）
+     * 下载图片（支持URL、Base64和/profile/相对路径）
      */
     byte[] downloadImageBytes(String imageUrl) throws Exception {
         if (imageUrl == null || imageUrl.isEmpty()) {
@@ -1669,7 +1781,19 @@ public class CanvasEditorService {
             return compressImage(bytes);
         }
 
-        // 2. 网络URL
+        // 2. /profile/ 相对路径（本地上传的图片，直接从文件系统读取）
+        if (imageUrl.startsWith("/profile/")) {
+            String relativePath = imageUrl.substring("/profile/".length());
+            java.io.File file = new java.io.File(ruoYiConfig.getProfile(), relativePath);
+            if (!file.exists()) {
+                throw new RuntimeException("图片文件不存在: " + file.getAbsolutePath());
+            }
+            byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
+            validateImageBytes(bytes, imageUrl);
+            return compressImage(bytes);
+        }
+
+        // 3. 网络URL
         try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(imageUrl))

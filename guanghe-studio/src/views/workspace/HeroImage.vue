@@ -844,7 +844,7 @@ console.error('主图生成失败:', e)
       return imgs
     })
 
-    const canvasEditor = useCanvasEditor(resultImages, 'main_image')
+    const canvasEditor = useCanvasEditor(gen.resultImages, 'main_image')
 
     function onCanvasExtend(params) { canvasEditor.handleExtend(params) }
     function onCanvasMultiAngle(params) {

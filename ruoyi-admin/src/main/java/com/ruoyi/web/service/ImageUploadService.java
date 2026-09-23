@@ -99,15 +99,9 @@ public class ImageUploadService {
      * 获取文件访问路径
      */
     private String getAccessPath(String relativePath) {
-        // 从application.yml读取服务器配置
-        String serverPort = System.getProperty("server.port", "8780");
-        String contextPath = "/";
-
-        // 构建完整URL
-        return String.format("http://localhost:%s%s%s",
-                serverPort,
-                contextPath,
-                relativePath);
+        // 返回相对路径 /profile/xxx，前端通过代理（vite /profile -> localhost:8780）或 Nginx 反代访问
+        // 这样在开发环境和生产环境都能正常访问，避免硬编码 localhost
+        return "/profile/" + relativePath;
     }
 
     /**

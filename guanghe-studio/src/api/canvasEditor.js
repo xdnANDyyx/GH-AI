@@ -11,7 +11,8 @@ export function extendImage(params) {
   return request({
     url: '/ai/image/extend',
     method: 'post',
-    data: params
+    data: params,
+    timeout: 300000
   })
 }
 
@@ -23,7 +24,8 @@ export function generateMultiAngle(params) {
   return request({
     url: '/ai/image/multi-angle',
     method: 'post',
-    data: params
+    data: params,
+    timeout: 300000
   })
 }
 
@@ -35,7 +37,8 @@ export function editImageText(params) {
   return request({
     url: '/ai/image/edit-text',
     method: 'post',
-    data: params
+    data: params,
+    timeout: 300000
   })
 }
 
@@ -47,7 +50,8 @@ export function partialRedraw(params) {
   return request({
     url: '/ai/image/partial-redraw',
     method: 'post',
-    data: params
+    data: params,
+    timeout: 300000
   })
 }
 
@@ -59,7 +63,8 @@ export function detectLayers(params) {
   return request({
     url: '/ai/image/detect-layers',
     method: 'post',
-    data: params
+    data: params,
+    timeout: 300000
   })
 }
 
@@ -71,7 +76,8 @@ export function downloadLayers(params) {
   return request({
     url: '/ai/image/download-layers',
     method: 'post',
-    data: params
+    data: params,
+    timeout: 300000
   })
 }
 

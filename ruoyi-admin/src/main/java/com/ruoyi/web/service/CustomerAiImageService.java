@@ -880,43 +880,85 @@ private int vertexReadTimeout;
             }
         }
 
+        // 3.5 解析白底样式（shadowStyle），转换为提示词追加到 prompt 中
+        if (params != null) {
+            Object shadowStyleObj = params.get("shadowStyle");
+            if (shadowStyleObj == null) shadowStyleObj = params.get("shadow_style");
+            if (shadowStyleObj != null && !shadowStyleObj.toString().isEmpty()) {
+                String shadowStyle = shadowStyleObj.toString();
+                String stylePrompt = shadowStyleToPrompt(shadowStyle);
+                if (stylePrompt != null && !stylePrompt.isEmpty()) {
+                    // 如果 prompt 中还没有包含该样式提示，则追加
+                    if (!prompt.contains(stylePrompt)) {
+                        prompt = prompt.isEmpty() ? stylePrompt : prompt + "。" + stylePrompt;
+                    }
+                }
+                log.info("[AI生图] 白底样式: {}, 追加提示词: {}", shadowStyle, stylePrompt);
+            }
+        }
+
         log.info("统一生成入口, prompt 长度: {}, 参考图数: {}, aspectRatio: {}, imageSize: {}, model: {}, n: {}",
                 prompt.length(), imageUrls.size(), aspectRatio, imageSize, model, n);
 
-        // 4. 调用 Vertex AI（根据 n 发起多次/单次调用并合并结果）
+        // 4. 调用 Vertex AI（根据 n 发起多次调用并合并结果）
+        //    使用串行调用而非并发，避免 Vertex AI 429 速率限制导致部分请求失败
         List<String> base64Images = new ArrayList<>();
         if (n <= 1) {
+            log.info("[AI生图] n=1, 单次调用 Vertex AI");
             base64Images.addAll(callVertexAi(prompt, imageUrls.isEmpty() ? null : imageUrls, aspectRatio, imageSize, model));
         } else {
-            List<java.util.concurrent.CompletableFuture<List<String>>> futures = new ArrayList<>();
+            log.info("[AI生图] n={}, 串行调用 Vertex AI {} 次", n, n);
             for (int i = 0; i < n; i++) {
-                final String finalPrompt = prompt;
-                final List<String> finalImageUrls = imageUrls.isEmpty() ? null : imageUrls;
-                final String finalAspectRatio = aspectRatio;
-                final String finalImageSize = imageSize;
-                final String finalModel = model;
-                futures.add(java.util.concurrent.CompletableFuture.supplyAsync(() -> {
-                    try {
-                        return callVertexAi(finalPrompt, finalImageUrls, finalAspectRatio, finalImageSize, finalModel);
-                    } catch (Exception e) {
-                        log.error("Vertex AI parallel generation failed", e);
-                        return new ArrayList<String>();
-                    }
-                }));
-            }
-            java.util.concurrent.CompletableFuture.allOf(futures.toArray(new java.util.concurrent.CompletableFuture[0])).join();
-            for (java.util.concurrent.CompletableFuture<List<String>> future : futures) {
                 try {
-                    base64Images.addAll(future.get());
+                    log.info("[AI生图] 第 {}/{} 次调用 Vertex AI", i + 1, n);
+                    List<String> images = callVertexAi(prompt, imageUrls.isEmpty() ? null : imageUrls, aspectRatio, imageSize, model);
+                    log.info("[AI生图] 第 {}/{} 次调用完成, 返回 {} 张图片", i + 1, n, images.size());
+                    base64Images.addAll(images);
                 } catch (Exception e) {
-                    log.error("Failed to get parallel generation result", e);
+                    log.error("[AI生图] 第 {}/{} 次调用 Vertex AI 失败: {}", i + 1, n, e.getMessage(), e);
+                    // 继续下一次调用，不中断
+                }
+                // 如果不是最后一次调用，等待 1 秒以避免速率限制
+                if (i < n - 1) {
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
                 }
             }
             if (base64Images.isEmpty()) {
                 throw new RuntimeException("Vertex AI generation failed for all requested images");
             }
         }
+        log.info("[AI生图] 总共生成 {} 张图片 (请求 n={})", base64Images.size(), n);
         return base64Images;
+    }
+
+    /**
+     * 将白底样式值转换为对应的提示词
+     */
+    private String shadowStyleToPrompt(String style) {
+        if (style == null || style.trim().isEmpty()) return null;
+        switch (style.trim().toLowerCase()) {
+            case "no-shadow":
+            case "none":
+                return "生成干净无阴影的白底图";
+            case "natural-shadow":
+            case "natural":
+                return "生成带自然投影的白底图，阴影自然柔和";
+            case "soft-shadow":
+            case "soft":
+                return "生成带柔和渐变阴影的白底图，阴影过渡平滑";
+            case "hard-shadow":
+            case "hard":
+                return "生成带硬朗阴影的白底图，阴影边缘清晰对比强烈";
+            case "reflection":
+                return "生成带倒影效果的白底图，产品倒影自然";
+            default:
+                return null;
+        }
     }
 
     /**
